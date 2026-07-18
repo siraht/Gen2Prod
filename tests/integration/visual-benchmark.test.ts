@@ -11,7 +11,10 @@ import { defaultPolicy } from "../../src/research/policy.ts";
 test("scores dirty and candidate browser images against the same frozen gold mockup", async () => {
   const root = await mkdtemp(join(tmpdir(), "gen2prod-visual-benchmark-"));
   const output = await mkdtemp(join(tmpdir(), "gen2prod-visual-candidate-"));
-  const manifest = await prepareSyntheticCurriculum({ root, seed: 1337, countPerArchetype: 1 });
+  // Seed 2 includes a bounded visual design-drift corruption, so this test
+  // exercises positive image recovery rather than only pixel-neutral semantic
+  // and class rewrites.
+  const manifest = await prepareSyntheticCurriculum({ root, seed: 2, countPerArchetype: 1 });
   const fixture = join(root, "hero-cta");
   const session = await openCaptureSession();
   try {

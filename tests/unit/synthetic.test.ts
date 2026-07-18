@@ -18,7 +18,10 @@ describe("synthetic curriculum", () => {
     expect(rendered.html).toContain('<main data-g2p-node="main">');
     expect(rendered.scss).toContain("var(--h1)");
     expect(rendered.css).toContain(".hero__title");
-    NormalFormSchema.parse(normalFormFromSpec(fixture));
+    expect(rendered.scss).toContain("@media (max-width: 47.99rem)");
+    expect(rendered.css).toContain("grid-template-columns: 1fr");
+    const normalForm = NormalFormSchema.parse(normalFormFromSpec(fixture));
+    expect(normalForm.styles.some((style) => style.declarations.some((declaration) => declaration.condition?.media.includes("(max-width: 47.99rem)")))).toBeTrue();
   });
 
   test("preserves exact node lineage through composed corruption", () => {
@@ -30,5 +33,16 @@ describe("synthetic curriculum", () => {
     expect(corrupted.correspondence.every((entry) => entry.confidence === 1)).toBeTrue();
     expect(corrupted.html).not.toContain('href="/start"');
     expect(corrupted.trace.operations.length).toBe(4);
+  });
+
+  test("degrades BEM selectors atomically across responsive rules", () => {
+    const fixture = createArchetypes()[0]!;
+    const gold = renderGold(fixture);
+    const corrupted = corruptFixture(fixture, gold, 17, ["classDegradation"]);
+    const innerClass = corrupted.html.match(/class="([^"]+)"[^>]+data-g2p-node="hero-inner"/)?.[1]?.split(/\s+/)[0];
+    expect(innerClass).toBeTruthy();
+    expect(corrupted.css).toContain(`.${innerClass}`);
+    expect(corrupted.css).toContain("@media (max-width: 47.99rem)");
+    expect(corrupted.css).not.toContain(".hero__inner");
   });
 });

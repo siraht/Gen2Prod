@@ -43,7 +43,13 @@ function classDegradation(state: Mutable): void {
     const modifiers = values.filter((name) => name.includes("--"));
     return `class="${values.map((name) => mapping.get(name) ?? name).join(" ")}"${modifiers.length ? ` data-g2p-variants="${modifiers.join(" ")}"` : ""}`;
   });
-  for (const [from, to] of mapping) state.css = state.css.replaceAll(`.${from}`, `.${to}`);
+  // Replace complete selector class tokens. Prefix replacement corrupts BEM
+  // families (`.hero` would turn `.hero__inner` into `.u-2__inner`) and makes
+  // the generated dirty HTML/CSS pair internally inconsistent.
+  for (const [from, to] of mapping) {
+    const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    state.css = state.css.replace(new RegExp(`\\.${escaped}(?![\\w-])`, "g"), `.${to}`);
+  }
   state.operations.push(operation("class-degradation", before, [...mapping.values()].join(" "), [], ["B"]));
 }
 
