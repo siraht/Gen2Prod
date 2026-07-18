@@ -9,6 +9,7 @@ import type { AccessibilityAudit } from "./accessibility.ts";
 import { classes, flatten, parseElements, type ValidationElement } from "./dom.ts";
 import { compareCaptures, type VisualMetrics } from "./visual.ts";
 import { imageDifference } from "./visual.ts";
+import { slotEntropy } from "../report/consistency.ts";
 
 export type GateAssertion = GateResult["assertions"][number];
 
@@ -214,7 +215,12 @@ async function consistencyGate(context: ValidationContext): Promise<GateResult> 
     }
     const drifted = [...signatures.entries()].filter(([, variants]) => variants.size > 1).map(([name]) => name);
     const duplicateNames = context.plan ? context.plan.components.filter((component, index, all) => all.findIndex((other) => JSON.stringify(other.bem.elements.slice().sort()) === JSON.stringify(component.bem.elements.slice().sort())) !== index).map((component) => component.name) : [];
-    return { assertions: [assertion("component-contract-drift", drifted.length === 0, "error", drifted.length ? `Drifted contracts: ${drifted.join(", ")}` : "Component contracts are consistent"), assertion("component-equivalence", duplicateNames.length === 0, "warning", duplicateNames.length ? `Equivalent component candidates: ${duplicateNames.join(", ")}` : "No obvious duplicate components")], metrics: { driftedComponents: drifted.length, equivalentComponents: duplicateNames.length } };
+    const plans = [...(context.plan ? [{ page: "current", plan: context.plan }] : []), ...peers.map((peer) => ({ page: peer.id, plan: peer.plan }))];
+    const entropy = slotEntropy(plans);
+    const supported = entropy.filter((item) => item.support >= 3 && item.entropy !== null);
+    const highEntropy = supported.filter((item) => (item.entropy ?? 0) > 0.75);
+    const meanEntropy = supported.length ? supported.reduce((sum, item) => sum + (item.entropy ?? 0), 0) / supported.length : 0;
+    return { assertions: [assertion("component-contract-drift", drifted.length === 0, "error", drifted.length ? `Drifted contracts: ${drifted.join(", ")}` : "Component contracts are consistent"), assertion("slot-token-entropy", highEntropy.length === 0, "warning", highEntropy.length ? `High-entropy token slots: ${highEntropy.map((item) => item.slot).join(", ")}` : "Supported token slots are consistent"), assertion("component-equivalence", duplicateNames.length === 0, "warning", duplicateNames.length ? `Equivalent component candidates: ${duplicateNames.join(", ")}` : "No obvious duplicate components")], metrics: { driftedComponents: drifted.length, equivalentComponents: duplicateNames.length, supportedTokenSlots: supported.length, highEntropyTokenSlots: highEntropy.length, meanSlotEntropy: meanEntropy } };
   });
 }
 

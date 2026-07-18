@@ -3,6 +3,7 @@ import type { CompiledPage } from "../compiler/types.ts";
 import { writeJsonAtomic, writeTextAtomic } from "../core/fs.ts";
 import type { PassEvent } from "../schemas/pass.ts";
 import type { ValidationReport } from "../validation/gates.ts";
+import { slotEntropy } from "./consistency.ts";
 
 export type ProductReports = {
   advisor: Record<string, unknown>;
@@ -26,7 +27,7 @@ export async function generateProductReports(outputDirectory: string, compiled: 
   const deltaExplorer = { semantic: { rewrites: compiled.correspondence.filter((item) => item.sourceNodeId === item.targetNodeId).length, unresolved: compiled.correspondence.filter((item) => item.event === "unresolved") }, bem: compiled.plan.bem, tokenMappings: compiled.plan.styles.map((style) => ({ nodeId: style.nodeId, bindings: style.declarations.filter((declaration) => declaration.tokenRole).map((declaration) => ({ property: declaration.property, role: declaration.tokenRole, value: declaration.value })) })), visual: validation.visual ?? null, accessibility: validation.gates.find((gate) => gate.gate === "E") };
   const rawRecurrence = new Map<string, number>();
   for (const exception of compiled.plan.tokenExceptions) rawRecurrence.set(`${exception.property}:${exception.value}`, (rawRecurrence.get(`${exception.property}:${exception.value}`) ?? 0) + 1);
-  const tokenDrift = { coverage: validation.metrics.tokenCoverage ?? 0, rawValues: [...rawRecurrence.entries()].map(([value, count]) => ({ value, count })), exceptionCount: compiled.plan.tokenExceptions.length, expiredExceptions: compiled.plan.tokenExceptions.filter((item) => new Date(item.expires) < new Date()).length, unusedTokens: compiled.plan.tokens.tokens.filter((token) => !compiled.scss.includes(token.runtimeExpression)).map((token) => token.id) };
+  const tokenDrift = { coverage: validation.metrics.tokenCoverage ?? 0, slotEntropy: slotEntropy([{ page: "current", plan: compiled.plan }]), rawValues: [...rawRecurrence.entries()].map(([value, count]) => ({ value, count })), exceptionCount: compiled.plan.tokenExceptions.length, expiredExceptions: compiled.plan.tokenExceptions.filter((item) => new Date(item.expires) < new Date()).length, unusedTokens: compiled.plan.tokens.tokens.filter((token) => !compiled.scss.includes(token.runtimeExpression)).map((token) => token.id) };
   const signatures = new Map<string, string[]>();
   for (const component of compiled.plan.components) {
     const signature = JSON.stringify(component.bem.elements.slice().sort());
