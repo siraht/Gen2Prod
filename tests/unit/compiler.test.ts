@@ -299,6 +299,15 @@ describe("static compilation", () => {
     expect(output.scss).toContain("&--");
   });
 
+  test("does not reinterpret an established BEM control as a primary CTA", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-canonical-control-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><meta name="generator" content="Gen2Prod"><title>Canonical control</title><meta name="description" content="Canonical control fixture"><style>.page-table__cell{display:flex}.page-table__button{padding:4px}</style></head><body><main><h1>Controls</h1><div class="page-table__cell"><button class="page-table__button"><span>Edit</span></button></div></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    expect(output.html).toContain('class="page-table__button"');
+    expect(output.html).not.toContain("button--primary");
+  });
+
   test("resolves full selectors, sibling combinators, and cascade precedence", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-selector-cascade-"));
     const htmlPath = join(directory, "page.html");

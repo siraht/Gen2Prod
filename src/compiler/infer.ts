@@ -223,7 +223,7 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
     const missingModifierBases = existingBem.filter((className) => className.includes("--")).map((className) => className.split("--")[0]!).filter((base) => !preserved.includes(base));
     classes = [...new Set([...missingModifierBases, ...preserved])];
   }
-  if ((semantic.tag === "a" || semantic.tag === "button") && (semantic.role === "submit" || node.nodeId.includes("cta") || node.nodeId.includes("submit") || node.text.toLowerCase().includes("choose") || (parent && interactiveGroup(parent)))) classes = ["button", "button--primary"];
+  if (existingBem.length === 0 && (semantic.tag === "a" || semantic.tag === "button") && (semantic.role === "submit" || node.nodeId.includes("cta") || node.nodeId.includes("submit") || node.text.toLowerCase().includes("choose") || (parent && interactiveGroup(parent)))) classes = ["button", "button--primary"];
   if (block === "hero" && isNewBlock && plannedSourceHasId(node, "media")) classes = ["hero", "hero--split"];
   const attrs = attributes(node);
   if (loweredDestination) attrs.href = loweredDestination;
