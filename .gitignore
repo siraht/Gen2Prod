@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.gen2prod/
+coverage/
+*.log
+.DS_Store
+fixtures/generated/
+results.tsv

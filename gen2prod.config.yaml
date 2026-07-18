@@ -1,0 +1,21 @@
+schemaVersion: "0.1.0"
+mode: legacy-conversion
+profile: refactor
+workspace: .gen2prod
+capture:
+  viewports: [360, 768, 1280, 1440]
+  themes: [light]
+  states: [default, focus-visible]
+  browserExecutable: auto
+policy:
+  file: src/research/policy.ts
+research:
+  budget: 12
+  split: validation
+  hiddenHoldoutEvery: 5
+validation:
+  wcag: WCAG2AA
+  provisionalThresholds: true
+  maxVisualPixelRatio: 0.01
+  minBemCoverage: 0.95
+  minTokenCoverage: 0.95
