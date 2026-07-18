@@ -53,9 +53,10 @@ These are not blockers for the local self-improving static compiler. They are ex
 
 - Naturalistic corpus: 6 projects, 96 artifacts, 48 HTML files, 28 screenshots and 17 strategy documents, split by project identity into train/validation/holdout.
 - Expanded procedural curriculum: 21 fixtures across three content families, with 12 train, 6 validation and 3 holdout cases and all 11 corruption operators represented.
+- Post-change procedural checkpoint: 4/4 validation cases have zero hard, semantic and BEM error with 100% mutation-control recall; 2/2 hidden holdout cases additionally reach zero gold visual loss and 100% visual recovery.
 - Hidden natural holdout after the correspondence/style fixes: 5/5 accepted, zero hard failures, 100% content/URL/form recall, 100% idempotence, 0.21% mean dirty-to-candidate pixel loss, and 2/2 exact-image non-regressions.
 - Natural validation after the one-off-style isolation fix: 4/4 accepted, zero hard failures, 100% content/URL/form recall, 100% idempotence and 0.06% mean dirty-to-candidate pixel loss.
-- Policy, pass and verifier autoresearch tracks all executed against frozen evaluation; non-improving hypotheses were reverted rather than weakening acceptance.
-- Distillation emits reloadable datasets and model artifacts, including naturalistic trajectories; deterministic verifier holdout precision and recall are both 1.0 on the frozen baseline.
+- Policy, pass and verifier autoresearch tracks all executed again after the final evaluator change; six non-improving hypotheses were reverted rather than weakening acceptance.
+- Final distillation blends 125 synthetic/research/natural trajectories into 18 supervised, 2 preference and 125 verifier examples. Verifier holdout precision/recall are both 1.0, planner holdout action coverage is 92.6%, and selector ranking uses hard-failure-first plus conservative acceptance evidence.
 
 Thresholds remain provisional until the corpus spans more generator families, frameworks, browsers and independently reviewed production projects. That warning is a calibration requirement, not a reason to discard the current measurements.
