@@ -28,8 +28,8 @@ export type RenderedSource = {
 };
 
 export type CaptureResult = {
-  environment: { browser: string; browserVersion: string; os: string; deviceScaleFactor: number; timezone: string; locale: string; fontSetHash: string; colorScheme: string; colorProfile: string };
-  captures: { viewport: number; viewportHeight: number; theme: string; state: string; screenshot: string; screenshotHash: string; dom: unknown[]; accessibilityTree: unknown[]; performance: Record<string, unknown>; seo: Record<string, unknown>; console: string[]; renderedSource?: RenderedSource | undefined }[];
+  environment: { browser: string; browserVersion: string; os: string; deviceScaleFactor: number; timezone: string; locale: string; fontSetHash: string; colorScheme: string; colorProfile: string; stabilization?: { epochMs: number; randomSeed: number; animations: "disabled"; reducedMotion: "reduce"; imagesDecoded: true } | undefined };
+  captures: { viewport: number; viewportHeight: number; theme: string; state: string; screenshot: string; screenshotHash: string; fontSetHash?: string | undefined; dom: unknown[]; accessibilityTree: unknown[]; performance: Record<string, unknown>; seo: Record<string, unknown>; console: string[]; renderedSource?: RenderedSource | undefined }[];
 };
 
 export type CaptureSession = {
@@ -41,6 +41,8 @@ let sharedBrowser: Browser | undefined;
 let sharedBrowserLaunch: Promise<Browser> | undefined;
 let sharedBrowserReferences = 0;
 let sharedBrowserCloseTimer: ReturnType<typeof setTimeout> | undefined;
+const STABILIZED_EPOCH_MS = Date.UTC(2024, 0, 1, 12, 0, 0);
+const STABILIZED_RANDOM_SEED = 0x6d2b79f5;
 
 export async function findBrowserExecutable(preferred?: string): Promise<string> {
   const candidates = [preferred, process.env.GEN2PROD_BROWSER, "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"].filter((value): value is string => Boolean(value && value !== "auto"));
@@ -165,12 +167,37 @@ async function captureOne(browser: Browser, options: CaptureOptions, viewport: n
   const viewportHeight = options.viewportHeight ?? 1000;
   const context = await browser.newContext({ viewport: { width: viewport, height: viewportHeight }, deviceScaleFactor: 1, locale: "en-US", timezoneId: "UTC", colorScheme: theme, reducedMotion: "reduce" });
   const page = await context.newPage();
+  await page.addInitScript({ content: `(() => {
+    const epoch = ${STABILIZED_EPOCH_MS};
+    const NativeDate = Date;
+    class FrozenDate extends NativeDate {
+      constructor(...args) { super(...(args.length ? args : [epoch])); }
+      static now() { return epoch; }
+    }
+    Object.setPrototypeOf(FrozenDate, NativeDate);
+    globalThis.Date = FrozenDate;
+    let randomState = ${STABILIZED_RANDOM_SEED} >>> 0;
+    Math.random = () => {
+      randomState += 0x6D2B79F5;
+      let value = randomState;
+      value = Math.imul(value ^ value >>> 15, value | 1);
+      value ^= value + Math.imul(value ^ value >>> 7, value | 61);
+      return ((value ^ value >>> 14) >>> 0) / 4294967296;
+    };
+  })();` });
   const consoleMessages: string[] = [];
   page.on("console", (message) => consoleMessages.push(`${message.type()}: ${message.text()}`));
   await page.goto(options.url, { waitUntil: "load" });
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   await page.evaluate(() => document.fonts.ready);
   const scrollPositionsVisited = options.materializeScrollStates === false ? 0 : await materializeScrollStates(page);
+  await page.evaluate(() => Promise.race([
+    Promise.all([...document.images].map((image) => image.complete ? image.decode().catch(() => undefined) : new Promise<void>((resolve) => {
+      image.addEventListener("load", () => resolve(), { once: true });
+      image.addEventListener("error", () => resolve(), { once: true });
+    }))),
+    new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+  ]));
   const renderedSource = options.collectRenderedSource ? { ...await captureRenderedSource(page), scrollPositionsVisited } : undefined;
   await stabilize(page, theme);
   if (state === "focus-visible") await page.keyboard.press("Tab");
@@ -186,7 +213,8 @@ async function captureOne(browser: Browser, options: CaptureOptions, viewport: n
     };
   });
   const seo = await page.evaluate(() => ({ title: document.title, description: document.querySelector('meta[name="description"]')?.getAttribute("content") ?? "", h1Count: document.querySelectorAll("h1").length, canonical: document.querySelector('link[rel="canonical"]')?.getAttribute("href") ?? null, links: [...document.querySelectorAll("a")].map((anchor) => ({ text: anchor.textContent?.trim(), href: anchor.getAttribute("href") })) }));
-  const result = { viewport, viewportHeight, theme, state, screenshot, screenshotHash: sha256(new Uint8Array(await Bun.file(screenshot).arrayBuffer())), dom: await captureDom(page), accessibilityTree: await captureAccessibility(page), performance: performanceEvidence, seo, console: consoleMessages, ...(renderedSource ? { renderedSource } : {}) };
+  const fontSet = await page.evaluate(() => [...document.fonts].map((font) => `${font.family}|${font.style}|${font.weight}|${font.stretch}|${font.status}`).sort());
+  const result = { viewport, viewportHeight, theme, state, screenshot, screenshotHash: sha256(new Uint8Array(await Bun.file(screenshot).arrayBuffer())), fontSetHash: sha256(fontSet.join("\n")), dom: await captureDom(page), accessibilityTree: await captureAccessibility(page), performance: performanceEvidence, seo, console: consoleMessages, ...(renderedSource ? { renderedSource } : {}) };
   await context.close();
   return result;
 }
@@ -195,7 +223,7 @@ async function captureWithBrowser(browser: Browser, options: CaptureOptions): Pr
   await ensureDirectory(options.outputDirectory);
   const captures: CaptureResult["captures"] = [];
   for (const viewport of options.viewports) for (const theme of options.themes) for (const state of options.states) captures.push(await captureOne(browser, options, viewport, theme, state));
-  const result: CaptureResult = { environment: { browser: "chromium", browserVersion: browser.version(), os: `${process.platform}/${process.arch}`, deviceScaleFactor: 1, timezone: "UTC", locale: "en-US", fontSetHash: "system-fonts", colorScheme: options.themes.join(","), colorProfile: "sRGB" }, captures };
+  const result: CaptureResult = { environment: { browser: "chromium", browserVersion: browser.version(), os: `${process.platform}/${process.arch}`, deviceScaleFactor: 1, timezone: "UTC", locale: "en-US", fontSetHash: sha256(captures.map((capture) => capture.fontSetHash ?? "").join("\n")), colorScheme: options.themes.join(","), colorProfile: "sRGB", stabilization: { epochMs: STABILIZED_EPOCH_MS, randomSeed: STABILIZED_RANDOM_SEED, animations: "disabled", reducedMotion: "reduce", imagesDecoded: true } }, captures };
   await writeJsonAtomic(join(options.outputDirectory, "capture.json"), result);
   return result;
 }

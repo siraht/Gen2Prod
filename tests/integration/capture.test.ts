@@ -31,3 +31,15 @@ test("visits scroll states before freezing observer-driven rendered DOM", async 
   expect(capture.captures[0]!.renderedSource?.scriptsRemoved).toBe(1);
   expect(capture.captures[0]!.renderedSource?.scrollPositionsVisited).toBeGreaterThan(1);
 });
+
+test("freezes time and randomness across independent captures", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "gen2prod-deterministic-capture-"));
+  const page = join(directory, "index.html");
+  await Bun.write(page, '<!doctype html><html><head><title>Deterministic</title><meta name="description" content="deterministic"><style>body{margin:0}p{font:16px system-ui}</style></head><body><p data-g2p-node="dynamic"></p><script>document.querySelector("p").textContent=`${Date.now()}:${Math.random()}`</script></body></html>');
+  const first = await capturePage({ url: pathToFileURL(page).href, outputDirectory: join(directory, "first"), viewports: [360], states: ["default"], themes: ["light"] });
+  const second = await capturePage({ url: pathToFileURL(page).href, outputDirectory: join(directory, "second"), viewports: [360], states: ["default"], themes: ["light"] });
+  expect(first.captures[0]?.screenshotHash).toBe(second.captures[0]?.screenshotHash);
+  expect(first.captures[0]?.dom).toEqual(second.captures[0]?.dom);
+  expect(first.environment.fontSetHash).not.toBe("system-fonts");
+  expect(first.environment.stabilization?.epochMs).toBe(Date.UTC(2024, 0, 1, 12, 0, 0));
+});
