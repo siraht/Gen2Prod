@@ -4,14 +4,14 @@ export const ImageOnlySplitSchema = z.enum(["train", "validation", "holdout"]);
 
 export const ImageOnlyFrameSchema = z.object({
   frameId: z.string().min(1),
-  kind: z.enum(["initial", "scroll-materialized", "scroll-checkpoint", "hover-probe", "focus-probe", "uploaded-mockup"]),
+  kind: z.enum(["initial", "scroll-materialized", "scroll-checkpoint", "hover-probe", "focus-probe", "temporal-probe", "uploaded-mockup"]),
   path: z.string().min(1),
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
   width: z.number().int().positive(),
   height: z.number().int().positive(),
   viewport: z.object({ width: z.number().int().positive(), height: z.number().int().positive() }),
   scrollY: z.number().nonnegative().default(0),
-  probe: z.object({ x: z.number().nonnegative(), y: z.number().nonnegative(), action: z.enum(["hover", "focus", "scroll"]) }).optional(),
+  probe: z.object({ x: z.number().nonnegative(), y: z.number().nonnegative(), action: z.enum(["hover", "focus", "scroll", "wait"]) }).optional(),
 });
 
 export const ImageOnlyTargetManifestSchema = z.object({
@@ -167,6 +167,31 @@ export const ImageOnlyPolicySchema = z.object({
   }),
 });
 
+export const ImageStateSequenceAnalysisSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  targetId: z.string().min(1),
+  observations: z.array(z.object({
+    observationId: z.string().min(1),
+    baselineFrameId: z.string().min(1),
+    candidateFrameId: z.string().min(1),
+    action: z.enum(["materialize-scroll", "scroll", "hover", "focus", "wait"]),
+    changedPixelRatio: z.number().min(0).max(1),
+    changedRegions: z.array(ImageBoxSchema),
+    interpretation: z.enum(["no-material-change", "lazy-or-scroll-materialization", "scroll-dependent-visual-state", "hover-response-observed", "focus-response-observed", "ambient-or-timed-change-observed"]),
+    confidence: z.number().min(0).max(1),
+    prohibitedClaims: z.array(z.string()),
+  })),
+  hypotheses: z.array(z.object({
+    hypothesisId: z.string().min(1),
+    kind: z.enum(["lazy-materialization", "scroll-linked-motion", "sticky-or-fixed-layer", "hover-response", "focus-response", "ambient-animation", "carousel-or-rotator", "unknown-dynamic-state"]),
+    evidenceObservationIds: z.array(z.string()),
+    confidence: z.number().min(0).max(1),
+    safeImplementation: z.string(),
+    verificationActions: z.array(z.string()),
+  })),
+  stillImageCeilings: z.array(z.string()),
+});
+
 export type ImageOnlyFrame = z.infer<typeof ImageOnlyFrameSchema>;
 export type ImageOnlyTargetManifest = z.infer<typeof ImageOnlyTargetManifestSchema>;
 export type ImageOnlyAnalysis = z.infer<typeof ImageOnlyAnalysisSchema>;
@@ -174,3 +199,4 @@ export type ImageOnlyBuildPlan = z.infer<typeof ImageOnlyBuildPlanSchema>;
 export type InteractionHypothesis = z.infer<typeof InteractionHypothesisSchema>;
 export type ImageOnlyEvaluation = z.infer<typeof ImageOnlyEvaluationSchema>;
 export type ImageOnlyPolicy = z.infer<typeof ImageOnlyPolicySchema>;
+export type ImageStateSequenceAnalysis = z.infer<typeof ImageStateSequenceAnalysisSchema>;

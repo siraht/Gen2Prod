@@ -17,6 +17,7 @@ export type CaptureImageTargetOptions = {
   capturePolicy?: "still" | "scroll-materialized" | "visual-probe-sequence" | undefined;
   checkpointFractions?: number[] | undefined;
   probePoints?: { x: number; y: number; action: "hover" | "focus" }[] | undefined;
+  temporalProbeDelayMs?: number | undefined;
 };
 
 function imageDimensions(bytes: Uint8Array): { width: number; height: number } {
@@ -100,6 +101,16 @@ export async function captureImageTarget(options: CaptureImageTargetOptions): Pr
       new Promise<void>((resolve) => setTimeout(resolve, 1_000)),
     ]));
     await waitForVisualAssets(page);
+
+    if (capturePolicy === "visual-probe-sequence") {
+      const temporalFirst = join(options.outputDirectory, "temporal-1.png");
+      await page.screenshot({ path: temporalFirst, fullPage: false, animations: "allow", timeout: 20_000 });
+      frames.push(await frame(temporalFirst, options.outputDirectory, { frameId: "temporal-1", kind: "temporal-probe", viewport, scrollY: 0, probe: { x: 0, y: 0, action: "wait" } }));
+      await page.waitForTimeout(options.temporalProbeDelayMs ?? 800);
+      const temporalSecond = join(options.outputDirectory, "temporal-2.png");
+      await page.screenshot({ path: temporalSecond, fullPage: false, animations: "allow", timeout: 20_000 });
+      frames.push(await frame(temporalSecond, options.outputDirectory, { frameId: "temporal-2", kind: "temporal-probe", viewport, scrollY: 0, probe: { x: 0, y: 0, action: "wait" } }));
+    }
 
     const initialPath = join(options.outputDirectory, "initial-full-page.png");
     await page.screenshot({ path: initialPath, fullPage: true, animations: "allow", timeout: 45_000 });
