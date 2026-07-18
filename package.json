@@ -17,6 +17,7 @@
     "verify": "bun run check && bun test && bun run acceptance && bun run build"
   },
   "dependencies": {
+    "@tesseract.js-data/eng": "1.0.0",
     "axe-core": "^4.10.3",
     "commander": "^14.0.0",
     "culori": "^4.0.2",
@@ -28,6 +29,7 @@
     "postcss": "^8.5.6",
     "postcss-scss": "^4.0.9",
     "sass": "^1.89.2",
+    "tesseract.js": "7.0.0",
     "yaml": "^2.8.0",
     "zod": "^4.0.5"
   },
