@@ -419,6 +419,16 @@ describe("static compilation", () => {
     }
     expect(output.scss).toContain("list-style: none");
   });
+
+  test("keeps repeated inline value-label pairs out of list semantics", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-inline-pair-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Metrics</title><meta name="description" content="Metric value and label pairs"><style>.metrics{display:grid;grid-template-columns:repeat(2,1fr)}.metric-value{display:block;font-size:2rem}.metric-label{font-size:.75rem;line-height:1rem}</style></head><body><main><h1>Results</h1><div class="metrics"><div><span class="metric-value">30+</span><span class="metric-label">Years of craft</span></div><div><span class="metric-value">150</span><span class="metric-label">Private estates</span></div></div></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    expect(output.html).toContain(">30+</span>");
+    expect(output.html).toContain(">Years of craft</span>");
+    expect(output.html).not.toMatch(/<li[^>]*>\s*<li/);
+  });
 });
 
 function inputTokens() {

@@ -36,6 +36,10 @@ function descendants(node: DomNode): DomNode[] {
 
 function repeatedContainer(node: DomNode): boolean {
   if (node.children.length < 2) return false;
+  // A pair of inline leaf nodes is commonly a value/label or icon/label
+  // composition, not a list. Promoting it to ul/li changes inline line boxes
+  // and can move every later section despite preserving all authored CSS.
+  if (node.children.every((child) => child.children.length === 0 && ["span", "strong", "em", "small"].includes(child.tag))) return false;
   const signatures = node.children.map((child) => `${child.tag}:${child.children.map((item) => item.tag).join(",")}`);
   return new Set(signatures).size === 1;
 }
