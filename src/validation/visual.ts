@@ -203,7 +203,12 @@ function matchNodes(baseline: Map<string, CapturedNode>, candidate: Map<string, 
   }
   const remaining = [...baseline.entries()].filter(([id]) => !matches.has(id)).sort(([, left], [, right]) => {
     const contentPriority = matchingPriority(right) - matchingPriority(left);
-    return contentPriority || Number(isVisuallySubstantive(right)) - Number(isVisuallySubstantive(left));
+    const substantivePriority = Number(isVisuallySubstantive(right)) - Number(isVisuallySubstantive(left));
+    // For repeated non-text surfaces (bars, progress segments, swatches),
+    // match the smallest leaves before their similarly positioned containers.
+    // Otherwise a greedy tag bonus can consume the leaf as the container.
+    const areaPriority = left.box.width * left.box.height - right.box.width * right.box.height;
+    return contentPriority || substantivePriority || areaPriority;
   });
   for (const [id, before] of remaining) {
     const beforeText = textIdentity(before);

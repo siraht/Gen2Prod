@@ -105,6 +105,21 @@ describe("image comparison calibration", () => {
     expect(metrics.layout.max).toBe(0);
   });
 
+  test("matches repeated visual leaves before their retagged containers", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-node-surfaces-"));
+    const screenshot = join(directory, "solid.png");
+    const image = new PNG({ width: 10, height: 10 });
+    image.data.fill(255);
+    await Bun.write(screenshot, PNG.sync.write(image));
+    const node = (nodeId: string, tag: string, y: number, height: number, backgroundColor: string) => ({ nodeId, tag, text: "", contentText: "", visible: true, box: { x: 0, y, width: 10, height }, styles: { display: "block", position: "static", backgroundColor, boxShadow: "none" } });
+    const capture = (dom: unknown[]) => ({ viewport: 100, viewportHeight: 100, theme: "light", state: "default", screenshot, screenshotHash: "hash", dom, accessibilityTree: [], performance: {}, seo: {}, console: [] });
+    const baseline = capture([node("rendered-0", "div", 0, 100, "rgb(20, 20, 20)"), node("rendered-1", "div", 10, 80, "rgb(20, 100, 220)")]);
+    const candidate = capture([node("rendered-0", "li", 0, 100, "rgb(20, 20, 20)"), node("rendered-1", "div", 10, 80, "rgb(20, 100, 220)")]);
+    const metrics = await compareCaptures(baseline, candidate);
+    expect(metrics.unmatchedVisibleNodes).toBe(0);
+    expect(metrics.layout.max).toBe(0);
+  });
+
   test("normalizes downsampled full-page references by width without calling them pixel-exact", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-image-scale-"));
     const writeSolid = async (path: string, width: number, height: number) => {
