@@ -7,7 +7,7 @@ import type { FitnessVector } from "../core/fitness.ts";
 import { TransformationPolicySchema, type TransformationPolicy } from "../core/policy.ts";
 import type { DomNode, NormalForm } from "../schemas/normal-form.ts";
 import { EvaluationResultSchema, type EvaluationResult, type FixtureEvaluation } from "../schemas/research.ts";
-import type { SyntheticManifest } from "../synthetic/types.ts";
+import { SyntheticManifestSchema, type SyntheticManifest } from "../synthetic/types.ts";
 import { contextFromCompiled, validate } from "../validation/gates.ts";
 import { EVALUATOR_MUTATIONS } from "../validation/mutations.ts";
 
@@ -94,15 +94,32 @@ async function evaluateMutationControls(compiled: Awaited<ReturnType<typeof comp
   return caught / EVALUATOR_MUTATIONS.length;
 }
 
-async function frozenEvaluatorHash(): Promise<string> {
-  const hashes = await Promise.all([hashFile(import.meta.filename), hashFile(new URL("./prepare.ts", import.meta.url).pathname), hashFile(new URL("../validation/mutations.ts", import.meta.url).pathname)]);
+async function frozenEvaluatorHash(manifestPath: string, manifest: SyntheticManifest): Promise<string> {
+  const sourcePaths = [
+    import.meta.filename,
+    new URL("./prepare.ts", import.meta.url).pathname,
+    new URL("../validation/mutations.ts", import.meta.url).pathname,
+    new URL("../validation/gates.ts", import.meta.url).pathname,
+    new URL("../validation/accessibility.ts", import.meta.url).pathname,
+    new URL("../validation/visual.ts", import.meta.url).pathname,
+    new URL("../compiler/pipeline.ts", import.meta.url).pathname,
+    new URL("../compiler/ingest.ts", import.meta.url).pathname,
+    new URL("../compiler/infer.ts", import.meta.url).pathname,
+    new URL("../compiler/tokens.ts", import.meta.url).pathname,
+    new URL("../compiler/emit.ts", import.meta.url).pathname,
+    new URL("../compiler/correspondence.ts", import.meta.url).pathname,
+  ];
+  const fixtureNames = ["fixture.canonical.json", "fixture.gold.semantic.json", "fixture.gold.bem.json", "fixture.gold.tokens.json", "fixture.gold.html", "gold.css", "fixture.corrupted.html", "corrupted.css", "fixture.corruption-trace.json", "fixture.node-correspondence.json", "fixture.expected-gates.json"];
+  const fixturePaths = manifest.fixtures.flatMap((fixture) => fixtureNames.map((name) => join(resolve(fixture.directory), name)));
+  const hashes = await Promise.all([...sourcePaths, resolve(manifestPath), ...fixturePaths].map(async (path) => ({ name: path.split("/").at(-1), hash: await hashFile(path) })));
   return hashJson(hashes);
 }
 
 export async function evaluatePolicy(options: EvaluateOptions): Promise<EvaluationResult> {
   const started = performance.now();
   const policy = TransformationPolicySchema.parse(options.policy);
-  const manifest = await readJson<SyntheticManifest>(options.manifestPath);
+  const manifest = SyntheticManifestSchema.parse(await readJson<SyntheticManifest>(options.manifestPath));
+  const evaluatorHash = await frozenEvaluatorHash(options.manifestPath, manifest);
   const selected = manifest.fixtures.filter((fixture) => options.split === "all" || fixture.split === options.split);
   if (selected.length === 0) throw new Error(`No fixtures in split ${options.split}`);
   await ensureDirectory(options.workDirectory);
@@ -157,6 +174,6 @@ export async function evaluatePolicy(options: EvaluateOptions): Promise<Evaluati
     mutationControlRecall,
     fixtureResults,
     resourceAccounting: { fixtureCount: selected.length, wallTimeMs: performance.now() - started, normalizedCost, browserCaptures: 0, visionCalls: policy.modalities.fullScreenshot ? selected.length : 0, modelCandidates: selected.length * (policy.candidates.semantic + policy.candidates.component + policy.candidates.token) },
-    frozenEvaluatorHash: await frozenEvaluatorHash(),
+    frozenEvaluatorHash: evaluatorHash,
   });
 }

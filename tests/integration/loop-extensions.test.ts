@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Gen2ProdConfig } from "../../src/core/config.ts";
 import { evaluateModalityAblation } from "../../src/research/ablation.ts";
+import { evaluatePolicy } from "../../src/research/evaluate.ts";
 import { defaultPolicy } from "../../src/research/policy.ts";
 import { executeRun } from "../../src/runtime/run.ts";
 import { TrajectorySchema } from "../../src/schemas/research.ts";
@@ -40,6 +41,19 @@ test("runs all controlled A-F modality configurations under one evaluator", asyn
   expect(results.map((result) => result.evaluation.resourceAccounting.normalizedCost)).toEqual([...results.map((result) => result.evaluation.resourceAccounting.normalizedCost)].sort((left, right) => left - right));
   expect(results[2]?.evaluation.resourceAccounting.visionCalls).toBe(0);
   expect(results[3]?.evaluation.resourceAccounting.visionCalls).toBe(1);
+});
+
+test("fingerprints evaluator code and the complete frozen fixture corpus", async () => {
+  const root = await mkdtemp(join(tmpdir(), "gen2prod-frozen-hash-"));
+  const workspace = await mkdtemp(join(tmpdir(), "gen2prod-frozen-hash-work-"));
+  await prepareSyntheticCurriculum({ root, seed: 31, countPerArchetype: 1 });
+  const manifestPath = join(root, "manifest.json");
+  const before = await evaluatePolicy({ manifestPath, policy: defaultPolicy, split: "holdout", workDirectory: join(workspace, "before") });
+  const expectedPath = join(root, "form", "fixture.expected-gates.json");
+  const expected = await Bun.file(expectedPath).json() as Record<string, unknown>;
+  await Bun.write(expectedPath, JSON.stringify({ ...expected, fingerprintMutation: true }));
+  const after = await evaluatePolicy({ manifestPath, policy: defaultPolicy, split: "holdout", workDirectory: join(workspace, "after") });
+  expect(after.frozenEvaluatorHash).not.toBe(before.frozenEvaluatorHash);
 });
 
 test("records accepted production runs as distillation trajectories", async () => {
