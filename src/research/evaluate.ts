@@ -418,10 +418,14 @@ export async function evaluatePolicy(options: EvaluateOptions): Promise<Evaluati
   const fixtureResults: FixtureEvaluation[] = [];
   const captureSession = options.captureSession ?? await openCaptureSession();
   const ownsCaptureSession = !options.captureSession;
+  const captureEnvironments = new Map<string, Record<string, unknown>>();
   let evaluatorHash = "";
   let visualMutationCaught = false;
   try {
-    for (const fixture of manifest.fixtures) await ensureVisualBenchmark(resolve(fixture.directory), undefined, captureSession);
+    for (const fixture of manifest.fixtures) {
+      const baseline = await ensureVisualBenchmark(resolve(fixture.directory), undefined, captureSession);
+      captureEnvironments.set(hashJson(baseline.environment), baseline.environment);
+    }
     const codeAndCorpusHash = await frozenEvaluatorHash(options.manifestPath, manifest);
     evaluatorHash = options.acss ? hashJson({ codeAndCorpusHash, automaticcss: { sourceHash: options.acss.provenance.sourceHash, registryHash: options.acss.provenance.registryHash, moduleMode: options.acss.provenance.moduleMode } }) : codeAndCorpusHash;
     for (const fixture of selected) {
@@ -459,6 +463,11 @@ export async function evaluatePolicy(options: EvaluateOptions): Promise<Evaluati
       fixtureResults.push({
         fixtureId: fixture.id,
         split: fixture.split,
+        archetype: fixture.archetype,
+        generatorFamily: fixture.generatorFamily,
+        contentFamily: fixture.contentFamily,
+        variantIndex: fixture.variantIndex,
+        corruptionKinds: fixture.corruptionKinds,
         hardGateFailures,
         fitness,
         metrics: {
@@ -544,6 +553,16 @@ export async function evaluatePolicy(options: EvaluateOptions): Promise<Evaluati
       actionCoverage: requestedCount ? executedRequested / requestedCount : 1,
       executedActions: [...(execution?.executedActions ?? []), ...evaluatorActions],
       ignoredActions: effectiveIgnored.map((item) => item.action),
+    },
+    benchmarkCoverage: {
+      generatorVersion: manifest.generatorVersion,
+      seed: manifest.seed,
+      calibrationStatus: manifest.calibrationStatus,
+      archetypes: [...new Set(selected.map((fixture) => fixture.archetype))].sort(),
+      generatorFamilies: [...new Set(selected.map((fixture) => fixture.generatorFamily))].sort(),
+      contentFamilies: [...new Set(selected.map((fixture) => fixture.contentFamily))].sort(),
+      corruptionKinds: [...new Set(selected.flatMap((fixture) => fixture.corruptionKinds))].sort(),
+      captureEnvironments: [...captureEnvironments.values()],
     },
     frozenEvaluatorHash: evaluatorHash,
   });

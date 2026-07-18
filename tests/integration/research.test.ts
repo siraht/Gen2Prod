@@ -17,6 +17,10 @@ test("runs frozen keep/revert experiments and records trajectories", async () =>
   expect(summary.experiments.every((experiment) => !experiment.intervention.effective)).toBeTrue();
   expect(summary.experiments.every((experiment) => experiment.reason.includes("no measured output"))).toBeTrue();
   expect(summary.experiments.every((experiment) => experiment.mutationControlRecall === 1)).toBeTrue();
+  const baselineEvaluation = await Bun.file(join(directory, "work", "research", "baseline", "evaluation.json")).json() as { benchmarkCoverage?: { archetypes: string[]; captureEnvironments: unknown[] }; fixtureResults: { generatorFamily?: string; corruptionKinds?: string[] }[] };
+  expect(baselineEvaluation.benchmarkCoverage?.archetypes.length).toBeGreaterThan(0);
+  expect(baselineEvaluation.benchmarkCoverage?.captureEnvironments.length).toBeGreaterThan(0);
+  expect(baselineEvaluation.fixtureResults.every((fixture) => fixture.generatorFamily && fixture.corruptionKinds)).toBeTrue();
   expect(summary.experiments.every((experiment) => experiment.holdoutFitness === undefined)).toBeTrue();
   expect(summary.promotion.promoted).toBeFalse();
   expect(summary.productionIncumbent).toEqual(defaultPolicy);

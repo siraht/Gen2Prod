@@ -18,6 +18,11 @@ export const FitnessVectorSchema = z.object({
 export const FixtureEvaluationSchema = z.object({
   fixtureId: z.string(),
   split: z.string(),
+  archetype: z.string().optional(),
+  generatorFamily: z.string().optional(),
+  contentFamily: z.string().optional(),
+  variantIndex: z.number().int().nonnegative().optional(),
+  corruptionKinds: z.array(z.string()).optional(),
   hardGateFailures: z.array(z.string()),
   fitness: FitnessVectorSchema,
   metrics: z.record(z.string(), z.number()),
@@ -47,6 +52,16 @@ export const EvaluationResultSchema = z.object({
     executedActions: z.array(z.string()),
     ignoredActions: z.array(z.string()),
   }),
+  benchmarkCoverage: z.object({
+    generatorVersion: z.string(),
+    seed: z.number().int(),
+    calibrationStatus: z.string(),
+    archetypes: z.array(z.string()),
+    generatorFamilies: z.array(z.string()),
+    contentFamilies: z.array(z.string()),
+    corruptionKinds: z.array(z.string()),
+    captureEnvironments: z.array(z.record(z.string(), z.unknown())),
+  }).optional(),
   frozenEvaluatorHash: z.string(),
 });
 
