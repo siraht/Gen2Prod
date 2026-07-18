@@ -32,6 +32,7 @@ import { analyzeImageStateSequence } from "./image-only/state.ts";
 import { prepareSyntheticImageCurriculum } from "./image-only/synthetic.ts";
 import { writeImageContentStrategy } from "./image-only/strategy.ts";
 import { importImageTarget } from "./image-only/import.ts";
+import { auditLiveImageBuild } from "./image-only/audit.ts";
 
 type GlobalOptions = { config: string; workspace: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -260,6 +261,16 @@ image
     const envelope = result("image evaluate", evaluation); envelope.ok = evaluation.accepted;
     emit(envelope, `Image evaluation ${evaluation.evaluationId}\nPixel loss: ${(evaluation.visual.pixelDifferenceRatio * 100).toFixed(2)}%; macro loss: ${(evaluation.visual.macroStructureLoss * 100).toFixed(2)}%\nText recall: ${(evaluation.semantics.visibleTextRecall * 100).toFixed(1)}%; BEM: ${(evaluation.semantics.bemCoverage * 100).toFixed(1)}%\nUncertainty coverage: ${(evaluation.interactions.unresolvedConcernCoverage * 100).toFixed(1)}%; leakage gate: ${evaluation.leakage.passed ? "PASS" : "FAIL"}\nFitness: ${evaluation.fitness.score.toFixed(4)}; accepted: ${evaluation.accepted}`);
     if (!evaluation.accepted) process.exitCode = 3;
+  });
+image
+  .command("audit <manifest>")
+  .description("compare an already-emitted image build with quarantined live extraction without changing builder inputs")
+  .requiredOption("--build <path>", "completed image-only build directory")
+  .option("--output <path>", "post-build audit JSON")
+  .action(async (manifest: string, options: { build: string; output?: string }) => {
+    const audit = await auditLiveImageBuild(resolve(manifest), resolve(options.build), options.output ? resolve(options.output) : undefined);
+    const envelope = result("image audit", audit); envelope.requiredActions.push(...audit.requiredActions);
+    emit(envelope, `Post-build audit ${audit.targetId}\nBuilder inputs changed: no\nAudit → OCR recall: ${(audit.metrics.auditToOcrRecall * 100).toFixed(1)}%\nAudit → candidate recall: ${(audit.metrics.auditToCandidateRecall * 100).toFixed(1)}%\nOCR → candidate recall: ${(audit.metrics.ocrToCandidateRecall * 100).toFixed(1)}%\nLikely incomplete capture: ${audit.likelyCaptureIncomplete ? "yes" : "no"}\nQuarantined link records awaiting authority: ${audit.metrics.discoveredLinks}`);
   });
 image
   .command("run <manifest>")
