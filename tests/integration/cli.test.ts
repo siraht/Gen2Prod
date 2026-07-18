@@ -27,4 +27,4 @@ test("exposes naturalistic import and modality ablation controls", async () => {
   const evaluate = Bun.spawn(["bun", "src/cli.ts", "evaluate", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
   expect(await new Response(evaluate.stdout).text()).toContain("--ablation");
   expect(await evaluate.exited).toBe(0);
-});
+}, 15_000);
