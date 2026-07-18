@@ -55,12 +55,12 @@ function semanticAndBemError(gold: NormalForm, candidate: PlannedNode): { semant
   return { semantic: semanticErrors / Math.max(comparableSemantic, 1), bem: bemLoss / Math.max(bemNodes, 1) };
 }
 
-function policyActions(policy: TransformationPolicy): string[] {
+export function policyActions(policy: TransformationPolicy): string[] {
   const modalityActions = Object.entries(policy.modalities).filter(([, enabled]) => enabled).map(([name]) => `evidence:${name}`);
   return [...policy.passOrder.map((pass) => `pass:${pass}`), ...modalityActions];
 }
 
-function policyCost(policy: TransformationPolicy): number {
+export function policyCost(policy: TransformationPolicy): number {
   const mapping: Record<keyof TransformationPolicy["modalities"], string> = { sourceAst: "source-ast", renderedDom: "rendered-dom", accessibilityTree: "accessibility-tree", computedStyles: "computed-styles", pageIntent: "page-intent", fullScreenshot: "full-screenshot", uncertaintyTriggeredCrops: "section-crops", crossPageInventory: "cross-page-inventory" };
   const modalityCost = Object.entries(mapping).reduce((sum, [field, cost]) => sum + (policy.modalities[field as keyof TransformationPolicy["modalities"]] ? (policy.costs[cost] ?? 0) : 0), 0);
   const candidateCount = policy.candidates.semantic + policy.candidates.component + policy.candidates.token;
