@@ -9,7 +9,16 @@ import { distill } from "../src/distill/train.ts";
 
 const root = await mkdtemp(join(tmpdir(), "gen2prod-acceptance-"));
 const fixtures = join(root, "fixtures");
-await prepareBenchmark({ root: fixtures, seed: 1337, countPerArchetype: 1 });
+await prepareBenchmark({
+  root: fixtures,
+  seed: 1337,
+  countPerArchetype: 1,
+  // This proof requires exact source-only reconstruction. Responsive erasure
+  // and raw design drift remain in the adversarial curriculum, where their
+  // missing evidence is expected to trigger visual failure/research rather
+  // than be hallucinated by the deterministic compiler.
+  corruptionPool: ["semanticErasure", "structuralNoise", "classDegradation", "styleLowering", "inlineStyleLowering", "componentCorruption", "behaviorCorruption", "accessibilityCorruption", "focusOrderDamage"],
+});
 const evaluation = await evaluatePolicy({ manifestPath: join(fixtures, "manifest.json"), policy: defaultPolicy, split: "all", workDirectory: join(root, "evaluation") });
 const requiredZero = ["criticalGateFailures", "contentBehaviorErrors", "semanticContractError", "accessibilityError", "unaccountedDeclarations", "bemComponentError", "crossPageDrift", "idempotenceError"] as const;
 for (const key of requiredZero) if (evaluation.fitness[key] !== 0) throw new Error(`Acceptance failed: ${key}=${evaluation.fitness[key]}`);

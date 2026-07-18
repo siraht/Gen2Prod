@@ -11,6 +11,7 @@ export async function prepareBenchmark(options: PrepareOptions) {
     schemaVersion: "0.1.0",
     preparationHash,
     seed: options.seed,
+    corruptionPool: options.corruptionPool ?? "all",
     fixtureCount: manifest.fixtures.length,
     manifest: "manifest.json",
     note: "Research candidates may consume but must never mutate this benchmark or its evaluator.",

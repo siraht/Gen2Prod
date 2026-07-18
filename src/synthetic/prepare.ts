@@ -1,7 +1,7 @@
 import { join, relative } from "node:path";
 import { ensureDirectory, writeJsonAtomic, writeTextAtomic } from "../core/fs.ts";
 import { createArchetypes } from "./archetypes.ts";
-import { corruptFixture } from "./corrupt.ts";
+import { corruptFixture, type CorruptorName } from "./corrupt.ts";
 import { normalFormFromSpec, renderGold } from "./render.ts";
 import { CanonicalPageSpecSchema, CorruptionTraceSchema, SyntheticManifestSchema, type SyntheticManifest } from "./types.ts";
 import { contentArtifact, mockupArtifact, pageBriefArtifact, strategyArtifact, trainingExampleArtifact } from "./artifacts.ts";
@@ -9,7 +9,7 @@ import { createContentVariant } from "./variants.ts";
 import { ensureVisualBenchmark } from "./visual-benchmark.ts";
 import { openCaptureSession } from "../evidence/capture.ts";
 
-export type PrepareOptions = { root: string; seed: number; countPerArchetype: number; renderVisuals?: boolean; browserExecutable?: string };
+export type PrepareOptions = { root: string; seed: number; countPerArchetype: number; renderVisuals?: boolean; browserExecutable?: string; corruptionPool?: CorruptorName[] };
 
 function splitFor(archetype: string): "train" | "validation" | "holdout" {
   if (archetype === "form") return "holdout";
@@ -33,7 +33,7 @@ export async function prepareSyntheticCurriculum(options: PrepareOptions): Promi
         await ensureDirectory(fixtureDirectory);
         const gold = renderGold(spec);
         const normalForm = normalFormFromSpec(spec);
-        const corruption = corruptFixture(spec, gold, options.seed + archetypes.indexOf(baseSpec) * 100 + variant);
+        const corruption = corruptFixture(spec, gold, options.seed + archetypes.indexOf(baseSpec) * 100 + variant, undefined, options.corruptionPool);
         const unmarkedHtml = corruption.html.replace(/\s+data-(?:g2p-node|gen2prod-id)="[^"]+"/g, "");
         CorruptionTraceSchema.parse(corruption.trace);
         const expectedGateFailures = [...new Set(corruption.trace.operations.flatMap((operation) => operation.expectedGateFailures))].sort();

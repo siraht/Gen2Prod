@@ -143,9 +143,9 @@ function accessibilityCorruption(state: Mutable): void {
 const CORRUPTORS = { semanticErasure, structuralNoise, classDegradation, styleLowering, inlineStyleLowering, designDrift, componentCorruption, behaviorCorruption, accessibilityCorruption, responsiveErasure, focusOrderDamage };
 export type CorruptorName = keyof typeof CORRUPTORS;
 
-export function corruptFixture(spec: CanonicalPageSpec, gold: { html: string; css: string }, seed: number, selected?: CorruptorName[]): CorruptedFixture {
+export function corruptFixture(spec: CanonicalPageSpec, gold: { html: string; css: string }, seed: number, selected?: CorruptorName[], allowed?: CorruptorName[]): CorruptedFixture {
   const prng = new Prng(seed);
-  const pool = selected ?? prng.shuffle(Object.keys(CORRUPTORS) as CorruptorName[]).slice(0, prng.integer(2, 5));
+  const pool = selected ?? prng.shuffle(allowed ?? Object.keys(CORRUPTORS) as CorruptorName[]).slice(0, prng.integer(2, Math.min(5, allowed?.length ?? 5)));
   const state: Mutable = { html: gold.html.replace('href="gold.css"', 'href="corrupted.css"'), css: gold.css, operations: [] };
   for (const name of pool) {
     if (name === "designDrift") CORRUPTORS[name](state, prng);
