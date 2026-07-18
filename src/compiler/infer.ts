@@ -199,7 +199,21 @@ function elementName(node: DomNode, role: string, block: string, classRoles: Map
   return canonicalName(result || "item");
 }
 
-function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: string | null, counts: SemanticPlan["confidenceSummary"], review: SemanticPlan["review"], useStableNodeHints: boolean, preserveExplicitSemantics: boolean, classRoles: Map<string, ClassRole>): PlannedNode {
+function externalPresentationClass(name: string): boolean {
+  return /^(?:material-(?:icons|symbols)(?:-[a-z]+)?|fa(?:s|r|b|l|t|d)?|fa-[a-z0-9-]+)$/.test(name);
+}
+
+function externalPresentationClasses(source: SourceDocument): Set<string> {
+  const resources = source.resourceLinks.map((resource) => resource.href).join(" ");
+  const material = /fonts\.googleapis\.com\/(?:icon|css2[^ ]*Material)/i.test(resources);
+  const fontAwesome = /(?:font-?awesome|fontawesome|use\.fontawesome)/i.test(resources);
+  return new Set(source.classInventory.map((item) => item.name).filter((name) =>
+    (material && /^material-(?:icons|symbols)(?:-[a-z]+)?$/.test(name))
+    || (fontAwesome && /^(?:fa(?:s|r|b|l|t|d)?|fa-[a-z0-9-]+)$/.test(name))
+  ));
+}
+
+function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: string | null, counts: SemanticPlan["confidenceSummary"], review: SemanticPlan["review"], useStableNodeHints: boolean, preserveExplicitSemantics: boolean, classRoles: Map<string, ClassRole>, externalClasses: Set<string>): PlannedNode {
   const semantic = semanticTag(node, parent, useStableNodeHints, preserveExplicitSemantics);
   const nativeDestination = node.attributes.find((attribute) => attribute.name.toLowerCase() === "onclick")?.value;
   const loweredDestination = nativeDestination ? nativeDestinationFromHandler(nativeDestination) : undefined;
@@ -225,6 +239,7 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
   }
   if (existingBem.length === 0 && (semantic.tag === "a" || semantic.tag === "button") && (semantic.role === "submit" || node.nodeId.includes("cta") || node.nodeId.includes("submit") || node.text.toLowerCase().includes("choose") || (parent && interactiveGroup(parent)))) classes = ["button", "button--primary"];
   if (block === "hero" && isNewBlock && plannedSourceHasId(node, "media")) classes = ["hero", "hero--split"];
+  classes = [...new Set([...classes, ...oldClasses(node).filter((className) => externalClasses.has(className))])];
   const attrs = attributes(node);
   if (loweredDestination) attrs.href = loweredDestination;
   if (attrs["data-g2p-variants"]) {
@@ -246,7 +261,7 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
   }
   if (semantic.tag === "button" && !attrs.type) attrs.type = "button";
   if (semantic.tag === "a") delete attrs.type;
-  const children = node.children.filter((child) => child.tag !== "script").map((child) => planNode(child, node, block, counts, review, useStableNodeHints, preserveExplicitSemantics, classRoles));
+  const children = node.children.filter((child) => child.tag !== "script").map((child) => planNode(child, node, block, counts, review, useStableNodeHints, preserveExplicitSemantics, classRoles, externalClasses));
   const childIds = new Set(children.map((child) => child.nodeId));
   const content = node.content?.filter((item) => item.kind === "text" || childIds.has(item.nodeId));
   return {
@@ -272,7 +287,7 @@ export function inferSemantics(source: SourceDocument, options: { useStableNodeH
   const counts = { high: 0, medium: 0, low: 0 };
   const review: SemanticPlan["review"] = [];
   const classRoles = new Map(source.classInventory.map((item) => [item.name, item.role]));
-  const root = planNode(source.dom, undefined, null, counts, review, options.useStableNodeHints ?? true, options.preserveExplicitSemantics ?? false, classRoles);
+  const root = planNode(source.dom, undefined, null, counts, review, options.useStableNodeHints ?? true, options.preserveExplicitSemantics ?? false, classRoles, externalPresentationClasses(source));
   normalizeListValidity(root);
   normalizeHeadingOrder(root, review);
   addMissingFormLabels(root, review);
@@ -453,7 +468,7 @@ export function differentiateStyleVariants(root: PlannedNode, styles: StyleInten
 export function inferComponents(plan: SemanticPlan): ComponentContract[] {
   const blocks = new Map<string, PlannedNode[]>();
   for (const current of plannedNodes(plan.root)) {
-    for (const className of current.classes) {
+    for (const className of current.classes.filter((name) => !externalPresentationClass(name))) {
       const block = className.split(/__|--/)[0]!;
       const members = blocks.get(block) ?? [];
       if (!members.includes(current)) members.push(current);
@@ -473,11 +488,11 @@ function confidenceFor(node: PlannedNode) {
 
 export function buildBemGraph(plan: SemanticPlan): BemGraph {
   const nodes = plannedNodes(plan.root);
-  const blocks = [...new Set(nodes.flatMap((node) => node.classes.map((name) => name.split(/__|--/)[0]!)))].filter((block) => block !== "page");
+  const blocks = [...new Set(nodes.flatMap((node) => node.classes.filter((name) => !externalPresentationClass(name)).map((name) => name.split(/__|--/)[0]!)))];
   return { blocks: blocks.map((block) => {
     const members = nodes.filter((node) => node.classes.some((name) => name === block || name.startsWith(`${block}__`) || name.startsWith(`${block}--`)));
     const root = members.find((node) => node.classes.includes(block)) ?? members[0]!;
-    return { block, nodeId: root.nodeId, semanticElement: root.tag, nodes: members.flatMap((node) => node.classes.filter((name) => name.startsWith(block)).map((className) => ({ nodeId: node.nodeId, className, kind: className.includes("__") ? "element" as const : className.includes("--") ? "modifier" as const : "block" as const, owner: block, role: node.role, confidence: confidenceFor(node) }))), childBlocks: blocks.filter((candidate) => candidate !== block && members.some((node) => node.classes.includes(candidate))) };
+    return { block, nodeId: root.nodeId, semanticElement: root.tag, nodes: members.flatMap((node) => node.classes.filter((name) => name.startsWith(block) || externalPresentationClass(name)).map((className) => ({ nodeId: node.nodeId, className, kind: externalPresentationClass(className) ? "mix" as const : className.includes("__") ? "element" as const : className.includes("--") ? "modifier" as const : "block" as const, owner: block, role: node.role, confidence: confidenceFor(node) }))), childBlocks: blocks.filter((candidate) => candidate !== block && members.some((node) => node.classes.includes(candidate))) };
   }) };
 }
 
