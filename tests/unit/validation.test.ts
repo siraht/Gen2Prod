@@ -89,6 +89,22 @@ describe("image comparison calibration", () => {
     expect(metrics.unmatchedVisibleNodes).toBe(0);
   });
 
+  test("does not count transparent aggregate containers as deleted visible content", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-node-aggregate-"));
+    const screenshot = join(directory, "solid.png");
+    const image = new PNG({ width: 10, height: 10 });
+    image.data.fill(255);
+    await Bun.write(screenshot, PNG.sync.write(image));
+    const styles = { display: "block", position: "static", backgroundColor: "rgba(0, 0, 0, 0)", boxShadow: "none" };
+    const node = (nodeId: string, tag: string, text: string, contentText: string, y: number) => ({ nodeId, tag, text, contentText, visible: true, box: { x: 0, y, width: 10, height: 10 }, styles });
+    const capture = (dom: unknown[]) => ({ viewport: 10, viewportHeight: 20, theme: "light", state: "default", screenshot, screenshotHash: "hash", dom, accessibilityTree: [], performance: {}, seo: {}, console: [] });
+    const baseline = capture([node("rendered-0", "main", "", "Shared heading", 0), node("rendered-1", "div", "", "Shared heading", 0), node("rendered-2", "h1", "Shared heading", "Shared heading", 10)]);
+    const candidate = capture([node("rendered-0", "html", "", "Shared heading", 0), node("rendered-1", "main", "", "Shared heading", 0), node("rendered-2", "section", "", "Shared heading", 0), node("rendered-3", "h1", "Shared heading", "Shared heading", 10)]);
+    const metrics = await compareCaptures(baseline, candidate);
+    expect(metrics.unmatchedVisibleNodes).toBe(0);
+    expect(metrics.layout.max).toBe(0);
+  });
+
   test("normalizes downsampled full-page references by width without calling them pixel-exact", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-image-scale-"));
     const writeSolid = async (path: string, width: number, height: number) => {

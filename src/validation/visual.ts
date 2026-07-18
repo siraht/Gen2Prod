@@ -143,9 +143,24 @@ function textIdentity(node: CapturedNode): string {
   return matchText(node).toLowerCase().match(/[a-z0-9]+(?:['’][a-z0-9]+)?/g)?.join(" ") ?? "";
 }
 
+const CONTENT_LEAF_TAG = /^(?:a|button|summary|label|p|h[1-6]|blockquote|figcaption|input|select|textarea)$/;
+const VISUAL_ASSET_TAG = /^(?:br|hr|img|svg|canvas|video)$/;
+
+function matchingPriority(node: CapturedNode): number {
+  if (node.text.trim()) return 4;
+  if (CONTENT_LEAF_TAG.test(node.tag) && matchText(node)) return 3;
+  if (VISUAL_ASSET_TAG.test(node.tag)) return 2;
+  if (matchText(node)) return 1;
+  return 0;
+}
+
 function isVisuallySubstantive(node: CapturedNode): boolean {
   if (!node.visible) return false;
-  if (matchText(node) || /^(?:br|hr|img|svg|canvas|video|input|select|textarea|button|a|h[1-6]|p|li|summary|blockquote|figcaption|label)$/.test(node.tag)) return true;
+  // Aggregate layout containers repeat all descendant text in `contentText`.
+  // Counting each transparent main/section/div as independently visible makes
+  // a valid semantic rewrite look like several deleted visible nodes. Direct
+  // text, content leaves, assets, and authored surfaces remain substantive.
+  if (node.text.trim() || (CONTENT_LEAF_TAG.test(node.tag) && matchText(node)) || VISUAL_ASSET_TAG.test(node.tag)) return true;
   return !/^(?:rgba\(0, 0, 0, 0\)|transparent)$/.test(node.styles.backgroundColor ?? "transparent") || (node.styles.boxShadow ?? "none") !== "none";
 }
 
@@ -158,8 +173,8 @@ function matchNodes(baseline: Map<string, CapturedNode>, candidate: Map<string, 
     if (exact) { matches.set(id, exact); usedCandidateIds.add(id); }
   }
   const remaining = [...baseline.entries()].filter(([id]) => !matches.has(id)).sort(([, left], [, right]) => {
-    const textPriority = Number(Boolean(matchText(right))) - Number(Boolean(matchText(left)));
-    return textPriority || Number(isVisuallySubstantive(right)) - Number(isVisuallySubstantive(left));
+    const contentPriority = matchingPriority(right) - matchingPriority(left);
+    return contentPriority || Number(isVisuallySubstantive(right)) - Number(isVisuallySubstantive(left));
   });
   for (const [id, before] of remaining) {
     const beforeText = textIdentity(before);
@@ -168,8 +183,9 @@ function matchNodes(baseline: Map<string, CapturedNode>, candidate: Map<string, 
       let score = 0;
       if (beforeText && afterText === beforeText) score += 1.5;
       else if (beforeText || afterText) score -= 0.75;
-      if (node.tag === before.tag) score += 0.2;
-      else if (/^h[1-6]$/.test(node.tag) && /^h[1-6]$/.test(before.tag)) score += 0.1;
+      if (node.tag === before.tag) score += 0.45;
+      else if (/^h[1-6]$/.test(node.tag) && /^h[1-6]$/.test(before.tag)) score += 0.25;
+      if (Boolean(node.text.trim()) === Boolean(before.text.trim())) score += 0.1;
       score -= (Math.abs(before.box.x - node.box.x) + Math.abs(before.box.y - node.box.y)) / Math.max(viewport, 1);
       score -= Math.abs(before.box.width - node.box.width) / Math.max(before.box.width, 1);
       return { node, score };
