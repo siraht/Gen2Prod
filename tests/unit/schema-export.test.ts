@@ -1,0 +1,20 @@
+import { describe, expect, test } from "bun:test";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { exportSchemas } from "../../src/schemas/export.ts";
+
+describe("versioned schema export", () => {
+  test("includes every strict image-only contract", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "g2p-schemas-"));
+    const paths = await exportSchemas(directory);
+    const names = paths.map((path) => path.split("/").at(-1));
+    expect(names).toContain("image-target-manifest.schema.json");
+    expect(names).toContain("image-analysis.schema.json");
+    expect(names).toContain("image-content-strategy.schema.json");
+    expect(names).toContain("image-state-sequence.schema.json");
+    expect(names).toContain("image-build-plan.schema.json");
+    expect(names).toContain("image-policy.schema.json");
+    expect(names).toContain("image-evaluation.schema.json");
+  });
+});

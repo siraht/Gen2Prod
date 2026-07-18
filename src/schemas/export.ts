@@ -5,6 +5,7 @@ import { ArtifactRefSchema, RunManifestSchema } from "./artifacts.ts";
 import { NormalFormSchema, TokenRegistrySchema, VisualTargetSchema } from "./normal-form.ts";
 import { GateResultSchema, PassDefinitionSchema, PassEventSchema } from "./pass.ts";
 import { EvaluationResultSchema, ExperimentResultSchema, TrajectorySchema } from "./research.ts";
+import { ImageDerivedContentStrategySchema, ImageOnlyAnalysisSchema, ImageOnlyBuildPlanSchema, ImageOnlyEvaluationSchema, ImageOnlyPolicySchema, ImageOnlyTargetManifestSchema, ImageStateSequenceAnalysisSchema } from "./image-only.ts";
 
 const SCHEMAS = {
   "artifact-ref": ArtifactRefSchema,
@@ -18,6 +19,13 @@ const SCHEMAS = {
   "evaluation-result": EvaluationResultSchema,
   "experiment-result": ExperimentResultSchema,
   trajectory: TrajectorySchema,
+  "image-target-manifest": ImageOnlyTargetManifestSchema,
+  "image-analysis": ImageOnlyAnalysisSchema,
+  "image-content-strategy": ImageDerivedContentStrategySchema,
+  "image-state-sequence": ImageStateSequenceAnalysisSchema,
+  "image-build-plan": ImageOnlyBuildPlanSchema,
+  "image-policy": ImageOnlyPolicySchema,
+  "image-evaluation": ImageOnlyEvaluationSchema,
 };
 
 export async function exportSchemas(outputDirectory: string): Promise<string[]> {
