@@ -104,7 +104,7 @@ async function compileInput(options: RunOptions, outputDirectory: string, requir
   const cssPath = await discoverCss(options.input, options.cssPath);
   const css = (await loadSourceCss(options.input, cssPath)).css;
   const projectRegistry = extractTokenRegistry(css);
-  if (!options.tokenPath && !acss && projectRegistry.tokens.length === 0) requiredActions.push({ id: "token-registry-authority", summary: "Provide or approve a project token registry", detail: "No runtime CSS custom properties or configured Automatic.css release were found. The compiler recorded governed values as expiring exceptions; configure designSystem.source or supply --tokens.", blocking: false });
+  if (!options.tokenPath && !acss && projectRegistry.tokens.length === 0) requiredActions.push({ id: "token-registry-authority", summary: "Provide or approve a project token registry", detail: "No runtime CSS custom properties or configured Automatic.css release were found. The compiler will register exact source-derived project aliases; configure designSystem.source or supply --tokens to replace them with approved semantic roles.", blocking: false });
   return {
     compiled: await compileStaticPage({ htmlPath: options.input, ...(cssPath ? { cssPath } : {}), tokenRegistry: options.tokenPath ? resolve(options.tokenPath) : extractTokenRegistry(""), fallbackTokenRegistry: fallbackRegistry, frameworkClassCatalog, policy: options.policy }),
     ...(cssPath ? { cssPath } : {}),
@@ -129,6 +129,8 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
     availableRuntimeVariables: compiledInput.acss.registry.tokens.length,
   });
   let compiled = compiledInput.compiled;
+  const experimentalSourceTokens = compiled.plan.tokens.tokens.filter((token) => token.status === "experimental" && token.source.startsWith("source-exact-value:"));
+  if (experimentalSourceTokens.length) requiredActions.push({ id: "source-token-role-review", summary: "Approve source-derived project token roles", detail: `${experimentalSourceTokens.length} governed source value(s) had no compatible approved ACSS/project token. They were emitted through registered experimental aliases—not raw CSS—but still need semantic naming, consolidation, or approval.`, blocking: false });
   if (compiled.plan.source.executableScripts.length) requiredActions.push({ id: "interaction-contract-required", summary: "Reimplement source behavior from explicit interaction contracts", detail: `${compiled.plan.source.executableScripts.length} executable script(s) were intentionally excluded from deterministic output. Preserve only approved behavior through typed interaction contracts and tested modules.`, blocking: false });
   const unresolvedEvents = compiled.plan.source.executableEvents.filter((event) => !event.nativeDestination);
   if (unresolvedEvents.length) requiredActions.push({ id: "inline-interaction-contract-required", summary: "Reimplement inline behavior from explicit interaction contracts", detail: `${unresolvedEvents.length} inline event handler(s) were intentionally excluded from deterministic output. Preserve only approved behavior through typed interaction contracts and tested modules.`, blocking: false });

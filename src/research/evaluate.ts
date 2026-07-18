@@ -486,7 +486,7 @@ export async function evaluatePolicy(options: EvaluateOptions): Promise<Evaluati
     await ensureDirectory(visualControlDirectory);
     const controlHtmlPath = join(visualControlDirectory, "page.html");
     await Bun.write(controlHtmlPath, (await Bun.file(join(controlDirectory, "fixture.gold.html")).text()).replace('href="gold.css"', 'href="page.css"'));
-    await Bun.write(join(visualControlDirectory, "page.css"), `${await Bun.file(join(controlDirectory, "gold.css")).text()}\nhtml { filter: invert(1) hue-rotate(90deg) !important; }\n`);
+    await Bun.write(join(visualControlDirectory, "page.css"), `${await Bun.file(join(controlDirectory, "gold.css")).text()}\n.page { filter: invert(1) hue-rotate(90deg); }\n`);
     const visualControl = await evaluateCandidateVisuals(controlDirectory, controlHtmlPath, join(visualControlDirectory, "evidence"), undefined, captureSession);
     visualMutationCaught = visualControl.candidateAggregate.pixelDifferenceRatio > policy.thresholds.visualPixelRatio;
   } finally {
