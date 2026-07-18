@@ -15,6 +15,8 @@ import { writeNaturalisticTrajectories } from "./trajectories.ts";
 import { parseFragment, type DefaultTreeAdapterMap } from "parse5";
 import { nativeDestinationFromHandler } from "../compiler/behavior.ts";
 import type { AutomaticCssBundle } from "../acss/schema.ts";
+import type { TransformationPolicy } from "../core/policy.ts";
+import { policyActions, policyCost } from "../research/evaluate.ts";
 
 export type NaturalisticEvaluationOptions = {
   manifestPath: string;
@@ -27,6 +29,8 @@ export type NaturalisticEvaluationOptions = {
   captureLive: boolean;
   browserExecutable?: string | undefined;
   acss?: AutomaticCssBundle | undefined;
+  policy?: TransformationPolicy | undefined;
+  captureSession?: CaptureSession | undefined;
 };
 
 type Preservation = { textRecall: number; urlRecall: number; formRecall: number; sourceTextTokens: number; sourceUrls: number; sourceFormControls: number };
@@ -55,6 +59,8 @@ export type NaturalisticFixtureEvaluation = {
   candidateHtml?: string;
   candidateCss?: string;
   outputHash?: string;
+  policyActions?: string[];
+  normalizedComputeCost?: number;
   consistency?: { comparedPages: number; contractDrift: number; equivalentComponents: number; highEntropyTokenSlots: number; meanSlotEntropy: number };
   visuals?: {
     viewport: number;
@@ -83,6 +89,7 @@ export type NaturalisticEvaluation = {
   createdAt: string;
   corpusFingerprint: string;
   evaluatorHash: string;
+  policyHash: string;
   split: NaturalisticEvaluationOptions["split"];
   fixtureSelectionHash: string;
   projectIds: string[];
@@ -271,7 +278,7 @@ async function evaluateArtifact(input: {
     await writeTextAtomic(materializedHtmlPath, compilerHtml);
     await writeTextAtomic(materializedCssPath, compilerCss);
     const registry = extractTokenRegistry(compilerCss);
-    const compiled = await compileStaticPage({ htmlPath: materializedHtmlPath, cssPath: materializedCssPath, tokenRegistry: registry, ...(options.acss ? { fallbackTokenRegistry: options.acss.registry, frameworkClassCatalog: options.acss.catalog.utilityClasses } : {}) });
+    const compiled = await compileStaticPage({ htmlPath: materializedHtmlPath, cssPath: materializedCssPath, tokenRegistry: registry, ...(options.acss ? { fallbackTokenRegistry: options.acss.registry, frameworkClassCatalog: options.acss.catalog.utilityClasses } : {}), ...(options.policy ? { policy: options.policy } : {}) });
     if (compiled.plan.source.executableScripts.length) result.requiredActions.push(`${compiled.plan.source.executableScripts.length} executable script(s) were excluded; reimplement approved behavior from typed interaction contracts.`);
     const unresolvedEvents = compiled.plan.source.executableEvents.filter((event) => !event.nativeDestination);
     if (unresolvedEvents.length) result.requiredActions.push(`${unresolvedEvents.length} inline event handler(s) were excluded; reimplement approved behavior from typed interaction contracts.`);
@@ -286,6 +293,8 @@ async function evaluateArtifact(input: {
     result.candidateHtml = candidateHtmlPath;
     result.candidateCss = candidateCssPath;
     result.outputHash = hashJson({ html: compiled.html, scss: compiled.scss });
+    result.policyActions = policyActions(compiled);
+    result.normalizedComputeCost = options.policy ? policyCost(options.policy, compiled) : 0;
     let candidate: CaptureResult | undefined;
     if (options.capture && session) candidate = await session.capture({ url: pathToFileURL(join(candidateDirectory, "page.html")).href, outputDirectory: join(candidateDirectory, "capture"), viewports: [viewport], viewportHeight, states: ["default"], themes: ["light"], browserExecutable: options.browserExecutable });
     result.preservation = contentPreservation(compilerHtml, compiled.html);
@@ -305,7 +314,7 @@ async function evaluateArtifact(input: {
     for (const gate of result.gates.failures.filter((failure) => failure.hard)) result.requiredActions.push(`Gate ${gate.gate} (${gate.name}): ${gate.assertions.map((assertion) => assertion.message).join("; ")}`);
     const rerunDirectory = join(fixtureDirectory, "idempotence");
     await Promise.all([writeTextAtomic(join(rerunDirectory, "page.html"), compiled.html), writeTextAtomic(join(rerunDirectory, "page.css"), compiled.css)]);
-    const rerun = await compileStaticPage({ htmlPath: join(rerunDirectory, "page.html"), cssPath: join(rerunDirectory, "page.css"), tokenRegistry: compiled.plan.tokens });
+    const rerun = await compileStaticPage({ htmlPath: join(rerunDirectory, "page.html"), cssPath: join(rerunDirectory, "page.css"), tokenRegistry: compiled.plan.tokens, ...(options.policy ? { policy: options.policy } : {}) });
     await Promise.all([writeTextAtomic(join(rerunDirectory, "rerun.html"), rerun.html), writeTextAtomic(join(rerunDirectory, "rerun.scss"), rerun.scss)]);
     result.idempotent = result.outputHash === hashJson({ html: rerun.html, scss: rerun.scss });
     const dirtyCapture = captureForViewport(baseline, viewport);
@@ -405,7 +414,8 @@ export async function evaluateNaturalisticCorpus(options: NaturalisticEvaluation
   const outputDirectory = resolve(options.outputDirectory, evaluationId);
   await ensureDirectory(outputDirectory);
   if (options.acss) await writeJsonAtomic(join(outputDirectory, "acss-provenance.json"), { ...options.acss.provenance, role: "naturalistic-compiler-design-system-fallback" });
-  const session = options.capture ? await openCaptureSession(options.browserExecutable) : undefined;
+  const session = options.capture ? options.captureSession ?? await openCaptureSession(options.browserExecutable) : undefined;
+  const ownsSession = Boolean(session && !options.captureSession);
   let liveOutcomes: NaturalisticEvaluation["liveOutcomes"] = [];
   const liveCaptures = new Map<string, CaptureResult>();
   try {
@@ -432,6 +442,7 @@ export async function evaluateNaturalisticCorpus(options: NaturalisticEvaluation
       createdAt: new Date().toISOString(),
       corpusFingerprint: manifest.fingerprint,
       evaluatorHash: options.acss ? hashJson({ evaluator: await naturalEvaluatorHash(options.manifestPath), automaticcss: { sourceHash: options.acss.provenance.sourceHash, registryHash: options.acss.provenance.registryHash, moduleMode: options.acss.provenance.moduleMode } }) : await naturalEvaluatorHash(options.manifestPath),
+      policyHash: options.policy ? hashJson(options.policy) : "implicit-default-policy",
       split: options.split,
       fixtureSelectionHash: hashJson(selected.map((artifact) => artifact.artifactId)),
       projectIds: projects.map((project) => project.projectId),
@@ -460,6 +471,6 @@ export async function evaluateNaturalisticCorpus(options: NaturalisticEvaluation
     await writeJsonAtomic(join(outputDirectory, "evaluation.json"), report);
     return report;
   } finally {
-    await session?.close();
+    if (ownsSession) await session?.close();
   }
 }

@@ -185,6 +185,7 @@ corpus
   .option("--no-live", "skip current live-outcome captures")
   .action(async (options: { manifest: string; output: string; split: "train" | "validation" | "holdout" | "all"; maxPerProject: string; limit?: string; viewport?: string; capture: boolean; live: boolean }) => {
     const project = await config();
+    const policy = await currentPolicy(project);
     const acss = await prepareConfiguredAutomaticCss(project, globals().acss);
     const evaluation = await evaluateNaturalisticCorpus({
       manifestPath: resolve(options.manifest),
@@ -195,6 +196,7 @@ corpus
       ...(options.viewport ? { viewport: Number.parseInt(options.viewport, 10) } : {}),
       capture: options.capture,
       captureLive: options.live,
+      policy,
       acss,
     });
     emit(result("corpus evaluate", evaluation), [

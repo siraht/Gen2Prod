@@ -24,7 +24,7 @@ function fixtureTrajectory(evaluation: NaturalisticEvaluation, fixture: Naturali
     ?? fixture.visuals?.dirtyToCandidate.pixelDifferenceRatio
     ?? 1;
   const metrics = fixture.gates?.metrics ?? {};
-  const cost = 0.5
+  const cost = (fixture.normalizedComputeCost ?? 0.5)
     + (fixture.materialization?.sourceMode === "browser-materialized" ? 0.3 : 0)
     + (fixture.visuals ? 0.2 : 0);
   return TrajectorySchema.parse({
@@ -54,7 +54,7 @@ function fixtureTrajectory(evaluation: NaturalisticEvaluation, fixture: Naturali
       urlRecall: fixture.preservation?.urlRecall ?? 0,
       formRecall: fixture.preservation?.formRecall ?? 0,
     },
-    actions: [
+    actions: fixture.policyActions ?? [
       `evidence:${fixture.materialization?.sourceMode ?? "static"}`,
       "pass:runtime-materialization",
       "pass:semantic-inference",
