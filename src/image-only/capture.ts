@@ -153,7 +153,9 @@ export async function captureImageTarget(options: CaptureImageTargetOptions): Pr
         await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }));
         if (probe.action === "hover") await page.mouse.move(probe.x, probe.y);
         else {
-          await page.mouse.click(probe.x, probe.y);
+          // Keyboard traversal is intentionally non-activating. Clicking an
+          // image-suggested coordinate could navigate, submit, or mutate a
+          // live system without any behavior authority.
           await page.keyboard.press("Tab");
         }
         await page.waitForTimeout(100);
