@@ -402,6 +402,10 @@ export function resolveStyles(source: SourceDocument, root: PlannedNode, registr
     const sourceDeclarations = source.declarations.filter((declaration) => {
       if (declaration.sourceNodeId === node.nodeId) return true;
       const conditioned = conditionedSelector(declaration);
+      // Root custom properties are emitted once from the merged token
+      // registry. Re-emitting generated :root tokens under html on a canonical
+      // recompile would duplicate the registry and break exact idempotence.
+      if (node === matching.virtualRoot && declaration.property.startsWith("--")) return false;
       const universal = universalFoundationSelector(conditioned.selector);
       if (universal) return node === universalRoot;
       if (node === universalRoot) return false;

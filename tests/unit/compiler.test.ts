@@ -86,6 +86,13 @@ describe("static compilation", () => {
     expect(output.scss).toContain("font-family: var(--g2p-font-family-");
     expect(output.scss).toContain("tab-size: 4;");
     expect(output.scss).toContain("line-height: inherit;");
+    const canonicalHtml = join(directory, "canonical.html");
+    const canonicalCss = join(directory, "canonical.css");
+    await Bun.write(canonicalHtml, output.html);
+    await Bun.write(canonicalCss, output.css);
+    const rerun = await compileStaticPage({ htmlPath: canonicalHtml, cssPath: canonicalCss, tokenRegistry: output.plan.tokens });
+    expect(rerun.html).toBe(output.html);
+    expect(rerun.scss).toBe(output.scss);
   });
 
   test("hoists universal reset and pseudo styles instead of cloning them into every BEM rule", async () => {
