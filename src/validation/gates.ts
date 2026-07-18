@@ -103,6 +103,10 @@ function plannedNodes(root: PlannedNode): PlannedNode[] {
   return [root, ...root.children.flatMap(plannedNodes)];
 }
 
+function descendantText(element: ValidationElement): string {
+  return [element.text, ...element.children.map(descendantText)].join(" ").replace(/\s+/g, " ").trim();
+}
+
 function equivalentStyleBlocks(css: string, htmlNames: Set<string>): string[][] {
   const signatures = new Map<string, Set<string>>();
   const root = postcss.parse(css);
@@ -218,7 +222,21 @@ async function accessibilityGate(context: ValidationContext): Promise<GateResult
     const buttons = elements.filter((element) => element.tag === "button");
     const images = elements.filter((element) => element.tag === "img");
     const controls = elements.filter((element) => ["input", "select", "textarea"].includes(element.tag));
-    const labels = new Set(elements.filter((element) => element.tag === "label").map((element) => element.attributes.for).filter(Boolean));
+    const labels = new Set(elements.filter((element) => element.tag === "label").map((element) => element.attributes.for).filter((value): value is string => Boolean(value)));
+    const ids = elements.map((element) => element.attributes.id).filter((value): value is string => Boolean(value));
+    const idCounts = new Map<string, number>();
+    for (const id of ids) idCounts.set(id, (idCounts.get(id) ?? 0) + 1);
+    const duplicateIds = [...idCounts].filter(([, count]) => count > 1).map(([id]) => id);
+    const idSet = new Set(ids);
+    const brokenLabelReferences = elements.flatMap((element) => {
+      const target = element.tag === "label" ? element.attributes.for : undefined;
+      return target && !idSet.has(target) ? [target] : [];
+    });
+    const brokenAriaReferences = elements.flatMap((element) => ["aria-labelledby", "aria-describedby", "aria-controls"].flatMap((attribute) => (element.attributes[attribute] ?? "").split(/\s+/).filter(Boolean).filter((id) => !idSet.has(id)).map((id) => `${attribute}=${id}`)));
+    const mains = elements.filter((element) => element.tag === "main");
+    const nameFor = (element: ValidationElement) => element.attributes["aria-label"] || (element.attributes["aria-labelledby"] ?? "").split(/\s+/).filter(Boolean).map((id) => descendantText(elements.find((candidate) => candidate.attributes.id === id) ?? { tag: "span", attributes: {}, text: "", children: [] })).join(" ") || descendantText(element);
+    const unnamedControls = [...anchors, ...buttons].filter((element) => !nameFor(element));
+    const unnamedDialogs = elements.filter((element) => element.tag === "dialog" || element.attributes.role === "dialog" || element.attributes.role === "alertdialog").filter((element) => !nameFor(element));
     const divButtons = elements.filter((element) => ["div", "span"].includes(element.tag) && classes(element).some((name) => name === "button" || name.startsWith("button--")));
     const expectedHooks = context.plan ? plannedNodes(context.plan.semantics.root).map((node) => node.attributes["data-hook"]).filter((value): value is string => Boolean(value)) : [];
     const emittedHooks = new Set(elements.map((element) => element.attributes["data-hook"]).filter(Boolean));
@@ -243,11 +261,16 @@ async function accessibilityGate(context: ValidationContext): Promise<GateResult
     const keyboardPassed = !context.accessibility || (context.accessibility.keyboard.tabStopsReached >= Math.min(context.accessibility.keyboard.focusables, 1) && context.accessibility.interactions.disclosureToggle);
     return { assertions: [
       assertion("static-a11y", staticIssues.length === 0, "critical", staticIssues.length ? staticIssues.join("; ") : "Static accessibility contracts pass"),
+      assertion("unique-ids", duplicateIds.length === 0, "critical", duplicateIds.length ? `Duplicate document IDs: ${duplicateIds.join(", ")}` : "Document IDs are unique"),
+      assertion("reference-integrity", brokenLabelReferences.length === 0 && brokenAriaReferences.length === 0, "critical", brokenLabelReferences.length || brokenAriaReferences.length ? `Broken label/ARIA references: ${[...brokenLabelReferences.map((id) => `for=${id}`), ...brokenAriaReferences].join(", ")}` : "Label and ARIA references resolve"),
+      assertion("main-landmark", mains.length === 1, "error", `Found ${mains.length} main landmarks`),
+      assertion("accessible-control-names", unnamedControls.length === 0, "critical", unnamedControls.length ? `${unnamedControls.length} anchor/button control(s) lack an accessible name` : "Anchors and buttons have accessible names"),
+      assertion("dialog-names", unnamedDialogs.length === 0, "critical", unnamedDialogs.length ? `${unnamedDialogs.length} dialog(s) lack an accessible name` : "Dialogs have accessible names"),
       assertion("axe", axeCritical.length === 0, "critical", axeCritical.length ? axeCritical.map((item) => item.id).join(", ") : "No serious/critical automated violations"),
       assertion("keyboard", keyboardPassed, "critical", keyboardPassed ? "Keyboard interaction smoke tests pass" : "Keyboard path or disclosure behavior failed"),
       assertion("focus-visible", !context.accessibility || context.accessibility.keyboard.focusVisibleMissing.length === 0, "error", context.accessibility?.keyboard.focusVisibleMissing.length ? `Missing visible focus: ${context.accessibility.keyboard.focusVisibleMissing.join(", ")}` : "Focus-visible evidence passes"),
       assertion("manual-review", true, "info", "Manual assistive-technology review remains explicitly required"),
-    ], metrics: { staticAccessibilityIssues: staticIssues.length, missingBehaviorHooks: missingHooks.length, focusSuppressions: focusSuppressions.length, positiveTabIndexes: positiveTabIndexes.length, automatedViolations: context.accessibility?.violations.length ?? 0, seriousViolations: axeCritical.length, focusVisibleMissing: context.accessibility?.keyboard.focusVisibleMissing.length ?? 0 } };
+    ], metrics: { staticAccessibilityIssues: staticIssues.length, duplicateIds: duplicateIds.length, brokenAccessibilityReferences: brokenLabelReferences.length + brokenAriaReferences.length, mainLandmarks: mains.length, unnamedControls: unnamedControls.length, unnamedDialogs: unnamedDialogs.length, missingBehaviorHooks: missingHooks.length, focusSuppressions: focusSuppressions.length, positiveTabIndexes: positiveTabIndexes.length, automatedViolations: context.accessibility?.violations.length ?? 0, seriousViolations: axeCritical.length, focusVisibleMissing: context.accessibility?.keyboard.focusVisibleMissing.length ?? 0 } };
   });
 }
 
@@ -257,9 +280,12 @@ async function seoGate(context: ValidationContext): Promise<GateResult> {
     const h1 = elements.filter((element) => element.tag === "h1");
     const title = elements.find((element) => element.tag === "title")?.text ?? "";
     const description = elements.find((element) => element.tag === "meta" && element.attributes.name === "description")?.attributes.content ?? "";
+    const language = elements.find((element) => element.tag === "html")?.attributes.lang ?? "";
+    const canonical = elements.find((element) => element.tag === "link" && element.attributes.rel?.split(/\s+/).includes("canonical"))?.attributes.href ?? "";
     const headings = elements.filter((element) => /^h[1-6]$/.test(element.tag)).map((element) => Number(element.tag[1]));
     const skipped = headings.some((level, index) => index > 0 && level > headings[index - 1]! + 1);
-    return { assertions: [assertion("one-h1", h1.length === 1, "error", `Found ${h1.length} H1 elements`), assertion("metadata", Boolean(title && description), "error", title && description ? "Title and description are present" : "Missing title or description"), assertion("heading-order", !skipped, "error", skipped ? "Heading hierarchy skips a level" : "Heading hierarchy is logical")], metrics: { h1Count: h1.length, metadataComplete: title && description ? 1 : 0, headingSkips: skipped ? 1 : 0 } };
+    const metadataLength = title.length >= 8 && title.length <= 65 && description.length >= 30 && description.length <= 170;
+    return { assertions: [assertion("one-h1", h1.length === 1, "error", `Found ${h1.length} H1 elements`), assertion("metadata", Boolean(title && description), "error", title && description ? "Title and description are present" : "Missing title or description"), assertion("metadata-length", metadataLength, "warning", metadataLength ? "Title and description lengths are reviewable" : `Metadata lengths are title=${title.length}, description=${description.length}`), assertion("document-language", Boolean(language), "error", language ? `Document language is ${language}` : "Document language is missing"), assertion("canonical-link", Boolean(canonical), "info", canonical ? `Canonical URL declared: ${canonical}` : "Canonical URL is not declared; confirm at deployment"), assertion("heading-order", !skipped, "error", skipped ? "Heading hierarchy skips a level" : "Heading hierarchy is logical")], metrics: { h1Count: h1.length, metadataComplete: title && description ? 1 : 0, metadataLengthPass: metadataLength ? 1 : 0, documentLanguage: language ? 1 : 0, canonicalDeclared: canonical ? 1 : 0, headingSkips: skipped ? 1 : 0 } };
   });
 }
 
@@ -268,9 +294,11 @@ async function performanceGate(context: ValidationContext): Promise<GateResult> 
     const elements = flatten(parseElements(context.html).roots);
     const images = elements.filter((element) => element.tag === "img");
     const unsized = images.filter((image) => !image.attributes.width || !image.attributes.height);
+    const incompleteResponsiveImages = images.filter((image) => image.attributes.srcset && !image.attributes.sizes);
+    const eagerImages = images.filter((image) => !image.attributes.loading || image.attributes.loading === "eager");
     const scripts = elements.filter((element) => element.tag === "script" && element.attributes.src);
     const cssBytes = new TextEncoder().encode(context.css).byteLength;
-    return { assertions: [assertion("image-dimensions", unsized.length === 0, "error", unsized.length ? `${unsized.length} unsized images` : "Images have dimensions"), assertion("css-budget", cssBytes <= 100_000, "error", `CSS payload is ${cssBytes} bytes`), assertion("third-party-budget", scripts.length <= 3, "warning", `${scripts.length} external scripts`)], metrics: { cssBytes, unsizedImages: unsized.length, externalScripts: scripts.length } };
+    return { assertions: [assertion("image-dimensions", unsized.length === 0, "error", unsized.length ? `${unsized.length} unsized images` : "Images have dimensions"), assertion("responsive-image-contract", incompleteResponsiveImages.length === 0, "warning", incompleteResponsiveImages.length ? `${incompleteResponsiveImages.length} srcset image(s) omit sizes` : "Responsive image candidates declare sizes"), assertion("eager-image-review", eagerImages.length <= 2, "warning", `${eagerImages.length} image(s) are eager or lack explicit loading policy`), assertion("css-budget", cssBytes <= 100_000, "error", `CSS payload is ${cssBytes} bytes`), assertion("third-party-budget", scripts.length <= 3, "warning", `${scripts.length} external scripts`)], metrics: { cssBytes, unsizedImages: unsized.length, incompleteResponsiveImages: incompleteResponsiveImages.length, eagerImages: eagerImages.length, externalScripts: scripts.length } };
   });
 }
 
@@ -280,8 +308,10 @@ async function securityGate(context: ValidationContext): Promise<GateResult> {
     const unsafeUrls = elements.flatMap((element) => Object.entries(element.attributes).filter(([name, value]) => ["href", "src", "action"].includes(name) && /^javascript:/i.test(value)));
     const inlineScripts = elements.filter((element) => element.tag === "script" && !element.attributes.src && element.attributes.type !== "application/ld+json");
     const unsafeBlank = elements.filter((element) => element.tag === "a" && element.attributes.target === "_blank" && !/\bnoopener\b/.test(element.attributes.rel ?? ""));
+    const mixedContent = elements.flatMap((element) => Object.entries(element.attributes).filter(([name, value]) => ["href", "src", "action", "poster"].includes(name) && /^http:\/\//i.test(value)).map(([, value]) => value));
+    const externalScriptsWithoutIntegrity = elements.filter((element) => element.tag === "script" && /^https:\/\//i.test(element.attributes.src ?? "") && !element.attributes.integrity);
     const secrets = context.html.match(/(?:sk-|api[_-]?key\s*[=:]\s*)[A-Za-z0-9_-]{16,}/gi) ?? [];
-    return { assertions: [assertion("unsafe-urls", unsafeUrls.length === 0, "critical", unsafeUrls.length ? "javascript: URL found" : "No executable URLs"), assertion("inline-scripts", inlineScripts.length === 0, "critical", inlineScripts.length ? "Unsafe inline script found" : "No unsafe inline scripts"), assertion("external-rel", unsafeBlank.length === 0, "error", unsafeBlank.length ? "target=_blank link missing noopener" : "External rel policy passes"), assertion("secret-scan", secrets.length === 0, "critical", secrets.length ? "Potential secret found" : "No secrets detected")], metrics: { unsafeUrls: unsafeUrls.length, inlineScripts: inlineScripts.length, unsafeBlankLinks: unsafeBlank.length, potentialSecrets: secrets.length } };
+    return { assertions: [assertion("unsafe-urls", unsafeUrls.length === 0, "critical", unsafeUrls.length ? "javascript: URL found" : "No executable URLs"), assertion("mixed-content", mixedContent.length === 0, "critical", mixedContent.length ? `Insecure HTTP resources: ${mixedContent.slice(0, 3).join(", ")}` : "No mixed-content resources"), assertion("inline-scripts", inlineScripts.length === 0, "critical", inlineScripts.length ? "Unsafe inline script found" : "No unsafe inline scripts"), assertion("external-script-integrity", externalScriptsWithoutIntegrity.length === 0, "warning", externalScriptsWithoutIntegrity.length ? `${externalScriptsWithoutIntegrity.length} external script(s) omit integrity metadata; confirm the hosting/CSP contract` : "External script integrity metadata is present or not applicable"), assertion("external-rel", unsafeBlank.length === 0, "error", unsafeBlank.length ? "target=_blank link missing noopener" : "External rel policy passes"), assertion("secret-scan", secrets.length === 0, "critical", secrets.length ? "Potential secret found" : "No secrets detected")], metrics: { unsafeUrls: unsafeUrls.length, mixedContentResources: mixedContent.length, externalScriptsWithoutIntegrity: externalScriptsWithoutIntegrity.length, inlineScripts: inlineScripts.length, unsafeBlankLinks: unsafeBlank.length, potentialSecrets: secrets.length } };
   });
 }
 

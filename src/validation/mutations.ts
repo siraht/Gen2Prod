@@ -28,4 +28,9 @@ export const EVALUATOR_MUTATIONS: EvaluatorMutation[] = [
     return { ...input, html: input.html.replace(/class="([^"]*\bbutton\b[^"]*)"/, 'class="$1 imposter-component"'), scss: `${input.scss}\n.imposter-component {${scssDeclarations}}`, css: `${input.css}\n.imposter-component {${cssDeclarations}}` };
   } },
   { id: "delete-behavior-hook", expectedGate: "E", apply: (input) => ({ ...input, html: input.html.replace(/\s+data-hook="[^"]+"/, "") }) },
+  { id: "duplicate-document-id", expectedGate: "E", apply: (input) => {
+    const id = input.html.match(/\sid="([^"]+)"/)?.[1] ?? "duplicate-id";
+    return { ...input, html: input.html.replace("<main", `<main id="${id}"`) };
+  } },
+  { id: "mixed-content-resource", expectedGate: "H", apply: (input) => ({ ...input, html: input.html.replace("</main>", '<img src="http://example.com/tracker.gif" alt="" width="1" height="1">\n</main>') }) },
 ];
