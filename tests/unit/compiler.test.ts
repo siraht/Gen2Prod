@@ -74,6 +74,15 @@ describe("static compilation", () => {
     expect(output.scss).toContain("margin-top: 8px");
   });
 
+  test("removes source important flags after resolving the winning cascade", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-important-lowering-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Important</title><meta name="description" content="Important fixture"><style>.title{color:red!important}.title{color:blue}</style></head><body><main><h1 class="title">Resolved cascade</h1></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    expect(output.scss).toContain("color: red");
+    expect(output.scss).not.toContain("!important");
+  });
+
   test("does not copy executable source scripts into deterministic output", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-script-boundary-"));
     const htmlPath = join(directory, "page.html");

@@ -56,7 +56,10 @@ function allNodes(root: PlannedNode): PlannedNode[] {
 }
 
 function declarationLines(declarations: StyleIntent["declarations"], indent: string): string {
-  return declarations.map((declaration) => `${indent}${declaration.property}: ${declaration.value}${declaration.important ? " !important" : ""};`).join("\n");
+  // The compiler has already resolved source cascade winners and emits isolated
+  // BEM selectors in deterministic order, so source `!important` flags are no
+  // longer necessary and would become ungoverned specificity debt.
+  return declarations.map((declaration) => `${indent}${declaration.property}: ${declaration.value};`).join("\n");
 }
 
 function indentBlock(value: string, indent: string): string {
