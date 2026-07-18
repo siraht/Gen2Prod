@@ -1,5 +1,5 @@
-import type { BemGraph, ComponentContract, DomNode, InteractionContract } from "../schemas/normal-form.ts";
-import type { PlannedNode, SemanticPlan, SourceDocument } from "./types.ts";
+import type { BemGraph, ComponentContract, DomNode, InteractionContract, StyleIntent } from "../schemas/normal-form.ts";
+import type { ClassRole, PlannedNode, SemanticPlan, SourceDocument } from "./types.ts";
 
 const BLOCK_ALIASES: Record<string, string> = {
   features: "feature-grid",
@@ -18,6 +18,11 @@ function attributes(node: DomNode): Record<string, string> {
 
 function oldClasses(node: DomNode): string[] {
   return node.attributes.find((attribute) => attribute.name === "class")?.value.split(/\s+/).filter(Boolean) ?? [];
+}
+
+function meaningfulClass(name: string, classRoles: Map<string, ClassRole>): boolean {
+  return !["tailwind", "behavior", "framework", "non-style"].includes(classRoles.get(name) ?? "unknown")
+    && !/^(?:container|wrapper|inner|section|group|row|col|active|open|selected|disabled)$/i.test(name);
 }
 
 function descendantClasses(node: DomNode): string[] {
@@ -112,23 +117,34 @@ function explicitRole(node: DomNode, parent?: DomNode): string {
   return node.tag;
 }
 
-function rootBlock(node: DomNode, semantic: { tag: string }, parentBlock: string | null, useStableNodeHints: boolean): string | null {
+function rootBlock(node: DomNode, semantic: { tag: string }, parentBlock: string | null, useStableNodeHints: boolean, classRoles: Map<string, ClassRole>, parent?: DomNode): string | null {
   const id = node.nodeId.toLowerCase();
   const attrs = attributes(node);
   if (node.tag === "body") return "page";
-  const existingBlock = oldClasses(node).find((className) => descendantClasses(node).some((candidate) => candidate.startsWith(`${className}__`)));
+  const existingBlock = oldClasses(node).find((className) => meaningfulClass(className, classRoles) && descendantClasses(node).some((candidate) => candidate.startsWith(`${className}__`)));
   if (existingBlock) return existingBlock;
   if (useStableNodeHints && BLOCK_ALIASES[id]) return BLOCK_ALIASES[id];
   if (useStableNodeHints && /^feature-\d+$/.test(id)) return "feature-card";
   if (useStableNodeHints && /^plan-\d+$/.test(id)) return "pricing-card";
   if (useStableNodeHints && id === "quote") return "testimonial-card";
   if (useStableNodeHints && id === "contact-form") return "contact-form";
-  if (["section", "header", "footer", "nav", "form"].includes(semantic.tag)) {
+  if (["section", "header", "footer", "nav", "form", "aside", "article", "table"].includes(semantic.tag)) {
     const explicitId = attrs.id && !/^(?:main|content|section|wrapper)$/i.test(attrs.id) ? canonicalName(attrs.id) : undefined;
     if (explicitId) return explicitId;
-    const sourceBlock = oldClasses(node).find((className) => !/^(?:section|container|wrapper|inner|grid|flex|relative|absolute|hidden|block)$/i.test(className) && !/^(?:u-\d+|sm:|md:|lg:|xl:|2xl:|hover:|focus:|dark:|p-|px-|py-|m-|mx-|my-|gap-|grid|flex|text-|bg-|rounded|shadow|max-w-|w-|h-)/.test(className));
+    const labelled = attrs["aria-labelledby"]?.replace(/-(?:title|heading)$/, "") || attrs["aria-label"];
+    if (labelled) {
+      const labelName = canonicalName(labelled.replace(/\bnavigation\b/i, "nav"));
+      if (labelName) return semantic.tag === "nav" && !labelName.endsWith("nav") ? `${labelName}-nav` : labelName;
+    }
+    const sourceBlock = oldClasses(node).find((className) => meaningfulClass(className, classRoles));
     if (sourceBlock) return canonicalName(sourceBlock);
   }
+  if (semantic.tag === "header" && (parent?.tag === "body" || descendants(node).some((child) => child.tag === "nav"))) return "site-header";
+  if (semantic.tag === "footer") return "site-footer";
+  if (semantic.tag === "aside") return "sidebar";
+  if (semantic.tag === "nav") return "primary-nav";
+  if (semantic.tag === "table") return parentBlock ? `${parentBlock}-table` : "data-table";
+  if (semantic.tag === "article") return parentBlock ? `${parentBlock}-card` : "article-card";
   if (semantic.tag === "form" && parentBlock) return `${parentBlock}-form`;
   if (semantic.tag === "figure" && parentBlock) return parentBlock === "testimonial" ? "testimonial-card" : `${parentBlock}-card`;
   if (semantic.tag === "li" && parentBlock && node.children.some((child) => /^h[1-6]$/.test(child.tag))) return parentBlock === "feature-grid" ? "feature-card" : `${parentBlock}-card`;
@@ -144,7 +160,7 @@ function canonicalName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").replace(/^features$/, "feature-grid");
 }
 
-function elementName(node: DomNode, role: string, block: string): string {
+function elementName(node: DomNode, role: string, block: string, classRoles: Map<string, ClassRole>): string {
   const nodeId = node.nodeId;
   const aliases: Record<string, string> = {
     "features-inner": "inner", "features-title": "title", "features-list": "list",
@@ -160,10 +176,18 @@ function elementName(node: DomNode, role: string, block: string): string {
   if (/^faq-summary-?\d*$/.test(nodeId)) return "question";
   if (/^faq-answer-?\d*$/.test(nodeId)) return "answer";
   if (nodeId === "quote-text") return "quote";
-  const sourceClass = oldClasses(node).find((className) => !/^(?:u-\d+|sm:|md:|lg:|xl:|2xl:|hover:|focus:|dark:|p-|px-|py-|m-|mx-|my-|gap-|grid|flex|text-|bg-|rounded|shadow|max-w-|w-|h-)/.test(className));
+  const sourceClass = oldClasses(node).find((className) => meaningfulClass(className, classRoles));
   if (sourceClass) {
     const candidate = canonicalName(sourceClass).replace(new RegExp(`^(?:${block}|${block.replace(/-(?:section|grid|list)$/, "")})-?`), "");
     if (candidate && !["container", "wrapper", "inner"].includes(candidate)) return candidate;
+  }
+  if (node.nodeId.startsWith("n-")) {
+    const utilities = oldClasses(node);
+    if (utilities.some((name) => /(?:^|:)grid(?:$|-)/.test(name))) return "grid";
+    if (utilities.some((name) => /(?:^|:)flex(?:$|-)/.test(name))) return utilities.some((name) => /justify-between/.test(name)) ? "split" : "row";
+    if (utilities.some((name) => /(?:^|:)space-y-/.test(name))) return "stack";
+    if (role !== "generic-container") return canonicalName(role);
+    return "group";
   }
   const prefixes = [block, block.replace("-grid", "s"), "hero", "faq", "feature", "plan", "quote", "contact", "pricing", "testimonial", "nav", "site-header"];
   let result = nodeId;
@@ -172,17 +196,17 @@ function elementName(node: DomNode, role: string, block: string): string {
   return canonicalName(result || "item");
 }
 
-function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: string | null, counts: SemanticPlan["confidenceSummary"], review: SemanticPlan["review"], useStableNodeHints: boolean, preserveExplicitSemantics: boolean): PlannedNode {
+function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: string | null, counts: SemanticPlan["confidenceSummary"], review: SemanticPlan["review"], useStableNodeHints: boolean, preserveExplicitSemantics: boolean, classRoles: Map<string, ClassRole>): PlannedNode {
   const semantic = semanticTag(node, parent, useStableNodeHints, preserveExplicitSemantics);
   if (node.tag !== "div" && node.tag !== "span") semantic.role = explicitRole(node, parent);
   counts[semantic.confidence] += 1;
   if (semantic.confidence === "low" && (node.tag === "div" || node.tag === "span")) review.push({ nodeId: node.nodeId, concern: "ambiguous semantic container", evidenceNeeded: ["accessibility tree", "section crop if visually separated"] });
-  const block = rootBlock(node, semantic, parentBlock, useStableNodeHints);
+  const block = rootBlock(node, semantic, parentBlock, useStableNodeHints, classRoles, parent);
   const isNewBlock = block !== null && block !== parentBlock;
   let classes: string[] = [];
   if (node.tag === "body") classes = ["page"];
   else if (block && isNewBlock) classes = semantic.tag === "li" && parentBlock ? [`${parentBlock}__item`, block] : [block];
-  else if (block && !["main", "html"].includes(semantic.tag)) classes = [`${block}__${elementName(node, semantic.role, block)}`];
+  else if (block && !["main", "html"].includes(semantic.tag)) classes = [`${block}__${elementName(node, semantic.role, block, classRoles)}`];
   const existingBem = oldClasses(node).filter((className) => className.includes("__") || className.includes("--"));
   if (existingBem.length > 0) {
     const bases = oldClasses(node).filter((className) => existingBem.some((candidate) => candidate.startsWith(`${className}--`)) || descendantClasses(node).some((candidate) => candidate.startsWith(`${className}__`)));
@@ -216,7 +240,7 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
     oldClasses: oldClasses(node),
     attributes: attrs,
     text: node.text,
-    children: node.children.map((child) => planNode(child, node, block, counts, review, useStableNodeHints, preserveExplicitSemantics)),
+    children: node.children.map((child) => planNode(child, node, block, counts, review, useStableNodeHints, preserveExplicitSemantics, classRoles)),
   };
 }
 
@@ -227,7 +251,8 @@ function plannedSourceHasId(node: DomNode, fragment: string): boolean {
 export function inferSemantics(source: SourceDocument, options: { useStableNodeHints?: boolean; preserveExplicitSemantics?: boolean } = {}): SemanticPlan {
   const counts = { high: 0, medium: 0, low: 0 };
   const review: SemanticPlan["review"] = [];
-  const root = planNode(source.dom, undefined, null, counts, review, options.useStableNodeHints ?? true, options.preserveExplicitSemantics ?? false);
+  const classRoles = new Map(source.classInventory.map((item) => [item.name, item.role]));
+  const root = planNode(source.dom, undefined, null, counts, review, options.useStableNodeHints ?? true, options.preserveExplicitSemantics ?? false, classRoles);
   normalizeListValidity(root);
   addMissingFormLabels(root, review);
   return { root, confidenceSummary: counts, review };
@@ -270,6 +295,86 @@ function addMissingFormLabels(root: PlannedNode, review: SemanticPlan["review"])
 
 function plannedNodes(root: PlannedNode): PlannedNode[] {
   return [root, ...root.children.flatMap(plannedNodes)];
+}
+
+function primaryBemClass(node: PlannedNode): string | undefined {
+  return node.classes.find((name) => name.includes("__") && !name.includes("--"))
+    ?? node.classes.find((name) => !name.includes("--"));
+}
+
+function declarationValue(style: StyleIntent, property: string): string | undefined {
+  return style.declarations.find((declaration) => declaration.property === property)?.value;
+}
+
+function variantHint(style: StyleIntent): string {
+  const position = declarationValue(style, "position");
+  if (position === "fixed") return "fixed";
+  if (position === "absolute") return "overlay";
+  const display = declarationValue(style, "display");
+  if (display === "grid") return "grid";
+  if (display === "flex") {
+    if (declarationValue(style, "flex-direction") === "column") return "stack";
+    if (declarationValue(style, "justify-content") === "space-between") return "split";
+    return "row";
+  }
+  if (style.declarations.some((declaration) => /^(?:background|box-shadow|border-radius)$/.test(declaration.property))) return "surface";
+  if (style.declarations.some((declaration) => /^(?:width|height|min-width|max-width|min-height|max-height)$/.test(declaration.property))) return "sized";
+  if (style.declarations.some((declaration) => /^(?:margin|padding|gap)/.test(declaration.property))) return "spaced";
+  if (style.declarations.some((declaration) => /^(?:font|line-height|letter-spacing|color)/.test(declaration.property))) return "type";
+  return "variant";
+}
+
+function styleSignature(style: StyleIntent): string {
+  return style.declarations.map((declaration) => `${declaration.property}:${declaration.value}:${declaration.important ? 1 : 0}`).sort().join(";");
+}
+
+function suffix(index: number): string {
+  let value = index;
+  let output = "";
+  do {
+    output = String.fromCharCode(97 + value % 26) + output;
+    value = Math.floor(value / 26) - 1;
+  } while (value >= 0);
+  return output;
+}
+
+/**
+ * A single inferred BEM element must never own conflicting rule sets. When
+ * natural source evidence proves that two occurrences differ, retain the
+ * conceptual element and add a readable BEM modifier for each style variant.
+ */
+export function differentiateStyleVariants(root: PlannedNode, styles: StyleIntent[]): void {
+  const styleByNode = new Map(styles.map((style) => [style.nodeId, style]));
+  const groups = new Map<string, PlannedNode[]>();
+  for (const node of plannedNodes(root)) {
+    const primary = primaryBemClass(node);
+    if (!primary || !styleByNode.has(node.nodeId)) continue;
+    const values = groups.get(primary) ?? [];
+    values.push(node);
+    groups.set(primary, values);
+  }
+  for (const [base, nodes] of groups) {
+    const bySignature = new Map<string, PlannedNode[]>();
+    for (const node of nodes) {
+      const style = styleByNode.get(node.nodeId)!;
+      const signature = styleSignature(style);
+      const values = bySignature.get(signature) ?? [];
+      values.push(node);
+      bySignature.set(signature, values);
+    }
+    if (bySignature.size < 2) continue;
+    const entries = [...bySignature.entries()].sort(([left], [right]) => left.localeCompare(right));
+    const hints = entries.map(([, values]) => variantHint(styleByNode.get(values[0]!.nodeId)!));
+    for (const [index, [, values]] of entries.entries()) {
+      const hint = hints[index]!;
+      const duplicateHintCount = hints.filter((candidate) => candidate === hint).length;
+      const duplicateHintIndex = hints.slice(0, index).filter((candidate) => candidate === hint).length;
+      const modifier = `${base}--${hint}${duplicateHintCount > 1 ? `-${suffix(duplicateHintIndex)}` : ""}`;
+      for (const node of values) {
+        if (!node.classes.some((name) => name.startsWith(`${base}--`))) node.classes.push(modifier);
+      }
+    }
+  }
 }
 
 export function inferComponents(plan: SemanticPlan): ComponentContract[] {

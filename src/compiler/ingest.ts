@@ -3,6 +3,7 @@ import { parse, type DefaultTreeAdapterMap } from "parse5";
 import postcss from "postcss";
 import type { DomNode } from "../schemas/normal-form.ts";
 import { sha256 } from "../core/hash.ts";
+import { isUtilityClass } from "../core/classes.ts";
 import type { ClassInventoryItem, ClassRole, CssDeclaration, SourceDocument } from "./types.ts";
 
 type P5Node = DefaultTreeAdapterMap["node"];
@@ -16,7 +17,7 @@ function classifyClass(name: string, selectors: string[]): { role: ClassRole; ev
   if (/^(js-|is-|has-|qa-|e2e-)/.test(name)) return { role: "behavior", evidence: ["behavior-hook prefix"] };
   if (/^(ng-|v-|svelte-|astro-|wp-|brx-)/.test(name)) return { role: "framework", evidence: ["framework/generated prefix"] };
   if (/^[a-z][a-z0-9-]*(?:__(?:[a-z0-9-]+)|--(?:[a-z0-9-]+))?$/.test(name) && (name.includes("__") || name.includes("--"))) return { role: "bem", evidence: ["BEM grammar"] };
-  if (/^(sm:|md:|lg:|xl:|2xl:|hover:|focus:|focus-visible:|dark:|container:|p-|px-|py-|m-|mx-|my-|gap-|grid|flex|text-|bg-|rounded|shadow|max-w-|w-|h-|items-|justify-)/.test(name)) return { role: "tailwind", evidence: ["utility syntax"] };
+  if (isUtilityClass(name)) return { role: "tailwind", evidence: ["utility syntax"] };
   if (selectors.length > 0) return { role: "style", evidence: ["matched compiled CSS selector"] };
   if (/^(active|open|selected|disabled)$/.test(name)) return { role: "behavior", evidence: ["state keyword"] };
   return { role: "unknown", evidence: ["no authoritative classification evidence"] };

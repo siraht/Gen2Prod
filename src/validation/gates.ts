@@ -9,6 +9,7 @@ import type { AccessibilityAudit } from "./accessibility.ts";
 import { classes, flatten, parseElements, type ValidationElement } from "./dom.ts";
 import { compareCaptures, type VisualMetrics } from "./visual.ts";
 import { imageDifference } from "./visual.ts";
+import { isUtilityClass } from "../core/classes.ts";
 import { slotEntropy } from "../report/consistency.ts";
 
 export type GateAssertion = GateResult["assertions"][number];
@@ -67,7 +68,7 @@ function selectorClasses(css: string): { selectors: string[]; classNames: string
 }
 
 function bemClass(name: string): boolean {
-  return /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:(?:__[a-z0-9]+(?:-[a-z0-9]+)*)|(?:--[a-z0-9]+(?:-[a-z0-9]+)*))?$/.test(name)
+  return /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:__[a-z0-9]+(?:-[a-z0-9]+)*)?(?:--[a-z0-9]+(?:-[a-z0-9]+)*)?$/.test(name)
     && !/__.*__/.test(name)
     && !/--.*__/.test(name);
 }
@@ -123,7 +124,7 @@ async function bemGate(context: ValidationContext): Promise<GateResult> {
     const orphanSelectors = css.classNames.filter((name) => !htmlNames.includes(name));
     const plannedClasses = new Set(context.plan?.bem.blocks.flatMap((block) => block.nodes.map((node) => node.className)) ?? []);
     const orphanClasses = htmlNames.filter((name) => cssSet.has(name) === false && !plannedClasses.has(name) && !/^(js-|qa-|e2e-)/.test(name));
-    const utilityClasses = htmlNames.filter((name) => /^(sm:|md:|lg:|p-|px-|py-|m-|gap-|text-|bg-|rounded|shadow|u-\d+)/.test(name));
+    const utilityClasses = htmlNames.filter((name) => isUtilityClass(name) || /^u-\d+$/.test(name));
     const invalid = htmlNames.filter((name) => !bemClass(name) && !/^(js-|qa-|e2e-)/.test(name));
     const bemCoverage = coverage.total ? coverage.bem / coverage.total : 1;
     return { assertions: [

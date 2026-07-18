@@ -46,7 +46,10 @@ export function emitScss(plan: CompilationPlan): string {
   for (const node of allNodes(plan.semantics.root)) {
     const style = styleMap.get(node.nodeId);
     if (!style || node.classes.length === 0) continue;
-    const primary = node.classes.find((name) => name.includes("__")) ?? node.classes.find((name) => !name.includes("--")) ?? node.classes[0]!;
+    const primary = node.classes.find((name) => name.includes("__") && name.includes("--"))
+      ?? node.classes.find((name) => name.includes("__"))
+      ?? node.classes.find((name) => !name.includes("--"))
+      ?? node.classes[0]!;
     const block = primary.split(/__|--/)[0]!;
     const rules = groups.get(block) ?? [];
     if (!rules.some((rule) => rule.className === primary)) rules.push({ node, className: primary, style });

@@ -1,6 +1,6 @@
 import type { TokenRegistry } from "../schemas/normal-form.ts";
 import { TokenRegistrySchema } from "../schemas/normal-form.ts";
-import { buildBemGraph, inferComponents, inferInteractions, inferSemantics } from "./infer.ts";
+import { buildBemGraph, differentiateStyleVariants, inferComponents, inferInteractions, inferSemantics } from "./infer.ts";
 import { ingestStaticHtml } from "./ingest.ts";
 import { augmentTokenRegistry, resolveStyles } from "./tokens.ts";
 import { compilePlan } from "./emit.ts";
@@ -16,9 +16,10 @@ export async function buildCompilationPlan(options: CompileOptions): Promise<Com
     || /<meta\s+[^>]*content=["']Gen2Prod["'][^>]*name=["']generator["']/i.test(source.html);
   const tokens = alreadyCanonical ? importedTokens : augmentTokenRegistry(importedTokens, source.declarations);
   const semantics = inferSemantics(source, { useStableNodeHints: options.policy?.compiler.useStableNodeHints ?? true, preserveExplicitSemantics: alreadyCanonical });
+  const resolved = resolveStyles(source, semantics.root, tokens, options.policy?.thresholds.tokenSnapRelative ?? 0.08);
+  differentiateStyleVariants(semantics.root, resolved.styles);
   const components = inferComponents(semantics);
   const bem = buildBemGraph(semantics);
-  const resolved = resolveStyles(source, semantics.root, tokens, options.policy?.thresholds.tokenSnapRelative ?? 0.08);
   return { source, semantics, components, bem, tokens, styles: resolved.styles, interactions: inferInteractions(semantics), tokenExceptions: resolved.exceptions };
 }
 

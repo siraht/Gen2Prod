@@ -25,7 +25,7 @@ describe("static compilation", () => {
   test("classifies source and compiled CSS evidence", async () => {
     const input = await fixtureInput();
     const source = await ingestStaticHtml(input.htmlPath, input.cssPath);
-    expect(source.classInventory.some((item) => item.role === "style")).toBeTrue();
+    expect(source.classInventory.some((item) => item.role === "tailwind")).toBeTrue();
     expect(source.declarations.length).toBeGreaterThan(10);
     expect(source.dom.nodeId).toBe("page");
   });
@@ -130,6 +130,28 @@ describe("static compilation", () => {
     const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
     expect(output.html).toContain('<html lang="en" class="dark">');
     expect(output.html).not.toContain("scroll-smooth");
+  });
+
+  test("keeps utility syntax out of conceptual BEM names", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-utility-names-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Utilities</title><meta name="description" content="Utility fixture"><style>.border-b{border-bottom-width:1px}.items-center{display:flex;align-items:center}.font-medium{font-weight:500}</style></head><body><header class="border-b"><div class="items-center"><span class="font-medium">Utility label</span></div></header><main><h1>Utilities</h1></main></body></html>');
+    const source = await ingestStaticHtml(htmlPath);
+    expect(source.classInventory.filter((item) => ["border-b", "items-center", "font-medium"].includes(item.name)).every((item) => item.role === "tailwind")).toBeTrue();
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    expect(output.html).toContain('class="site-header"');
+    expect(output.html).not.toMatch(/class="[^"]*\b(?:border-b|items-center|font-medium)\b/);
+  });
+
+  test("adds readable modifiers when one inferred BEM element has conflicting styles", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-bem-variants-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Variants</title><meta name="description" content="Variant fixture"><style>.content{padding:1rem}#grid-content{display:grid}#row-content{display:flex}</style></head><body><main><section id="hero"><h1>Variants</h1><div id="grid-content" class="content">Grid</div><div id="row-content" class="content">Row</div></section></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    expect(output.html).toContain("hero__content--grid");
+    expect(output.html).toContain("hero__content--row");
+    expect(output.scss).toContain("&__content--grid");
+    expect(output.scss).toContain("&__content--row");
   });
 });
 
