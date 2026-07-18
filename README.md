@@ -13,7 +13,7 @@ Gen2Prod turns uncertain website artifacts into semantic, BEM-structured, token-
 | Measured compiler | Source, rendered DOM, accessibility tree, computed styles, boxes, screenshots, intent, components, and tokens reconcile into G2P-NF |
 | Hard constraints | Build, BEM, token, inline-style, accessibility, SEO, security, and mode-specific visual failures cannot be outweighed by a soft score |
 | Reproducibility | Content hashes, manifests, source authority, versioned schemas, replay events, and idempotence checks make every decision attributable |
-| Synthetic curriculum | Seven archetypes plus imported model-generator families produce gold code, controlled/naturalistic failures, exact lineage where available, negative controls, and train/validation/held-out splits |
+| Synthetic curriculum | Seven archetypes plus imported model-generator families produce strategy, page briefs, varied content, rendered mockups, gold code, marked/unmarked dirty inputs, image diffs, lineage, controls, and held-out splits |
 | Autoresearch | One bounded mutation per experiment; frozen evaluator; separate policy/pass/verifier tracks; automatic keep or revert |
 | Distillation | Exports supervised, preference, and verifier JSONL and trains reloadable selector/verifier/planner models |
 | Local-first operation | The entire loop runs with deterministic local planners; an external structured-model provider is optional |
@@ -124,7 +124,7 @@ Global flags:
 | --- | --- | --- |
 | `init [directory]` | Write config and export versioned JSON Schemas | `gen2prod init ./site` |
 | `synth prepare` | Build gold/corrupt fixtures, lineage, splits, and controls | `gen2prod synth prepare --seed 1337 --count 2` |
-| `synth import` | Add model-generated messy output with generator-family provenance | `gen2prod synth import canonical-spec.json messy.html --css messy.css --family codex-v1` |
+| `synth import` | Add exact, partial, or non-1:1 dirty/clean examples with generator-family provenance | `gen2prod synth import canonical.json messy.html --css messy.css --family codex-v1 --alignment exact` |
 | `evaluate` | Score a policy with the frozen evaluator | `gen2prod evaluate --split holdout` |
 | `evaluate --ablation` | Run controlled evidence configurations A through F | `gen2prod evaluate --split validation --ablation` |
 | `run <input>` | Execute any production mode | `gen2prod run page.html --css app.css --tokens tokens.json` |
@@ -230,7 +230,7 @@ Important on-disk artifacts:
     {selector,verifier,planner}.model.json
 ```
 
-The normative designs are [docs/Gen2Prod_plan_v2_3_4_revised.md](docs/Gen2Prod_plan_v2_3_4_revised.md) and [docs/karpathyloop.md](docs/karpathyloop.md). [docs/implementation-matrix.md](docs/implementation-matrix.md) maps each layer to executable evidence.
+The normative designs are [docs/Gen2Prod_plan_v2_3_4_revised.md](docs/Gen2Prod_plan_v2_3_4_revised.md) and [docs/karpathyloop.md](docs/karpathyloop.md). [docs/implementation-matrix.md](docs/implementation-matrix.md) maps each layer to executable evidence. [docs/dataset-intake.md](docs/dataset-intake.md) defines how to contribute exact, partial, and non-1:1 real examples.
 
 Both research evaluations and production runs feed `research/trajectories.jsonl`. The former contributes accepted/rejected policy trials; the latter contributes real-run observations, exact idempotence labels, hard-gate labels, and measured evaluator-mutation recall. Naturalistic output can be added without rewriting the procedural generator:
 
@@ -239,6 +239,8 @@ gen2prod synth import canonical-spec.json model-page.html \
   --css model-page.css --family generator-model-version \
   --split holdout --fixture-id stable-family-case
 ```
+
+Optional `--dirty-image`, `--clean-image`, `--clean-html`, `--clean-css`, `--strategy`, and `--change-manifest` inputs preserve observed project evidence. `--alignment exact` makes compatible clean screenshots a hard image-diff target; `partial` and `non-1-to-1` keep the example as scoped or preference supervision instead of incorrectly demanding global pixel identity.
 
 ## How Gen2Prod compares
 
@@ -265,7 +267,7 @@ bun run build       # Standalone Bun bundle
 bun run verify      # Everything above
 ```
 
-Acceptance requires every synthetic fixture to reach zero hard-gate, semantic, BEM, token-accounting, and idempotence error while all evaluator mutations are caught. The frozen fingerprint covers evaluator logic, gates, compiler passes, manifest, corrupt inputs, gold artifacts, traces, lineage, and expected-gate controls. Thresholds still report their provisional calibration status until the fixture suite spans representative real projects, frameworks, browsers, and generator-model families.
+Acceptance requires every marked and lineage-free unmarked fixture to reach zero hard-gate, semantic, BEM, token-accounting, and idempotence error; every candidate must improve on its dirty browser render and remain below the pixel threshold; and every static and rendered-image mutation must be caught. The frozen fingerprint covers evaluator logic, gates, compiler passes, strategy/mockup artifacts, marked/unmarked inputs, gold and dirty screenshots, actual diff PNGs, traces, lineage, and observed-pair evidence. Thresholds still report provisional calibration until the suite spans representative real projects, frameworks, browsers, and generator-model families.
 
 ## Troubleshooting
 

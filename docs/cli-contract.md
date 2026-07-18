@@ -7,6 +7,7 @@ Gen2Prod serves humans and automation. Primary results are written to stdout, di
 ```text
 gen2prod init [directory]
 gen2prod synth prepare [--seed N] [--count N] [--force]
+gen2prod synth import <canonical> <dirty-html> --css path --family name [--alignment exact|partial|non-1-to-1] [--dirty-image path] [--clean-image path] [--clean-html path] [--clean-css path] [--strategy path] [--change-manifest path]
 gen2prod evaluate [--split validation|holdout|all] [--policy path]
 gen2prod run <input> [--mode MODE] [--profile PROFILE] [--visual-target path]
 gen2prod validate <run-or-output>
