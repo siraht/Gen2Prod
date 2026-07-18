@@ -77,6 +77,14 @@ async function captureDom(page: Page): Promise<unknown[]> {
 async function captureRenderedSource(page: Page): Promise<RenderedSource> {
   return page.evaluate(() => {
     const clone = document.documentElement.cloneNode(true) as HTMLElement;
+    const originalImages = [...document.querySelectorAll("img")];
+    const clonedImages = [...clone.querySelectorAll("img")];
+    for (const [index, image] of originalImages.entries()) {
+      const cloned = clonedImages[index];
+      if (!cloned || !image.naturalWidth || !image.naturalHeight) continue;
+      if (!cloned.hasAttribute("width")) cloned.setAttribute("width", String(image.naturalWidth));
+      if (!cloned.hasAttribute("height")) cloned.setAttribute("height", String(image.naturalHeight));
+    }
     for (const element of [...clone.querySelectorAll("[src]")]) {
       const value = element.getAttribute("src");
       if (value && !/^(?:data:|blob:|#)/i.test(value)) element.setAttribute("src", new URL(value, document.baseURI).href);
