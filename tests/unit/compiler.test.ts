@@ -7,6 +7,7 @@ import { corruptFixture } from "../../src/synthetic/corrupt.ts";
 import { renderGold } from "../../src/synthetic/render.ts";
 import { ingestStaticHtml } from "../../src/compiler/ingest.ts";
 import { compileStaticPage } from "../../src/compiler/pipeline.ts";
+import { bindValue } from "../../src/compiler/tokens.ts";
 
 async function fixtureInput() {
   const spec = createArchetypes()[0]!;
@@ -71,6 +72,14 @@ describe("static compilation", () => {
     expect(output.html).not.toContain("style=");
     expect(output.scss).toContain("color: var(--ink)");
     expect(output.scss).toContain("margin-top: 8px");
+  });
+
+  test("snaps only complete CSS atoms inside compound values", () => {
+    const registry = inputTokens();
+    const untouched = bindValue("gap", "clamp(1.5rem, 4vw, 4rem)", registry);
+    expect(untouched.value).toBe("clamp(1.5rem, 4vw, 4rem)");
+    const replaced = bindValue("gap", "clamp(16px, 4vw, 4rem)", registry);
+    expect(replaced.value).toBe("clamp(var(--space-m), 4vw, 4rem)");
   });
 });
 

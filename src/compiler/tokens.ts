@@ -26,6 +26,14 @@ function eligibleTokens(registry: TokenRegistry, property: string): Token[] {
   return registry.tokens.filter((token) => token.allowedProperties.includes(property) || token.allowedProperties.some((allowed) => property.startsWith(`${allowed}-`)));
 }
 
+function replaceCssAtom(value: string, sample: string, replacement: string): string | undefined {
+  if (value.trim() === sample.trim()) return replacement;
+  const escaped = sample.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pattern = new RegExp(`(?<![\\w.-])${escaped}(?![\\w.-])`, "g");
+  if (!pattern.test(value)) return undefined;
+  return value.replace(pattern, replacement);
+}
+
 export function bindValue(property: string, rawValue: string, registry: TokenRegistry, relativeThreshold = 0.08): { value: string; token?: Token | undefined; error?: number | undefined } {
   const existing = registry.tokens.find((token) => rawValue.includes(token.runtimeExpression));
   if (existing) return { value: rawValue, token: existing, error: 0 };
@@ -35,8 +43,9 @@ export function bindValue(property: string, rawValue: string, registry: TokenReg
   for (const token of eligibleTokens(registry, property)) {
     const samples = Object.values(token.sampledValues);
     for (const sample of samples) {
-      if (value.includes(sample)) {
-        value = value.replaceAll(sample, token.runtimeExpression);
+      const replaced = replaceCssAtom(value, sample, token.runtimeExpression);
+      if (replaced !== undefined) {
+        value = replaced;
         selected = token;
         selectedError = 0;
         continue;
