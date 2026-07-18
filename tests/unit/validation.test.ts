@@ -57,13 +57,28 @@ describe("image comparison calibration", () => {
     image.data.fill(255);
     await Bun.write(screenshot, PNG.sync.write(image));
     const styles = { display: "block", position: "static" };
-    const node = (nodeId: string, tag: string, text: string, y: number) => ({ nodeId, tag, text, visible: true, box: { x: 0, y, width: 10, height: 10 }, styles });
+    const node = (nodeId: string, tag: string, text: string, y: number, contentText = text) => ({ nodeId, tag, text, contentText, visible: true, box: { x: 0, y, width: 10, height: 10 }, styles });
     const capture = (dom: unknown[]) => ({ viewport: 10, viewportHeight: 20, theme: "light", state: "default", screenshot, screenshotHash: "hash", dom, accessibilityTree: [], performance: {}, seo: {}, console: [] });
     const baseline = capture([node("rendered-0", "main", "", 0), node("rendered-1", "h1", "Alpha", 10)]);
     const candidate = capture([node("rendered-0", "html", "", 0), node("rendered-1", "main", "", 0), node("rendered-2", "h1", "Alpha", 10)]);
     const metrics = await compareCaptures(baseline, candidate);
     expect(metrics.unmatchedVisibleNodes).toBe(0);
     expect(metrics.layout.max).toBe(0);
+  });
+
+  test("matches content-bearing nodes before anonymous wrappers", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-node-priority-"));
+    const screenshot = join(directory, "solid.png");
+    const image = new PNG({ width: 10, height: 10 });
+    image.data.fill(255);
+    await Bun.write(screenshot, PNG.sync.write(image));
+    const styles = { display: "block", position: "static", backgroundColor: "rgba(0, 0, 0, 0)", boxShadow: "none" };
+    const node = (nodeId: string, tag: string, contentText: string, y: number) => ({ nodeId, tag, text: "", contentText, visible: true, box: { x: 0, y, width: 10, height: 10 }, styles });
+    const capture = (dom: unknown[]) => ({ viewport: 10, viewportHeight: 20, theme: "light", state: "default", screenshot, screenshotHash: "hash", dom, accessibilityTree: [], performance: {}, seo: {}, console: [] });
+    const baseline = capture([node("rendered-0", "div", "", 0), node("rendered-1", "h2", "Nested heading", 0)]);
+    const candidate = capture([node("rendered-0", "section", "", 0), node("rendered-1", "h2", "Nested heading", 0)]);
+    const metrics = await compareCaptures(baseline, candidate);
+    expect(metrics.unmatchedVisibleNodes).toBe(0);
   });
 
   test("normalizes downsampled full-page references by width without calling them pixel-exact", async () => {

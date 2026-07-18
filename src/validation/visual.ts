@@ -26,6 +26,7 @@ type CapturedNode = {
   nodeId: string;
   tag: string;
   text: string;
+  contentText?: string;
   visible: boolean;
   box: { x: number; y: number; width: number; height: number };
   styles: Record<string, string>;
@@ -134,42 +135,65 @@ function isSourceStableNodeId(nodeId: string): boolean {
   return !/^rendered-\d+$/.test(nodeId);
 }
 
+function matchText(node: CapturedNode): string {
+  return (node.contentText || node.text).replace(/\s+/g, " ").trim();
+}
+
+function isVisuallySubstantive(node: CapturedNode): boolean {
+  if (!node.visible) return false;
+  if (matchText(node) || /^(?:br|hr|img|svg|canvas|video|input|select|textarea|button|a|h[1-6]|p|li|summary|blockquote|figcaption|label)$/.test(node.tag)) return true;
+  return !/^(?:rgba\(0, 0, 0, 0\)|transparent)$/.test(node.styles.backgroundColor ?? "transparent") || (node.styles.boxShadow ?? "none") !== "none";
+}
+
+function matchNodes(baseline: Map<string, CapturedNode>, candidate: Map<string, CapturedNode>, viewport: number): Map<string, CapturedNode> {
+  const matches = new Map<string, CapturedNode>();
+  const usedCandidateIds = new Set<string>();
+  for (const [id] of baseline) {
+    if (!isSourceStableNodeId(id)) continue;
+    const exact = candidate.get(id);
+    if (exact) { matches.set(id, exact); usedCandidateIds.add(id); }
+  }
+  const remaining = [...baseline.entries()].filter(([id]) => !matches.has(id)).sort(([, left], [, right]) => {
+    const textPriority = Number(Boolean(matchText(right))) - Number(Boolean(matchText(left)));
+    return textPriority || Number(isVisuallySubstantive(right)) - Number(isVisuallySubstantive(left));
+  });
+  for (const [id, before] of remaining) {
+    const beforeText = matchText(before);
+    const candidates = [...candidate.values()].filter((node) => !usedCandidateIds.has(node.nodeId)).map((node) => {
+      const afterText = matchText(node);
+      let score = 0;
+      if (beforeText && afterText === beforeText) score += 1.5;
+      else if (beforeText || afterText) score -= 0.75;
+      if (node.tag === before.tag) score += 0.2;
+      else if (/^h[1-6]$/.test(node.tag) && /^h[1-6]$/.test(before.tag)) score += 0.1;
+      score -= (Math.abs(before.box.x - node.box.x) + Math.abs(before.box.y - node.box.y)) / Math.max(viewport, 1);
+      score -= Math.abs(before.box.width - node.box.width) / Math.max(before.box.width, 1);
+      return { node, score };
+    }).sort((left, right) => right.score - left.score);
+    if (candidates[0] && candidates[0].score > -0.05) {
+      matches.set(id, candidates[0].node);
+      usedCandidateIds.add(candidates[0].node.nodeId);
+    }
+  }
+  return matches;
+}
+
 export async function compareCaptures(baseline: CaptureResult["captures"][number], candidate: CaptureResult["captures"][number], diffPath?: string): Promise<VisualMetrics> {
   const images = await imageDifference(baseline.screenshot, candidate.screenshot, diffPath);
   const baselineNodes = byNode(baseline);
   const candidateNodes = byNode(candidate);
-  const usedCandidateIds = new Set<string>();
+  const nodeMatches = matchNodes(baselineNodes, candidateNodes, baseline.viewport);
   const deltas: number[] = [];
   const critical: number[] = [];
   const categoryMismatches: Record<string, { changed: number; total: number }> = {};
   let unmatchedVisibleNodes = 0;
   const unmatchedVisibleNodeDetails: VisualMetrics["unmatchedVisibleNodeDetails"] = [];
   for (const [id, before] of baselineNodes) {
-    // Capture-order locators shift when head metadata or semantic tags change;
-    // only source-authored IDs are safe to use as cross-build identity.
-    let after = isSourceStableNodeId(id) ? candidateNodes.get(id) : undefined;
-    if (after) usedCandidateIds.add(after.nodeId);
+    const after = nodeMatches.get(id);
     if (!after) {
-      const candidates = [...candidateNodes.values()]
-        .filter((node) => !usedCandidateIds.has(node.nodeId))
-        .map((node) => {
-          let score = 0;
-          if (before.text && node.text === before.text) score += 1;
-          if (node.tag === before.tag) score += 0.2;
-          score -= (Math.abs(before.box.x - node.box.x) + Math.abs(before.box.y - node.box.y)) / Math.max(baseline.viewport, 1);
-          score -= Math.abs(before.box.width - node.box.width) / Math.max(before.box.width, 1);
-          return { node, score };
-        })
-        .sort((left, right) => right.score - left.score);
-      if (candidates[0] && candidates[0].score > -0.05) {
-        after = candidates[0].node;
-        usedCandidateIds.add(after.nodeId);
-      }
-    }
-    if (!after) {
-      if (before.visible) {
+      if (isVisuallySubstantive(before)) {
         unmatchedVisibleNodes += 1;
-        unmatchedVisibleNodeDetails.push({ nodeId: before.nodeId, tag: before.tag, text: before.text.slice(0, 120) });
+        unmatchedVisibleNodeDetails.push({ nodeId: before.nodeId, tag: before.tag, text: matchText(before).slice(0, 120) });
       }
       continue;
     }

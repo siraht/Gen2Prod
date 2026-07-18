@@ -70,7 +70,10 @@ async function captureDom(page: Page): Promise<unknown[]> {
     const style = getComputedStyle(element);
     const box = element.getBoundingClientRect();
     const attributes = Object.fromEntries([...element.attributes].map((attribute) => [attribute.name, attribute.value]));
-    return { nodeId: attributes["data-g2p-node"] ?? attributes["data-gen2prod-id"], tag: element.tagName.toLowerCase(), attributes, text: element.childNodes.length === 1 && element.firstChild?.nodeType === Node.TEXT_NODE ? element.textContent?.trim() : "", box: { x: box.x, y: box.y, width: box.width, height: box.height }, visible: Boolean(box.width || box.height), styles: { display: style.display, position: style.position, margin: style.margin, padding: style.padding, gap: style.gap, width: style.width, height: style.height, fontSize: style.fontSize, lineHeight: style.lineHeight, color: style.color, backgroundColor: style.backgroundColor, borderRadius: style.borderRadius, boxShadow: style.boxShadow, overflow: style.overflow } };
+    const tag = element.tagName.toLowerCase();
+    const text = element.childNodes.length === 1 && element.firstChild?.nodeType === Node.TEXT_NODE ? element.textContent?.trim() ?? "" : "";
+    const contentText = /^(?:a|button|summary|label|p|h[1-6]|blockquote|figcaption|li)$/.test(tag) ? (element.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 500) : text;
+    return { nodeId: attributes["data-g2p-node"] ?? attributes["data-gen2prod-id"], tag, attributes, text, contentText, box: { x: box.x, y: box.y, width: box.width, height: box.height }, visible: Boolean(box.width || box.height), styles: { display: style.display, position: style.position, margin: style.margin, padding: style.padding, gap: style.gap, width: style.width, height: style.height, fontSize: style.fontSize, lineHeight: style.lineHeight, color: style.color, backgroundColor: style.backgroundColor, borderRadius: style.borderRadius, boxShadow: style.boxShadow, overflow: style.overflow } };
   }));
 }
 
