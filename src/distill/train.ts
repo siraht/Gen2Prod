@@ -54,7 +54,9 @@ function trainVerifier(trajectories: Trajectory[]): VerifierModel {
   let truePositive = 0, falsePositive = 0, trueNegative = 0, falseNegative = 0;
   for (const row of rows) {
     const predicted = predictVerifier(row);
-    const actual = row.accepted && row.verifierLabels.hardGatesPass === true;
+    const actual = row.verifierLabels.hardGatesPass === true
+      && row.verifierLabels.mutationControlsPass === true
+      && row.verifierLabels.idempotent === true;
     if (predicted && actual) truePositive += 1;
     else if (predicted) falsePositive += 1;
     else if (actual) falseNegative += 1;

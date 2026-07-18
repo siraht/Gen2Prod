@@ -43,6 +43,12 @@ async function config(): Promise<Gen2ProdConfig> {
   return loadConfig(options.config, options.workspace ? { workspace: options.workspace } : {});
 }
 
+async function currentPolicy(project: Gen2ProdConfig, explicit?: string): Promise<Awaited<ReturnType<typeof loadPolicy>>> {
+  if (explicit) return loadPolicy(explicit);
+  const incumbent = resolve(project.workspace, "research", "incumbent-policy.json");
+  return loadPolicy((await pathExists(incumbent)) ? incumbent : project.policy.file);
+}
+
 function emit<T>(envelope: ResultEnvelope<T>, human: string): void {
   if (globals().json) console.log(JSON.stringify(envelope));
   else {
@@ -95,7 +101,7 @@ program
   .addOption(new Option("--split <split>", "benchmark split").choices(["train", "validation", "holdout", "all"]).default("validation"))
   .action(async (options: { fixtures: string; policy?: string; split: "train" | "validation" | "holdout" | "all" }) => {
     const project = await config();
-    const policy = await loadPolicy(options.policy ?? project.policy.file);
+    const policy = await currentPolicy(project, options.policy);
     const evaluation = await evaluatePolicy({ manifestPath: resolve(options.fixtures), policy, split: options.split, workDirectory: resolve(project.workspace, "evaluations", crypto.randomUUID()) });
     const envelope = result("evaluate", evaluation);
     if (evaluation.mutationControlRecall < 1) envelope.warnings.push("Frozen evaluator did not catch every mutation control.");
@@ -114,7 +120,7 @@ program
   .option("--no-capture", "skip browser and accessibility evidence")
   .action(async (input: string, options: { css?: string; tokens?: string; policy?: string; visualTarget?: string; mode?: string; profile?: string; capture: boolean }) => {
     const project = await config();
-    const policy = await loadPolicy(options.policy ?? project.policy.file);
+    const policy = await currentPolicy(project, options.policy);
     const run = await executeRun({ input: resolve(input), cssPath: options.css, tokenPath: options.tokens, visualTargetPath: options.visualTarget, mode: ModeSchema.parse(options.mode ?? project.mode), profile: ProfileSchema.parse(options.profile ?? project.profile), capture: options.capture, config: project, policy });
     const envelope = result("run", { runId: run.runId, runDirectory: run.runDirectory, passed: run.validation.passed, gates: run.validation.gates.map((gate) => ({ gate: gate.gate, passed: gate.passed, hard: gate.hard })), metrics: run.validation.metrics, repairCount: run.repairs.length });
     envelope.runId = run.runId;
