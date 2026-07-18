@@ -86,6 +86,7 @@ export function planImageOnlyBuild(analysis: ImageOnlyAnalysis): ImageOnlyBuildP
       { concern: "dynamic-states", reason: "hover, focus, open, loading, error, autoplay, and animation timing are not proven by one still", requiredEvidence: ["state image sequence or active visual probes"] },
       { concern: "responsive-rules", reason: "one viewport does not determine breakpoints, reflow, or mobile interaction patterns", requiredEvidence: ["approved images at additional viewports"] },
       { concern: "asset-meaning", reason: "pixels do not prove informative image alt text or decorative intent", requiredEvidence: ["content/asset inventory review"] },
+      ...(analysis.quality.targetQualityReviewRequired ? [{ concern: "capture-completeness", reason: analysis.quality.reason, requiredEvidence: ["scroll-materialized recapture, alternate browser capture, or reviewer confirmation that the negative space is intentional"] }] : []),
     ],
     provenance: { allowedInputHashes: [analysis.sourceFrameHash], usedQuarantinedArtifacts: false },
   });

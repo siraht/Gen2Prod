@@ -95,6 +95,12 @@ export const ImageOnlyAnalysisSchema = z.object({
     downsample: z.number().int().positive(),
     ocrProvider: z.string().min(1),
   }),
+  quality: z.object({
+    blankLikeCoverage: z.number().min(0).max(1),
+    suspiciousBlankRegionIds: z.array(z.string()),
+    targetQualityReviewRequired: z.boolean(),
+    reason: z.string(),
+  }).default({ blankLikeCoverage: 0, suspiciousBlankRegionIds: [], targetQualityReviewRequired: false, reason: "no suspicious blank coverage detected" }),
 });
 
 export const InteractionHypothesisSchema = z.object({
@@ -144,7 +150,7 @@ export const ImageOnlyEvaluationSchema = z.object({
   split: ImageOnlySplitSchema,
   sourceFrameHash: z.string().regex(/^[a-f0-9]{64}$/),
   candidate: z.object({ html: z.string(), css: z.string(), screenshot: z.string(), screenshotHash: z.string().regex(/^[a-f0-9]{64}$/) }),
-  visual: z.object({ pixelDifferenceRatio: z.number().min(0).max(1), widthMismatch: z.number().min(0), heightMismatch: z.number().min(0), macroStructureLoss: z.number().min(0).max(1), dirtyPixelDifferenceRatio: z.number().min(0).max(1).optional(), recoveryFromDirty: z.number().optional(), previousPixelDifferenceRatio: z.number().min(0).max(1).optional(), recovery: z.number().optional() }),
+  visual: z.object({ pixelDifferenceRatio: z.number().min(0).max(1), widthMismatch: z.number().min(0), heightMismatch: z.number().min(0), macroStructureLoss: z.number().min(0).max(1), targetBlankLikeCoverage: z.number().min(0).max(1), targetQualityReviewRequired: z.boolean(), dirtyPixelDifferenceRatio: z.number().min(0).max(1).optional(), recoveryFromDirty: z.number().optional(), previousPixelDifferenceRatio: z.number().min(0).max(1).optional(), recovery: z.number().optional() }),
   semantics: z.object({ parseErrors: z.number().int().nonnegative(), h1Count: z.number().int().nonnegative(), landmarkRecall: z.number().min(0).max(1), visibleTextRecall: z.number().min(0).max(1), bemCoverage: z.number().min(0).max(1), inlineStyleCount: z.number().int().nonnegative(), scriptCount: z.number().int().nonnegative() }),
   interactions: z.object({ hypothesisCount: z.number().int().nonnegative(), hypothesesRequiringVerification: z.number().int().nonnegative(), prohibitedClaimCoverage: z.number().min(0).max(1), safeStateCssCoverage: z.number().min(0).max(1), unresolvedConcernCoverage: z.number().min(0).max(1) }),
   leakage: z.object({ passed: z.boolean(), sourceUrlUsedByBuilder: z.boolean(), quarantinedInputCount: z.number().int().nonnegative(), fullFrameWallpaperDetected: z.boolean(), rasterCoverage: z.number().min(0).max(1), maximumRasterCoverage: z.number().min(0).max(1) }),

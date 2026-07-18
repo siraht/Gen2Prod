@@ -190,6 +190,9 @@ export async function analyzeImageTarget(options: AnalyzeImageTargetOptions): Pr
   const downsample = options.downsample ?? 8;
   const text = options.ocr === false ? [] : await recognizeText(image, options.ocrChunkHeight ?? 2200);
   const bands = horizontalBands(image, downsample);
+  const regions = bands.map((band, index) => classifyBand(band, index, bands, image, text));
+  const suspiciousBlankRegions = regions.filter((region) => region.bbox.height >= Math.max(600, image.height * 0.18) && region.imageDominance <= 0.035 && !text.some((item) => item.bbox.y + item.bbox.height / 2 >= region.bbox.y && item.bbox.y + item.bbox.height / 2 <= region.bbox.y + region.bbox.height));
+  const blankLikeCoverage = suspiciousBlankRegions.reduce((sum, region) => sum + region.bbox.height, 0) / image.height;
   const analysis = ImageOnlyAnalysisSchema.parse({
     schemaVersion: "0.1.0",
     targetId: manifest.targetId,
@@ -197,9 +200,10 @@ export async function analyzeImageTarget(options: AnalyzeImageTargetOptions): Pr
     dimensions: { width: image.width, height: image.height },
     palette: palette(image, downsample),
     horizontalBands: bands.map((band) => ({ y: band.y, height: band.height, color: colorHex({ r: quantize(band.color.r, 12), g: quantize(band.color.g, 12), b: quantize(band.color.b, 12) }), confidence: 0.72 })),
-    regions: bands.map((band, index) => classifyBand(band, index, bands, image, text)),
+    regions,
     text,
     extraction: { algorithm: "g2p-row-segmentation-v1", downsample, ocrProvider: options.ocr === false ? "none" : "tesseract.js-eng-best-int-v1" },
+    quality: { blankLikeCoverage, suspiciousBlankRegionIds: suspiciousBlankRegions.map((region) => region.regionId), targetQualityReviewRequired: blankLikeCoverage >= 0.2, reason: blankLikeCoverage >= 0.2 ? "large uniform regions without visible text or image edges may indicate unmaterialized lazy/scroll content or intentional negative space; review the capture" : "no suspicious blank coverage detected" },
   });
   await writeJsonAtomic(options.outputPath ?? join(dirname(manifestPath), "image-analysis.json"), analysis);
   return analysis;

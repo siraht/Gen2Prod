@@ -4,7 +4,7 @@ import { PNG } from "pngjs";
 import { ensureDirectory, pathExists, readJson, writeJsonAtomic } from "../core/fs.ts";
 import { hashFile } from "../core/hash.ts";
 import { capturePage } from "../evidence/capture.ts";
-import { ImageOnlyBuildPlanSchema, ImageOnlyEvaluationSchema, ImageOnlyTargetManifestSchema, type ImageOnlyEvaluation } from "../schemas/image-only.ts";
+import { ImageOnlyAnalysisSchema, ImageOnlyBuildPlanSchema, ImageOnlyEvaluationSchema, ImageOnlyTargetManifestSchema, type ImageOnlyEvaluation } from "../schemas/image-only.ts";
 import { classes, flatten, parseElements } from "../validation/dom.ts";
 import { imageDifference } from "../validation/visual.ts";
 
@@ -68,7 +68,7 @@ export async function evaluateImageBuild(options: EvaluateImageBuildOptions): Pr
   const bemClasses = authoredClasses.filter((name) => /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:(?:__|--)[a-z0-9]+(?:-[a-z0-9]+)*)?$/.test(name));
   const visibleWords = new Set(normalizedWords(elements.map((element) => element.text).join(" ")));
   const colocatedAnalysis = join(buildDirectory, "image-analysis.json");
-  const analysis = await readJson<{ text: { text: string }[] }>(await pathExists(colocatedAnalysis) ? colocatedAnalysis : join(dirname(manifestPath), "image-analysis.json"));
+  const analysis = ImageOnlyAnalysisSchema.parse(await readJson(await pathExists(colocatedAnalysis) ? colocatedAnalysis : join(dirname(manifestPath), "image-analysis.json")));
   const observedWords = [...new Set(analysis.text.flatMap((item) => normalizedWords(item.text)))];
   const visibleTextRecall = observedWords.length ? observedWords.filter((word) => visibleWords.has(word)).length / observedWords.length : 1;
   const expectedLandmarks = [...new Set(plan.regions.map((region) => region.tag).filter((tag) => ["header", "nav", "footer"].includes(tag))), "main"];
@@ -113,7 +113,7 @@ export async function evaluateImageBuild(options: EvaluateImageBuildOptions): Pr
     split: manifest.split,
     sourceFrameHash: builderFrame.sha256,
     candidate: { html: htmlPath, css: cssPath, screenshot, screenshotHash: await hashFile(screenshot) },
-    visual: { pixelDifferenceRatio: difference.ratio, widthMismatch: difference.widthMismatch, heightMismatch: difference.heightMismatch, macroStructureLoss: structureLoss, ...(dirtyDifference ? { dirtyPixelDifferenceRatio: dirtyDifference.ratio, recoveryFromDirty: dirtyDifference.ratio > 1e-9 ? (dirtyDifference.ratio - difference.ratio) / dirtyDifference.ratio : difference.ratio <= 1e-9 ? 1 : -difference.ratio } : {}), ...(previous ? { previousPixelDifferenceRatio: previous.ratio, recovery: previous.ratio > 1e-9 ? (previous.ratio - difference.ratio) / previous.ratio : 0 } : {}) },
+    visual: { pixelDifferenceRatio: difference.ratio, widthMismatch: difference.widthMismatch, heightMismatch: difference.heightMismatch, macroStructureLoss: structureLoss, targetBlankLikeCoverage: analysis.quality.blankLikeCoverage, targetQualityReviewRequired: analysis.quality.targetQualityReviewRequired, ...(dirtyDifference ? { dirtyPixelDifferenceRatio: dirtyDifference.ratio, recoveryFromDirty: dirtyDifference.ratio > 1e-9 ? (dirtyDifference.ratio - difference.ratio) / dirtyDifference.ratio : difference.ratio <= 1e-9 ? 1 : -difference.ratio } : {}), ...(previous ? { previousPixelDifferenceRatio: previous.ratio, recovery: previous.ratio > 1e-9 ? (previous.ratio - difference.ratio) / previous.ratio : 0 } : {}) },
     semantics,
     interactions: { hypothesisCount: plan.interactions.length, hypothesesRequiringVerification: plan.interactions.filter((item) => item.verification.required).length, prohibitedClaimCoverage, safeStateCssCoverage: safeStateChecks.filter(Boolean).length / safeStateChecks.length, unresolvedConcernCoverage },
     leakage: { passed: leakagePassed, sourceUrlUsedByBuilder: provenance.sourceUrlUsedByBuilder, quarantinedInputCount: provenance.quarantinedInputsUsed.length, fullFrameWallpaperDetected, rasterCoverage: crop.actualCoverage, maximumRasterCoverage: crop.maximumCoverage },

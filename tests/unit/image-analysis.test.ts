@@ -35,4 +35,17 @@ describe("image-only deterministic analysis", () => {
     expect(analysis.horizontalBands[0]!.color).not.toBe(analysis.horizontalBands[1]!.color);
     expect(analysis.text).toEqual([]);
   });
+
+  test("flags large blank-like bands as capture-quality review instead of content", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "g2p-image-blank-"));
+    const image = new PNG({ width: 200, height: 1000 }); image.data.fill(232);
+    for (let offset = 3; offset < image.data.length; offset += 4) image.data[offset] = 255;
+    const bytes = PNG.sync.write(image);
+    await Bun.write(join(directory, "target.png"), bytes);
+    const hash = sha256(bytes);
+    await Bun.write(join(directory, "image-target.json"), JSON.stringify({ schemaVersion: "0.1.0", targetId: "blank", projectId: "blank", split: "train", acquisition: { kind: "uploaded-image", capturePolicy: "still", capturedAt: "2026-07-18T00:00:00.000Z", viewport: { width: 200, height: 500 }, deviceScaleFactor: 1, scrollPositionsVisited: 0, animations: "preserved" }, frames: [{ frameId: "target", kind: "uploaded-mockup", path: "target.png", sha256: hash, width: 200, height: 1000, viewport: { width: 200, height: 500 }, scrollY: 0 }], builderInputs: { images: ["target.png"] }, quarantinedArtifacts: [], authority: { pixels: "authoritative-for-captured-frame", visibleText: "advisory-until-reviewed", semantics: "hypothesis-only", behavior: "hypothesis-only", responsiveRules: "unknown-outside-captured-viewports", destinationsAndActions: "unknown" } }));
+    const analysis = await analyzeImageTarget({ manifestPath: join(directory, "image-target.json"), ocr: false });
+    expect(analysis.quality.targetQualityReviewRequired).toBe(true);
+    expect(analysis.quality.blankLikeCoverage).toBe(1);
+  });
 });

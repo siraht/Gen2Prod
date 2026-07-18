@@ -57,7 +57,7 @@ export function deriveImageContentStrategy(analysis: ImageOnlyAnalysis, states?:
     contentHierarchy: analysis.regions.map((region) => ({ regionId: region.regionId, visualRole: region.visualRole, goalHypothesis: regionGoal(region.visualRole), visibleMessages: analysis.text.filter((item) => item.bbox.y + item.bbox.height / 2 >= region.bbox.y && item.bbox.y + item.bbox.height / 2 <= region.bbox.y + region.bbox.height).sort((left, right) => right.bbox.height - left.bbox.height).slice(0, 4).map((item) => item.text), confidence: region.confidence })),
     mockupSummary: { dimensions: analysis.dimensions, palette: analysis.palette.map((item) => item.hex), regionCount: analysis.regions.length, imageDominantRegions: analysis.regions.filter((region) => region.imageDominance >= 0.35).length },
     motionAndStateExpectations,
-    requiredReview: ["approve OCR transcription and content hierarchy", "supply link destinations and form/action contracts", "approve informative versus decorative image meaning and alt text", "provide mobile/tablet mockups", "capture or specify hover, focus, open, loading, error, carousel, video, and motion states"],
+    requiredReview: ["approve OCR transcription and content hierarchy", "supply link destinations and form/action contracts", "approve informative versus decorative image meaning and alt text", "provide mobile/tablet mockups", "capture or specify hover, focus, open, loading, error, carousel, video, and motion states", ...(analysis.quality.targetQualityReviewRequired ? [analysis.quality.reason] : [])],
   });
 }
 
