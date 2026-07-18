@@ -40,6 +40,8 @@ function trajectories(experiment: ExperimentResult, evaluation: Awaited<ReturnTy
     trajectoryId: `trajectory-${crypto.randomUUID()}`,
     experimentId: experiment.experimentId,
     fixtureId: fixture.fixtureId,
+    groupId: `fixture:${fixture.fixtureId}`,
+    sourceKind: "synthetic-html",
     split: fixture.split,
     observations: { semanticError: fixture.fitness.semanticContractError, bemError: fixture.fitness.bemComponentError, unaccountedDeclarations: fixture.fitness.unaccountedDeclarations, hardGateFailures: fixture.fitness.criticalGateFailures, reviewBurden: fixture.fitness.reviewBurden, dirtyVisualLoss: fixture.metrics.dirtyVisualLoss ?? 0, candidateVisualLoss: fixture.metrics.candidateVisualLoss ?? fixture.fitness.visualLoss, visualRecovery: fixture.metrics.visualRecovery ?? 0, candidatePixelDifferenceRatio: fixture.metrics.candidatePixelDifferenceRatio ?? 0, markedCandidatePixelDifferenceRatio: fixture.metrics.markedCandidatePixelDifferenceRatio ?? 0, unmarkedCandidatePixelDifferenceRatio: fixture.metrics.unmarkedCandidatePixelDifferenceRatio ?? 0, unmarkedSemanticContractError: fixture.metrics.unmarkedSemanticContractError ?? 0, unmarkedBemComponentError: fixture.metrics.unmarkedBemComponentError ?? 0, observedPairUsedInFitness: fixture.metrics.observedPairUsedInFitness ?? 0, observedVisualRecovery: fixture.metrics.observedVisualRecovery ?? 1, candidateLayoutP95: fixture.metrics.candidateLayoutP95 ?? 0 },
     actions: fixture.policyActions,

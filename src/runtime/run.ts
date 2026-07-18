@@ -203,6 +203,8 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
     trajectoryId: `trajectory-${crypto.randomUUID()}`,
     experimentId: `production-${id}`,
     fixtureId: basename(options.input),
+    groupId: `production:${basename(options.input)}`,
+    sourceKind: "production-html",
     split: "production",
     observations: { mode: options.mode, profile: options.profile, capture: options.capture, semanticReview: compiled.plan.semantics.review.length, hardGateFailures: hardFailures.length, mutationControlRecall },
     actions: policyActions(compiled),

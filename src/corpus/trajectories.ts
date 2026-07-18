@@ -32,6 +32,8 @@ function fixtureTrajectory(evaluation: NaturalisticEvaluation, fixture: Naturali
     trajectoryId: `natural-${fixture.artifactId}-${evaluation.evaluationId}`,
     experimentId: evaluation.evaluationId,
     fixtureId: fixture.artifactId,
+    groupId: `project:${fixture.projectId}`,
+    sourceKind: "naturalistic-html",
     split: fixture.split,
     observations: {
       corpus: "naturalistic-project-holdout",
@@ -103,4 +105,3 @@ export async function writeNaturalisticTrajectories(evaluation: NaturalisticEval
   await Bun.write(path, trajectories.length ? `${trajectories.map((trajectory) => JSON.stringify(trajectory)).join("\n")}\n` : "");
   return { path, total: trajectories.length, accepted: trajectories.filter((trajectory) => trajectory.accepted).length, rejected: trajectories.filter((trajectory) => !trajectory.accepted).length };
 }
-

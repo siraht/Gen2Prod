@@ -22,12 +22,18 @@ test("exports training datasets and reloadable distilled models", async () => {
   expect(result.dataset.trajectories).toBe(6);
   expect(result.dataset.supervised).toBe(3);
   expect(result.dataset.preferences).toBeGreaterThan(0);
+  expect(result.dataset.groups).toBeGreaterThan(1);
+  expect(result.dataset.holdoutGroups).toBeGreaterThan(0);
+  expect(await Bun.file(join(directory, "models", "datasets", "dataset-audit.json")).exists()).toBeTrue();
   const selector = await loadSelector(join(directory, "models", "selector.model.json"));
   const verifier = await loadVerifier(join(directory, "models", "verifier.model.json"));
   const planner = await loadPlanner(join(directory, "models", "planner.model.json"));
   expect(selectNextAction(selector, ["pass:semantic-inference"])).toBe("pass:semantic-inference");
   expect(verifyCandidate(verifier, { hardGateFailures: 0, unaccountedDeclarations: 0 }, { mutationControlsPass: true, idempotent: true })).toBeTrue();
   expect(planner.vocabulary.passes).toContain("pass:semantic-inference");
+  expect(selector.evaluation.groupLeakage).toBe(0);
+  expect(verifier.evaluation.groupLeakage).toBe(0);
+  expect(planner.evaluation.groupLeakage).toBe(0);
 });
 
 test("selector ranks accepted evidence above cheaper never-kept evidence", async () => {

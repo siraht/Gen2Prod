@@ -89,6 +89,8 @@ function targetTrajectory(researchId: string, experimentId: string, mutation: st
     trajectoryId: `${experimentId}-${target.targetId}`,
     experimentId,
     fixtureId: target.targetId,
+    groupId: `project:${target.projectId}`,
+    sourceKind: "live-image",
     split: target.split,
     observations: {
       modality: "strict-image-only",
