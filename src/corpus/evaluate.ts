@@ -117,6 +117,10 @@ export type NaturalisticEvaluation = {
 
 type InternalArtifactEvaluation = { fixture: NaturalisticFixtureEvaluation; compiled?: CompiledPage };
 
+export function naturalisticValidationProfile(capture: boolean): "refactor" | "migration" {
+  return capture ? "refactor" : "migration";
+}
+
 function tokens(html: string): string[] {
   const visible = html
     .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
@@ -298,7 +302,7 @@ async function evaluateArtifact(input: {
     let candidate: CaptureResult | undefined;
     if (options.capture && session) candidate = await session.capture({ url: pathToFileURL(join(candidateDirectory, "page.html")).href, outputDirectory: join(candidateDirectory, "capture"), viewports: [viewport], viewportHeight, states: ["default"], themes: ["light"], browserExecutable: options.browserExecutable });
     result.preservation = contentPreservation(compilerHtml, compiled.html);
-    const report = await validate({ html: compiled.html, scss: compiled.scss, css: compiled.css, plan: compiled.plan, baselineCapture: baseline, candidateCapture: candidate, mode: "legacy-conversion", profile: "refactor", thresholds: { minBemCoverage: 0.95, minTokenCoverage: 0.95, maxVisualPixelRatio: 0.01, provisional: true } });
+    const report = await validate({ html: compiled.html, scss: compiled.scss, css: compiled.css, plan: compiled.plan, baselineCapture: baseline, candidateCapture: candidate, mode: "legacy-conversion", profile: naturalisticValidationProfile(options.capture), thresholds: { minBemCoverage: 0.95, minTokenCoverage: 0.95, maxVisualPixelRatio: 0.01, provisional: true } });
     await writeJsonAtomic(join(fixtureDirectory, "validation.json"), report);
     const hardFailures = report.gates.filter((gate) => gate.hard && !gate.passed).length;
     result.gates = {
