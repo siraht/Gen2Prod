@@ -13,6 +13,18 @@ gen2prod synth import canonical-spec.json generated.html \
 
 Do not promote a family on the procedural suite alone. Review licenses and data-handling terms before sending proprietary source or content to an external endpoint.
 
+Imperfect real examples are still high-value. An evolved implementation, a mockup that was only partly followed, or a dirty/clean pair with copy and section changes can teach planning, component boundaries, semantic choices, BEM ownership and reviewer preference without being mislabeled as an exact visual refactor. The best contribution is a small project-isolated bundle containing whatever exists from this list:
+
+- original dirty HTML and its compiled CSS;
+- dirty screenshots with viewport, browser, font and state metadata;
+- the content strategy, page brief or prompt that produced the mockup;
+- approved mockup images and their authority/viewport conditions;
+- later or cleaner HTML/CSS and screenshots;
+- a short manifest naming intentional changes, locked/ignored regions and reviewed coordinate masks;
+- generator/model/prompt family, framework, route, asset and behavior provenance.
+
+Keep related pages together and give the project a stable identity so every derivative stays in one train, validation or holdout partition. Exact pairs improve pixel-preserving compilation directly; reviewed partial pairs improve masked recovery; non-one-to-one pairs improve preference and planner data. All three are useful.
+
 ## Token authority
 
 If compiled CSS does not expose the project’s ACSS/custom-property registry, provide a versioned token adapter with portable values, runtime bindings, allowed properties, modes/themes, and provenance:
