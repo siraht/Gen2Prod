@@ -63,6 +63,7 @@ html { color: var(--text); }
     const unresolved = analyzeTokenReferenceContract(".card { color: var(--missing-color); }");
     expect(unresolved.unresolvedReferences).toEqual(["--missing-color"]);
     const local = analyzeTokenReferenceContract(".card { --card-gap: 1rem; gap: var(--card-gap); }");
-    expect(local.localDefinitions).toEqual([{ token: "--card-gap", selector: ".card" }]);
+    expect(local.invalidLocalDefinitions).toEqual([{ token: "--card-gap", selector: ".card", value: "1rem", aliasesRegisteredToken: false }]);
+    expect(analyzeTokenReferenceContract(":root { --space-m: 1rem; } .card { --card-gap: var(--space-m); gap: var(--card-gap); }").passed).toBeTrue();
   });
 });

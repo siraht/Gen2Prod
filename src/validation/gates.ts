@@ -194,10 +194,11 @@ async function tokenGate(context: ValidationContext): Promise<GateResult> {
     return { assertions: [
       assertion("governed-accounting", unaccounted.length === 0, "error", unaccounted.length ? `${unaccounted.length} unaccounted governed declarations` : "All governed declarations are tokenized or excepted"),
       assertion("token-coverage", coverage >= context.thresholds.minTokenCoverage, "error", `Token coverage ${(coverage * 100).toFixed(1)}%`, { expected: context.thresholds.minTokenCoverage, actual: coverage }),
+      assertion("direct-token-coverage", directTokenCoverage === 1, "error", `Direct token coverage ${(directTokenCoverage * 100).toFixed(1)}%`, { expected: 1, actual: directTokenCoverage }),
       assertion("registered-token-references", references.unresolvedReferences.length === 0, "error", references.unresolvedReferences.length ? `Unregistered token references: ${references.unresolvedReferences.join(", ")}` : "Every runtime variable resolves through the token registry"),
-      assertion("root-token-registry", references.localDefinitions.length === 0, "error", references.localDefinitions.length ? `Ad hoc local variables: ${references.localDefinitions.map((item) => `${item.token} at ${item.selector}`).join(", ")}` : "Runtime tokens are registered at :root"),
+      assertion("component-token-aliases", references.invalidLocalDefinitions.length === 0, "error", references.invalidLocalDefinitions.length ? `Ad hoc local variables: ${references.invalidLocalDefinitions.map((item) => `${item.token} at ${item.selector}`).join(", ")}` : "Component custom properties alias registered tokens"),
       assertion("important", !context.scss.includes("!important"), "error", context.scss.includes("!important") ? "Unapproved !important found" : "No !important overrides"),
-    ], metrics: { governedDeclarations: governed.length, tokenizedDeclarations: tokenized.length, exceptionDeclarations: excepted.length, unaccountedDeclarations: unaccounted.length, directTokenCoverage, tokenCoverage: coverage, unresolvedTokenReferences: references.unresolvedReferences.length, localTokenDefinitions: references.localDefinitions.length } };
+    ], metrics: { governedDeclarations: governed.length, tokenizedDeclarations: tokenized.length, exceptionDeclarations: excepted.length, unaccountedDeclarations: unaccounted.length, directTokenCoverage, tokenCoverage: coverage, unresolvedTokenReferences: references.unresolvedReferences.length, localTokenDefinitions: references.localDefinitions.length, invalidLocalTokenDefinitions: references.invalidLocalDefinitions.length } };
   });
 }
 

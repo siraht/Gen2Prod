@@ -28,6 +28,9 @@ describe("validation gates", () => {
     const compiled = await compiledHero();
     const report = await validate(contextFromCompiled(compiled, thresholds));
     expect(report.gates.map((gate) => gate.gate)).toEqual(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]);
+    expect(report.gates.find((gate) => gate.gate === "B")?.passed).toBeTrue();
+    expect(report.gates.find((gate) => gate.gate === "C")?.passed).toBeTrue();
+    expect(report.metrics.directTokenCoverage).toBe(1);
     expect(report.thresholds.provisional).toBeTrue();
     expect(report.thresholds.coverageGaps.length).toBeGreaterThan(0);
   });

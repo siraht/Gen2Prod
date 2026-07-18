@@ -46,7 +46,8 @@ export type TokenReferenceContractReport = {
   declaredTokens: string[];
   referencedTokens: string[];
   unresolvedReferences: string[];
-  localDefinitions: { token: string; selector: string }[];
+  localDefinitions: { token: string; selector: string; value: string; aliasesRegisteredToken: boolean }[];
+  invalidLocalDefinitions: { token: string; selector: string; value: string; aliasesRegisteredToken: boolean }[];
 };
 
 const CLASS = /\.([_a-zA-Z]+[\w-]*)/g;
@@ -211,16 +212,23 @@ export function analyzeScssNestingContract(source: string): StylingContractRepor
 export function analyzeTokenReferenceContract(css: string): TokenReferenceContractReport {
   const root = postcss.parse(css);
   const declared = new Set<string>();
+  const rootDeclared = new Set<string>();
   const referenced = new Set<string>();
-  const localDefinitions: { token: string; selector: string }[] = [];
+  const pendingLocalDefinitions: { token: string; selector: string; value: string }[] = [];
   root.walkDecls((declaration) => {
     if (declaration.prop.startsWith("--")) {
       declared.add(declaration.prop);
       const rule = declaration.parent?.type === "rule" ? declaration.parent : undefined;
-      if (rule?.selector !== ":root") localDefinitions.push({ token: declaration.prop, selector: rule?.selector ?? "<root>" });
+      if (rule?.selector === ":root") rootDeclared.add(declaration.prop);
+      else pendingLocalDefinitions.push({ token: declaration.prop, selector: rule?.selector ?? "<root>", value: declaration.value });
     }
     for (const match of declaration.value.matchAll(/var\((--[a-z0-9-]+)/gi)) if (match[1]) referenced.add(match[1]);
   });
+  const localDefinitions = pendingLocalDefinitions.map((definition) => {
+    const alias = definition.value.trim().match(/^var\((--[a-z0-9-]+)\)$/i)?.[1];
+    return { ...definition, aliasesRegisteredToken: Boolean(alias && rootDeclared.has(alias)) };
+  });
+  const invalidLocalDefinitions = localDefinitions.filter((definition) => !definition.aliasesRegisteredToken);
   const unresolvedReferences = [...referenced].filter((token) => !declared.has(token)).sort();
-  return { passed: unresolvedReferences.length === 0 && localDefinitions.length === 0, declaredTokens: [...declared].sort(), referencedTokens: [...referenced].sort(), unresolvedReferences, localDefinitions };
+  return { passed: unresolvedReferences.length === 0 && invalidLocalDefinitions.length === 0, declaredTokens: [...declared].sort(), referencedTokens: [...referenced].sort(), unresolvedReferences, localDefinitions, invalidLocalDefinitions };
 }

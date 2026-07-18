@@ -480,7 +480,7 @@ export async function buildImageTarget(options: BuildImageTargetOptions): Promis
   const nesting = analyzeScssNestingContract(scss);
   const tokens = analyzeTokenReferenceContract(css);
   if (!architecture.passed || !nesting.passed || !tokens.passed) {
-    const failures = [...architecture.violations.map((item) => `${item.kind}:${item.selector}`), ...nesting.violations.map((item) => `${item.kind}:${item.selector}`), ...tokens.unresolvedReferences.map((item) => `unregistered-token:${item}`), ...tokens.localDefinitions.map((item) => `local-token:${item.token}`)];
+    const failures = [...architecture.violations.map((item) => `${item.kind}:${item.selector}`), ...nesting.violations.map((item) => `${item.kind}:${item.selector}`), ...tokens.unresolvedReferences.map((item) => `unregistered-token:${item}`), ...tokens.invalidLocalDefinitions.map((item) => `local-token:${item.token}`)];
     throw new Error(`Image-only styling contract violation: ${failures.join(", ")}`);
   }
   const htmlPath = join(outputDirectory, "page.html");
