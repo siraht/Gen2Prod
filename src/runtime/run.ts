@@ -99,14 +99,14 @@ async function compileInput(options: RunOptions, outputDirectory: string, requir
     const cssPath = join(sourceDirectory, "page.css");
     await Bun.write(htmlPath, greenfield.html);
     await Bun.write(cssPath, greenfield.css);
-    return { compiled: await compileStaticPage({ htmlPath, cssPath, tokenRegistry: fallbackRegistry, authoritativeTokenRegistry: greenfield.spec.tokens, frameworkClassCatalog, policy: options.policy }), cssPath, greenfield, ...(acss ? { acss } : {}) };
+    return { compiled: await compileStaticPage({ htmlPath, cssPath, tokenRegistry: greenfield.spec.tokens, fallbackTokenRegistry: fallbackRegistry, frameworkClassCatalog, policy: options.policy }), cssPath, greenfield, ...(acss ? { acss } : {}) };
   }
   const cssPath = await discoverCss(options.input, options.cssPath);
   const css = (await loadSourceCss(options.input, cssPath)).css;
   const projectRegistry = extractTokenRegistry(css);
   if (!options.tokenPath && !acss && projectRegistry.tokens.length === 0) requiredActions.push({ id: "token-registry-authority", summary: "Provide or approve a project token registry", detail: "No runtime CSS custom properties or configured Automatic.css release were found. The compiler recorded governed values as expiring exceptions; configure designSystem.source or supply --tokens.", blocking: false });
   return {
-    compiled: await compileStaticPage({ htmlPath: options.input, ...(cssPath ? { cssPath } : {}), tokenRegistry: fallbackRegistry, ...(options.tokenPath ? { authoritativeTokenRegistry: resolve(options.tokenPath) } : {}), frameworkClassCatalog, policy: options.policy }),
+    compiled: await compileStaticPage({ htmlPath: options.input, ...(cssPath ? { cssPath } : {}), tokenRegistry: options.tokenPath ? resolve(options.tokenPath) : extractTokenRegistry(""), fallbackTokenRegistry: fallbackRegistry, frameworkClassCatalog, policy: options.policy }),
     ...(cssPath ? { cssPath } : {}),
     ...(acss ? { acss } : {}),
   };
