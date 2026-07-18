@@ -3,8 +3,9 @@ import { compileString } from "sass";
 import { PNG } from "pngjs";
 import { ensureDirectory, readJson, writeJsonAtomic, writeTextAtomic } from "../core/fs.ts";
 import { hashFile } from "../core/hash.ts";
-import { ImageOnlyAnalysisSchema, ImageOnlyBuildPlanSchema, ImageOnlyTargetManifestSchema, type ImageOnlyAnalysis, type ImageOnlyBuildPlan } from "../schemas/image-only.ts";
+import { ImageOnlyAnalysisSchema, ImageOnlyBuildPlanSchema, ImageOnlyPolicySchema, ImageOnlyTargetManifestSchema, type ImageOnlyAnalysis, type ImageOnlyBuildPlan, type ImageOnlyPolicy } from "../schemas/image-only.ts";
 import { planImageOnlyBuild } from "./plan.ts";
+import { defaultImageOnlyPolicy } from "./policy.ts";
 
 export type BuildImageTargetOptions = {
   manifestPath: string;
@@ -12,6 +13,7 @@ export type BuildImageTargetOptions = {
   planPath?: string | undefined;
   outputDirectory: string;
   maxRasterCoverage?: number | undefined;
+  policy?: ImageOnlyPolicy | undefined;
 };
 
 export type ImageOnlyBuildResult = {
@@ -103,13 +105,15 @@ async function createRasterAssets(options: {
   analysis: ImageOnlyAnalysis;
   plan: ImageOnlyBuildPlan;
   maximumCoverage: number;
+  dominanceThreshold: number;
+  maximumTextLines: number;
 }): Promise<{ assets: Map<string, { path: string; width: number; height: number }>; coverage: number; manifest: unknown[] }> {
   const image = PNG.sync.read(Buffer.from(await Bun.file(options.sourcePath).arrayBuffer()));
   const assets = new Map<string, { path: string; width: number; height: number }>();
   const manifest: unknown[] = [];
   const maximumArea = image.width * image.height * options.maximumCoverage;
   let usedArea = 0;
-  const candidates = options.analysis.regions.filter((region) => region.imageDominance >= 0.45 && region.bbox.height >= 140 && textForRegion(options.analysis, region.regionId).length <= 1).sort((left, right) => right.imageDominance - left.imageDominance);
+  const candidates = options.analysis.regions.filter((region) => region.imageDominance >= options.dominanceThreshold && region.bbox.height >= 140 && textForRegion(options.analysis, region.regionId).length <= options.maximumTextLines).sort((left, right) => right.imageDominance - left.imageDominance);
   await ensureDirectory(join(options.outputDirectory, "assets"));
   for (const region of candidates) {
     const width = Math.min(image.width - Math.floor(region.bbox.x), Math.floor(region.bbox.width));
@@ -128,7 +132,7 @@ async function createRasterAssets(options: {
   return { assets, coverage: usedArea / Math.max(1, image.width * image.height), manifest };
 }
 
-function renderScss(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, assetRegions: Set<string>): string {
+function renderScss(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, policy: ImageOnlyPolicy): string {
   const colors = [...new Set([...analysis.palette.map((item) => item.hex), ...analysis.regions.flatMap((region) => [region.background, region.foreground])])];
   const tokenLines = colors.map((color) => `  ${variableName(color)}: ${color};`).join("\n");
   const baseBlocks = [...new Set(plan.regions.map((region) => region.block))];
@@ -161,16 +165,18 @@ function renderScss(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, asset
   const regionRules = plan.regions.map((region) => {
     const evidence = analysis.regions.find((item) => item.regionId === region.regionId)!;
     const layout = layoutForRegion(analysis, region.regionId);
-    const contentPosition = layout.align === "center" ? "margin-inline: auto; text-align: center;" : `margin-left: ${Math.round(layout.left * 10000) / 100}%; text-align: left;`;
+    const contentPosition = policy.layoutStrategy === "flow" ? "margin-inline: auto; text-align: left;" : layout.align === "center" ? "margin-inline: auto; text-align: center;" : `margin-left: ${Math.round(layout.left * 10000) / 100}%; text-align: left;`;
+    const regionHeight = policy.preserveTargetRegionHeights ? Math.max(1, Math.round(region.bbox.height)) : Math.max(240, Math.round(region.bbox.height * 0.68));
+    const topPadding = policy.layoutStrategy === "geometry-aware" ? Math.round(layout.top * Math.max(region.bbox.height, 1)) : 64;
     return `.${region.block}--${region.regionId} {
-  min-height: ${Math.max(1, Math.round(region.bbox.height))}px;
+  min-height: ${regionHeight}px;
   color: var(${variableName(evidence.foreground)});
   background: var(${variableName(evidence.background)});
-  --image-heading-size: ${Math.round(layout.headingSize)}px;
+  --image-heading-size: ${Math.round(layout.headingSize * policy.typographyScale)}px;
 
   > .${region.block}__inner {
     max-width: ${Math.round(layout.width + 64)}px;
-    padding-top: ${Math.round(layout.top * Math.max(region.bbox.height, 1))}px;
+    padding-top: ${topPadding}px;
     ${contentPosition}
   }
 }`;
@@ -273,14 +279,16 @@ export async function buildImageTarget(options: BuildImageTargetOptions): Promis
   const analysisPath = resolve(options.analysisPath ?? join(dirname(manifestPath), "image-analysis.json"));
   const analysis = ImageOnlyAnalysisSchema.parse(await readJson(analysisPath));
   const plan = options.planPath ? ImageOnlyBuildPlanSchema.parse(await readJson(resolve(options.planPath))) : planImageOnlyBuild(analysis);
+  const policy = ImageOnlyPolicySchema.parse(options.policy ?? defaultImageOnlyPolicy);
   const builderFrame = manifest.frames.find((item) => manifest.builderInputs.images.includes(item.path) && item.sha256 === analysis.sourceFrameHash);
   if (!builderFrame || plan.sourceFrameHash !== builderFrame.sha256 || !plan.provenance.allowedInputHashes.every((hash) => hash === builderFrame.sha256)) throw new Error("Image-only provenance violation: analysis or plan does not match the declared builder image");
   if (plan.provenance.usedQuarantinedArtifacts) throw new Error("Image-only provenance violation: quarantined artifacts reached the builder");
   const outputDirectory = resolve(options.outputDirectory);
   await ensureDirectory(outputDirectory);
   const sourcePath = resolve(dirname(manifestPath), builderFrame.path);
-  const raster = await createRasterAssets({ sourcePath, outputDirectory, analysis, plan, maximumCoverage: options.maxRasterCoverage ?? 0.28 });
-  const scss = renderScss(analysis, plan, new Set(raster.assets.keys()));
+  const maximumCoverage = options.maxRasterCoverage ?? policy.raster.maximumCoverage;
+  const raster = await createRasterAssets({ sourcePath, outputDirectory, analysis, plan, maximumCoverage: policy.raster.enabled ? maximumCoverage : 0, dominanceThreshold: policy.raster.imageDominanceThreshold, maximumTextLines: policy.raster.maximumTextLines });
+  const scss = renderScss(analysis, plan, policy);
   const css = compileString(scss, { style: "expanded" }).css;
   const html = renderHtml(plan, raster.assets);
   const htmlPath = join(outputDirectory, "page.html");
@@ -294,7 +302,8 @@ export async function buildImageTarget(options: BuildImageTargetOptions): Promis
     writeTextAtomic(scssPath, scss),
     writeTextAtomic(cssPath, css),
     writeJsonAtomic(planOutputPath, plan),
-    writeJsonAtomic(join(outputDirectory, "crop-manifest.json"), { sourceFrameHash: plan.sourceFrameHash, maximumCoverage: options.maxRasterCoverage ?? 0.28, actualCoverage: raster.coverage, assets: raster.manifest }),
+    writeJsonAtomic(join(outputDirectory, "crop-manifest.json"), { sourceFrameHash: plan.sourceFrameHash, maximumCoverage, actualCoverage: raster.coverage, assets: raster.manifest }),
+    writeJsonAtomic(join(outputDirectory, "image-policy.json"), policy),
     writeJsonAtomic(requiredActionsPath, plan.unresolved.map((item, index) => ({ id: `image-review-${index + 1}`, summary: item.concern, detail: item.reason, requiredEvidence: item.requiredEvidence, blocking: false }))),
   ]);
   await writeJsonAtomic(provenancePath, {

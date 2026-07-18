@@ -153,9 +153,24 @@ export const ImageOnlyEvaluationSchema = z.object({
   accepted: z.boolean(),
 });
 
+export const ImageOnlyPolicySchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  name: z.string().min(1),
+  layoutStrategy: z.enum(["flow", "geometry-aware"]),
+  preserveTargetRegionHeights: z.boolean(),
+  typographyScale: z.number().min(0.6).max(1.4),
+  raster: z.object({
+    enabled: z.boolean(),
+    maximumCoverage: z.number().min(0).max(0.4),
+    imageDominanceThreshold: z.number().min(0).max(1),
+    maximumTextLines: z.number().int().min(0).max(4),
+  }),
+});
+
 export type ImageOnlyFrame = z.infer<typeof ImageOnlyFrameSchema>;
 export type ImageOnlyTargetManifest = z.infer<typeof ImageOnlyTargetManifestSchema>;
 export type ImageOnlyAnalysis = z.infer<typeof ImageOnlyAnalysisSchema>;
 export type ImageOnlyBuildPlan = z.infer<typeof ImageOnlyBuildPlanSchema>;
 export type InteractionHypothesis = z.infer<typeof InteractionHypothesisSchema>;
 export type ImageOnlyEvaluation = z.infer<typeof ImageOnlyEvaluationSchema>;
+export type ImageOnlyPolicy = z.infer<typeof ImageOnlyPolicySchema>;
