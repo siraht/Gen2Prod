@@ -379,6 +379,20 @@ describe("static compilation", () => {
     expect(output.scss).toContain("&__content--row");
   });
 
+  test("scopes a one-off inline style away from unstyled repeated elements", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-inline-variant-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Inline variant</title><meta name="description" content="Inline variant fixture"><style>.hero-title{font-size:4rem}.line{display:block}</style></head><body><main><section class="hero"><h1 class="hero-title"><span class="line">First line</span><span class="line">Second line</span><span class="line" style="color:#a64b2a;font-style:italic">Accent line</span></h1></section></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    const accentTag = output.html.match(/<span[^>]*>Accent line<\/span>/)?.[0] ?? "";
+    const firstTag = output.html.match(/<span[^>]*>First line<\/span>/)?.[0] ?? "";
+    expect(accentTag).toContain("hero__line--type");
+    expect(firstTag).not.toContain("hero__line--type");
+    expect(firstTag).not.toContain("--default");
+    expect(output.scss).toContain("&__line--type");
+    expect(output.scss).not.toMatch(/&__line \{[^}]*color:/s);
+  });
+
   test("keeps navigation link groups distinct from CTA groups", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-link-groups-"));
     const htmlPath = join(directory, "page.html");

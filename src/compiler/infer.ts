@@ -412,7 +412,8 @@ function declarationValue(style: StyleIntent, property: string): string | undefi
   return style.declarations.find((declaration) => declaration.property === property)?.value;
 }
 
-function variantHint(style: StyleIntent): string {
+function variantHint(style?: StyleIntent): string {
+  if (!style) return "default";
   const position = declarationValue(style, "position");
   if (position === "fixed") return "fixed";
   if (position === "absolute") return "overlay";
@@ -454,7 +455,7 @@ export function differentiateStyleVariants(root: PlannedNode, styles: StyleInten
   const groups = new Map<string, PlannedNode[]>();
   for (const node of plannedNodes(root)) {
     const primary = primaryBemClass(node);
-    if (!primary || !styleByNode.has(node.nodeId)) continue;
+    if (!primary) continue;
     const values = groups.get(primary) ?? [];
     values.push(node);
     groups.set(primary, values);
@@ -462,16 +463,20 @@ export function differentiateStyleVariants(root: PlannedNode, styles: StyleInten
   for (const [base, nodes] of groups) {
     const bySignature = new Map<string, PlannedNode[]>();
     for (const node of nodes) {
-      const style = styleByNode.get(node.nodeId)!;
-      const signature = styleSignature(style);
+      const style = styleByNode.get(node.nodeId);
+      const signature = style ? styleSignature(style) : "";
       const values = bySignature.get(signature) ?? [];
       values.push(node);
       bySignature.set(signature, values);
     }
     if (bySignature.size < 2) continue;
     const entries = [...bySignature.entries()].sort(([left], [right]) => left.localeCompare(right));
-    const hints = entries.map(([, values]) => variantHint(styleByNode.get(values[0]!.nodeId)!));
-    for (const [index, [, values]] of entries.entries()) {
+    const hints = entries.map(([, values]) => variantHint(styleByNode.get(values[0]!.nodeId)));
+    for (const [index, [signature, values]] of entries.entries()) {
+      // The base element is the default variant. Only occurrences with
+      // declarations need an explicit modifier; emitting `--default` would
+      // add noise without owning a rule.
+      if (!signature) continue;
       const hint = hints[index]!;
       const duplicateHintCount = hints.filter((candidate) => candidate === hint).length;
       const duplicateHintIndex = hints.slice(0, index).filter((candidate) => candidate === hint).length;
