@@ -119,6 +119,20 @@ function documentMetadata(document: DefaultTreeAdapterMap["document"]): SourceDo
   };
 }
 
+function documentResourceLinks(document: DefaultTreeAdapterMap["document"]): SourceDocument["resourceLinks"] {
+  const html = documentElement(document);
+  const head = html.childNodes.find((node) => isElement(node) && node.tagName === "head");
+  if (!head || !isElement(head)) return [];
+  return head.childNodes.filter((node): node is P5Element => isElement(node) && node.tagName === "link").flatMap((node) => {
+    const attributes = Object.fromEntries(node.attrs.map(({ name, value }) => [name, value]));
+    const rel = (attributes.rel ?? "").toLowerCase();
+    const href = attributes.href ?? "";
+    if (!/^(?:https:)?\/\//i.test(href) || !/^(?:stylesheet|preconnect|dns-prefetch|preload)$/.test(rel)) return [];
+    const allowed = Object.fromEntries(Object.entries(attributes).filter(([name]) => ["as", "crossorigin", "href", "integrity", "media", "referrerpolicy", "rel", "type"].includes(name)));
+    return [{ rel, href, attributes: allowed }];
+  });
+}
+
 function classesFromDom(root: DomNode): string[] {
   const here = root.attributes.find((attribute) => attribute.name === "class")?.value.split(/\s+/).filter(Boolean) ?? [];
   return [...here, ...root.children.flatMap(classesFromDom)];
@@ -135,6 +149,11 @@ function executableScripts(root: DomNode): SourceDocument["executableScripts"] {
     ? [{ ...(root.attributes.find((attribute) => attribute.name === "src")?.value ? { src: root.attributes.find((attribute) => attribute.name === "src")!.value } : {}), inline: !root.attributes.some((attribute) => attribute.name === "src"), bytes: new TextEncoder().encode(root.text).byteLength }]
     : [];
   return [...here, ...root.children.flatMap(executableScripts)];
+}
+
+function executableEvents(root: DomNode): SourceDocument["executableEvents"] {
+  const here = root.attributes.filter((attribute) => /^on[a-z]+$/i.test(attribute.name)).map((attribute) => ({ nodeId: root.nodeId, event: attribute.name.toLowerCase().slice(2), bytes: new TextEncoder().encode(attribute.value).byteLength }));
+  return [...here, ...root.children.flatMap(executableEvents)];
 }
 
 export async function ingestStaticHtml(htmlPath: string, cssPath?: string): Promise<SourceDocument> {
@@ -163,6 +182,7 @@ export async function ingestStaticHtml(htmlPath: string, cssPath?: string): Prom
     dom,
     documentAttributes,
     metadata: documentMetadata(document),
+    resourceLinks: documentResourceLinks(document),
     classInventory,
     declarations,
     styleSources: [
@@ -171,6 +191,7 @@ export async function ingestStaticHtml(htmlPath: string, cssPath?: string): Prom
       ...(declarations.some((declaration) => declaration.origin === "inline") ? [{ origin: "inline" as const, label: `${basename(htmlPath)}:style-attributes`, bytes: declarations.filter((declaration) => declaration.origin === "inline").reduce((sum, declaration) => sum + declaration.property.length + declaration.value.length, 0) }] : []),
     ],
     executableScripts: executableScripts(dom),
+    executableEvents: executableEvents(dom),
     authorities: ["content", "links", "forms", "behavior-hooks", "semantics-partial", "conditional-branches"],
   };
 }
@@ -188,6 +209,7 @@ export function sourceSummary(source: SourceDocument): Record<string, unknown> {
     declarations: source.declarations.length,
     styleSources: source.styleSources,
     executableScripts: source.executableScripts,
+    executableEvents: source.executableEvents,
   };
 }
 

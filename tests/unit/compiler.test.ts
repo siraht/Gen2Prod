@@ -83,6 +83,18 @@ describe("static compilation", () => {
     expect(output.html).not.toContain("compromised");
   });
 
+  test("preserves safe external style resources while quarantining inline event code", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-resource-boundary-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Resources</title><meta name="description" content="Resource boundary"><link rel="preconnect" href="https://fonts.example"><link rel="stylesheet" href="https://fonts.example/family.css"><link rel="stylesheet" href="javascript:alert(1)"></head><body><main><h1>Resources</h1><button onclick="window.launch()">Launch</button></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    expect(output.html).toContain('rel="preconnect" href="https://fonts.example"');
+    expect(output.html).toContain('rel="stylesheet" href="https://fonts.example/family.css"');
+    expect(output.html).not.toContain("javascript:");
+    expect(output.html).not.toContain("onclick");
+    expect(output.plan.source.executableEvents).toEqual([{ nodeId: expect.any(String), event: "click", bytes: 15 }]);
+  });
+
   test("derives stable SEO metadata only from source-authoritative visible copy", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-metadata-"));
     const htmlPath = join(directory, "page.html");

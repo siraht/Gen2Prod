@@ -35,7 +35,7 @@ export type NaturalisticFixtureEvaluation = {
   inputPath: string;
   generatorFamily?: string;
   status: "evaluated" | "failed";
-  materialization?: { staticTextTokens: number; renderedTextTokens: number; scriptsRemoved: number; styleSheetCount: number; inaccessibleStyleSheets: string[]; canvasSnapshots: number; canvasSnapshotFailures: number; sourceMode: "static" | "browser-materialized" };
+  materialization?: { staticTextTokens: number; renderedTextTokens: number; scriptsRemoved: number; inlineEventHandlers: number; styleSheetCount: number; inaccessibleStyleSheets: string[]; canvasSnapshots: number; canvasSnapshotFailures: number; sourceMode: "static" | "browser-materialized" };
   preservation?: Preservation;
   gates?: {
     passed: boolean;
@@ -232,8 +232,9 @@ async function evaluateArtifact(input: {
     const sourceMode = rendered && (renderedTokenCount > staticTokenCount || rendered.scriptsRemoved > 0 || rendered.css.length > 0) ? "browser-materialized" as const : "static" as const;
     const compilerHtml = sourceMode === "browser-materialized" ? rendered!.html : staticHtml;
     const compilerCss = sourceMode === "browser-materialized" ? rendered!.css : "";
-    result.materialization = { staticTextTokens: staticTokenCount, renderedTextTokens: renderedTokenCount, scriptsRemoved: rendered?.scriptsRemoved ?? 0, styleSheetCount: rendered?.styleSheetCount ?? 0, inaccessibleStyleSheets: rendered?.inaccessibleStyleSheets ?? [], canvasSnapshots: rendered?.canvasSnapshots ?? 0, canvasSnapshotFailures: rendered?.canvasSnapshotFailures ?? 0, sourceMode };
+    result.materialization = { staticTextTokens: staticTokenCount, renderedTextTokens: renderedTokenCount, scriptsRemoved: rendered?.scriptsRemoved ?? 0, inlineEventHandlers: rendered?.inlineEventHandlers ?? 0, styleSheetCount: rendered?.styleSheetCount ?? 0, inaccessibleStyleSheets: rendered?.inaccessibleStyleSheets ?? [], canvasSnapshots: rendered?.canvasSnapshots ?? 0, canvasSnapshotFailures: rendered?.canvasSnapshotFailures ?? 0, sourceMode };
     if (rendered?.scriptsRemoved) result.requiredActions.push(`${rendered.scriptsRemoved} executable script(s) require explicit interaction contracts; browser materialization retained their rendered DOM but did not copy code.`);
+    if (rendered?.inlineEventHandlers) result.requiredActions.push(`${rendered.inlineEventHandlers} inline event handler(s) require explicit interaction contracts; executable attribute code was not copied.`);
     if (rendered?.inaccessibleStyleSheets.length) result.requiredActions.push(`Could not inspect ${rendered.inaccessibleStyleSheets.length} stylesheet(s): ${rendered.inaccessibleStyleSheets.join(", ")}`);
     if (rendered?.canvasSnapshotFailures) result.requiredActions.push(`${rendered.canvasSnapshotFailures} canvas visual(s) could not be frozen, usually because cross-origin pixels tainted the canvas.`);
     const materializedHtmlPath = join(fixtureDirectory, "materialized", "page.html");
@@ -243,6 +244,7 @@ async function evaluateArtifact(input: {
     const registry = extractTokenRegistry(compilerCss);
     const compiled = await compileStaticPage({ htmlPath: materializedHtmlPath, cssPath: materializedCssPath, tokenRegistry: registry });
     if (compiled.plan.source.executableScripts.length) result.requiredActions.push(`${compiled.plan.source.executableScripts.length} executable script(s) were excluded; reimplement approved behavior from typed interaction contracts.`);
+    if (compiled.plan.source.executableEvents.length) result.requiredActions.push(`${compiled.plan.source.executableEvents.length} inline event handler(s) were excluded; reimplement approved behavior from typed interaction contracts.`);
     const candidateDirectory = join(fixtureDirectory, "candidate");
     const candidateHtmlPath = join(candidateDirectory, "page.html");
     const candidateCssPath = join(candidateDirectory, "page.css");

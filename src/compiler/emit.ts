@@ -28,6 +28,13 @@ function metadataSummary(plan: CompilationPlan): string {
   return `${shortened}…`;
 }
 
+function renderResourceLinks(plan: CompilationPlan): string {
+  return plan.source.resourceLinks.map((resource) => {
+    const attributes = Object.entries(resource.attributes).map(([name, value]) => `${name}="${escapeHtml(value)}"`).join(" ");
+    return `  <link ${attributes}>`;
+  }).join("\n");
+}
+
 function renderNode(node: PlannedNode, depth = 0, includeNodeIds = false): string {
   const indent = "  ".repeat(depth);
   const attributes = { ...node.attributes, ...(node.classes.length ? { class: node.classes.join(" ") } : {}), ...(includeNodeIds ? { "data-g2p-node": node.nodeId } : {}) };
@@ -129,7 +136,8 @@ export function emitHtml(plan: CompilationPlan, cssHref = "page.css", includeNod
       ...(stateClasses.length ? { class: stateClasses.join(" ") } : {}),
     };
     const renderedHtmlAttributes = Object.entries(htmlAttributes).map(([name, value]) => `${name}="${escapeHtml(value)}"`).join(" ");
-    return `<!doctype html>\n<html ${renderedHtmlAttributes}>\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <meta name="generator" content="Gen2Prod">\n  <title>${escapeHtml(sourceTitle)}</title>\n  <meta name="description" content="${escapeHtml(sourceDescription)}">\n  <link rel="stylesheet" href="${escapeHtml(cssHref)}">\n</head>\n${body}\n</html>\n`;
+    const resources = renderResourceLinks(plan);
+    return `<!doctype html>\n<html ${renderedHtmlAttributes}>\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <meta name="generator" content="Gen2Prod">\n  <title>${escapeHtml(sourceTitle)}</title>\n  <meta name="description" content="${escapeHtml(sourceDescription)}">\n${resources ? `${resources}\n` : ""}  <link rel="stylesheet" href="${escapeHtml(cssHref)}">\n</head>\n${body}\n</html>\n`;
   }
   return body;
 }

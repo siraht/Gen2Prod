@@ -31,10 +31,12 @@ export type SourceDocument = {
   dom: DomNode;
   documentAttributes: Record<string, string>;
   metadata: { title: string; description: string };
+  resourceLinks: { rel: string; href: string; attributes: Record<string, string> }[];
   classInventory: ClassInventoryItem[];
   declarations: CssDeclaration[];
   styleSources: { origin: "external" | "embedded" | "inline" | "rendered"; label: string; bytes: number }[];
   executableScripts: { src?: string; inline: boolean; bytes: number }[];
+  executableEvents: { nodeId: string; event: string; bytes: number }[];
   authorities: AuthorityConcern[];
 };
 
