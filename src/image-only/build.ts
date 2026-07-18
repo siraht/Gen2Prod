@@ -7,6 +7,7 @@ import { ImageOnlyAnalysisSchema, ImageOnlyBuildPlanSchema, ImageOnlyPolicySchem
 import { planImageOnlyBuild } from "./plan.ts";
 import { defaultImageOnlyPolicy } from "./policy.ts";
 import type { AutomaticCssBundle } from "../acss/schema.ts";
+import { analyzeCssSelectorContract, analyzeScssNestingContract, analyzeTokenReferenceContract } from "../validation/styling-contract.ts";
 
 export type BuildImageTargetOptions = {
   manifestPath: string;
@@ -55,13 +56,22 @@ const FALLBACK_ACSS_VALUES: Record<string, string> = {
   "--section-space-m": "6rem", "--gutter": "1.5rem", "--content-width": "75rem", "--radius-m": "1rem",
   "--focus-color": "currentColor", "--focus-width": "3px", "--focus-offset": "4px", "--h1": "4.5rem", "--h2": "3rem",
   "--text-m": "1.125rem", "--body-font-family": "Inter, ui-sans-serif, system-ui, sans-serif", "--heading-font-family": "Inter, ui-sans-serif, system-ui, sans-serif",
+  "--heading-font-weight": "700", "--heading-line-height": "1.2", "--text-line-height": "1.5",
+  "--g2p-image-heading-max-width": "18ch", "--g2p-image-copy-max-width": "64ch", "--g2p-image-page-min-width": "20rem",
+  "--g2p-image-card-min-width": "16rem", "--g2p-image-visually-hidden-size": "1px", "--g2p-image-heading-letter-spacing": "-0.035em",
+  "--g2p-image-border-width": "1px", "--g2p-image-mobile-max-height": "80rem",
 };
 
 const ACSS_COLOR_ROLES = ["--base", "--primary", "--secondary", "--accent", "--neutral", "--primary-light", "--secondary-light", "--accent-light", "--base-light", "--neutral-light", "--primary-dark", "--secondary-dark", "--accent-dark", "--base-dark", "--neutral-dark"];
 
 function normalizedColor(color: string): string { return color.toLowerCase(); }
 
-function imageAcssBindings(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, policy: ImageOnlyPolicy, acss?: AutomaticCssBundle): { artifact: AcssImageBindings; colors: Map<string, string>; declarations: string[]; regionTypography: Map<string, string> } {
+function identifier(value: string): string {
+  const normalized = value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return /^[a-z]/.test(normalized) ? normalized : `region-${normalized || "unknown"}`;
+}
+
+function imageAcssBindings(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, policy: ImageOnlyPolicy, acss?: AutomaticCssBundle): { artifact: AcssImageBindings; colors: Map<string, string>; declarations: string[]; regionTypography: Map<string, string>; regionLayout: Map<string, { size: string; contentWidth: string; paddingStart: string; marginStart: string; mobileMinHeight: string }> } {
   const available = new Set(acss?.registry.tokens.map((token) => token.runtimeVariable) ?? [...Object.keys(FALLBACK_ACSS_VALUES), "--black", "--white", ...ACSS_COLOR_ROLES]);
   const observed = [...new Set([...analysis.palette.map((item) => normalizedColor(item.hex)), ...analysis.regions.flatMap((region) => [normalizedColor(region.background), normalizedColor(region.foreground)])])];
   const colors = new Map<string, string>();
@@ -78,7 +88,7 @@ function imageAcssBindings(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan
     used.add(runtimeVariable);
   }
   const bindings: AcssImageBinding[] = [...colors].map(([observedValue, runtimeVariable], index) => ({ runtimeVariable, observedValue, proposedRole: runtimeVariable.slice(2), evidence: `image palette/region observation ${index + 1}; semantic role requires review`, status: "image-derived-unreviewed" }));
-  for (const [runtimeVariable, observedValue] of Object.entries(FALLBACK_ACSS_VALUES).filter(([name]) => !["--h1", "--h2"].includes(name) && available.has(name))) {
+  for (const [runtimeVariable, observedValue] of Object.entries(FALLBACK_ACSS_VALUES).filter(([name]) => !["--h1", "--h2"].includes(name) && (available.has(name) || name.startsWith("--g2p-")))) {
     bindings.push({ runtimeVariable, observedValue, proposedRole: runtimeVariable.slice(2), evidence: "image-diff-calibrated reconstruction baseline expressed as a project ACSS override", status: "image-derived-unreviewed" });
   }
   const releaseTypographyRoles = (acss?.registry.tokens.map((token) => token.runtimeVariable) ?? ["--h1", "--h2"])
@@ -92,6 +102,27 @@ function imageAcssBindings(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan
     const observedValue = `${Math.round(layoutForRegion(analysis, region.regionId).headingSize * policy.typographyScale)}px`;
     regionTypography.set(region.regionId, runtimeVariable);
     bindings.push({ runtimeVariable, observedValue, proposedRole: index === 0 ? "primary-page-heading" : `section-heading-${index}`, evidence: `observed heading geometry in ${region.regionId}`, status: "image-derived-unreviewed" });
+  }
+  const regionLayout = new Map<string, { size: string; contentWidth: string; paddingStart: string; marginStart: string; mobileMinHeight: string }>();
+  for (const region of plan.regions) {
+    const layout = layoutForRegion(analysis, region.regionId);
+    const suffix = identifier(region.regionId);
+    const values = {
+      size: `--g2p-image-${suffix}-region-size`,
+      contentWidth: `--g2p-image-${suffix}-content-width`,
+      paddingStart: `--g2p-image-${suffix}-padding-start`,
+      marginStart: `--g2p-image-${suffix}-margin-start`,
+      mobileMinHeight: `--g2p-image-${suffix}-mobile-min-height`,
+    };
+    const observedValues = new Map<string, string>([
+      [values.size, `${policy.preserveTargetRegionHeights ? Math.max(1, Math.round(region.bbox.height)) : Math.max(240, Math.round(region.bbox.height * 0.68))}px`],
+      [values.contentWidth, `${Math.round(layout.width + 64)}px`],
+      [values.paddingStart, `${policy.layoutStrategy === "geometry-aware" ? Math.round(layout.top * Math.max(region.bbox.height, 1)) : 64}px`],
+      [values.marginStart, policy.layoutStrategy === "flow" || layout.align === "center" ? "auto" : `${Math.round(layout.left * 10000) / 100}%`],
+      [values.mobileMinHeight, `${Math.max(320, Math.round(region.bbox.height))}px`],
+    ]);
+    for (const [runtimeVariable, observedValue] of observedValues) bindings.push({ runtimeVariable, observedValue, proposedRole: runtimeVariable.slice(2), evidence: `observed layout geometry in ${region.regionId}; registered project extension to the ACSS settings layer`, status: "image-derived-unreviewed" });
+    regionLayout.set(region.regionId, values);
   }
   const artifact: AcssImageBindings = { schemaVersion: "0.1.0", provider: "automaticcss", release: acss ? { version: acss.provenance.version, moduleMode: acss.provenance.moduleMode, sourceHash: acss.provenance.sourceHash, registryHash: acss.provenance.registryHash } : null, authority: "image-derived-project-override-proposal", bindings };
   const overrides = new Map(bindings.map((binding) => [binding.runtimeVariable, binding.observedValue]));
@@ -117,7 +148,7 @@ function imageAcssBindings(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan
     const value = overrides.get(variable) ?? values.get(variable);
     return value ? [`  ${variable}: ${value};`] : [];
   });
-  return { artifact, colors, declarations, regionTypography };
+  return { artifact, colors, declarations, regionTypography, regionLayout };
 }
 
 function textForRegion(analysis: ImageOnlyAnalysis, regionId: string) {
@@ -143,8 +174,9 @@ function layoutForRegion(analysis: ImageOnlyAnalysis, regionId: string) {
 function renderHeader(region: ImageOnlyBuildPlan["regions"][number]): string {
   const items = [...region.copy];
   const brand = items.shift() ?? "";
-  return `<header class="site-header site-header--${escapeHtml(region.regionId)}">
-  <div class="site-header__inner">
+  const modifier = identifier(region.regionId);
+  return `<header class="site-header site-header--${modifier}">
+  <div class="site-header__inner site-header__inner--${modifier}">
     ${brand ? `<span class="site-header__brand">${escapeHtml(brand)}</span>` : ""}
     ${items.length ? `<nav class="site-header__navigation" aria-label="Visible navigation labels; destinations unresolved">
       <ul class="site-header__list">${items.map((item) => `<li class="site-header__item"><span class="site-header__label">${escapeHtml(item)}</span></li>`).join("")}</ul>
@@ -166,18 +198,19 @@ function renderCards(region: ImageOnlyBuildPlan["regions"][number]): string {
 }
 
 function renderRegion(region: ImageOnlyBuildPlan["regions"][number], headingLevel: 1 | 2, asset?: { path: string; width: number; height: number }): string {
+  const modifier = identifier(region.regionId);
   if (region.tag === "header") return renderHeader(region);
-  if (region.tag === "footer") return `<footer class="site-footer site-footer--${escapeHtml(region.regionId)}"><div class="site-footer__inner">${region.copy.map((value) => `<p class="site-footer__copy">${escapeHtml(value)}</p>`).join("")}</div></footer>`;
-  if (asset) return `<figure class="media-panel media-panel--${escapeHtml(region.regionId)}">
+  if (region.tag === "footer") return `<footer class="site-footer site-footer--${modifier}"><div class="site-footer__inner site-footer__inner--${modifier}">${region.copy.map((value) => `<p class="site-footer__copy">${escapeHtml(value)}</p>`).join("")}</div></footer>`;
+  if (asset) return `<figure class="media-panel media-panel--${modifier}">
   <img class="media-panel__image" src="assets/${escapeHtml(asset.path)}" alt="" width="${asset.width}" height="${asset.height}">
   <figcaption class="media-panel__caption">Visual subject and alternative text require content review.</figcaption>
 </figure>`;
   const tag = region.tag === "nav" ? "nav" : region.tag === "figure" ? "section" : region.tag;
   const label = region.heading ? ` aria-labelledby="${escapeHtml(region.regionId)}-title"` : "";
-  const heading = region.heading ? `<h${headingLevel} class="${region.block}__title" id="${escapeHtml(region.regionId)}-title">${escapeHtml(region.heading)}</h${headingLevel}>` : "";
+  const heading = region.heading ? `<h${headingLevel} class="${region.block}__title ${region.block}__title--${modifier}" id="${escapeHtml(region.regionId)}-title">${escapeHtml(region.heading)}</h${headingLevel}>` : "";
   const content = region.block === "card-grid" ? renderCards(region) : region.copy.map((value) => `<p class="${region.block}__copy">${escapeHtml(value)}</p>`).join("\n    ");
-  return `<${tag} class="${region.block} ${region.block}--${escapeHtml(region.regionId)}"${label}>
-  <div class="${region.block}__inner">
+  return `<${tag} class="${region.block} ${region.block}--${modifier}"${label}>
+  <div class="${region.block}__inner ${region.block}__inner--${modifier}">
     ${heading}
     ${content}
   </div>
@@ -217,104 +250,177 @@ async function createRasterAssets(options: {
   return { assets, coverage: usedArea / Math.max(1, image.width * image.height), manifest };
 }
 
-function renderScss(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, policy: ImageOnlyPolicy, acssBindings: ReturnType<typeof imageAcssBindings>): string {
-  const baseBlocks = [...new Set(plan.regions.map((region) => region.block))];
-  const baseRules = baseBlocks.map((block) => `.${block} {
-  position: relative;
-  box-sizing: border-box;
-  overflow: clip;
+function visuallyHiddenDeclarations(indent: string): string {
+  return `${indent}position: absolute;
+${indent}width: var(--g2p-image-visually-hidden-size);
+${indent}height: var(--g2p-image-visually-hidden-size);
+${indent}padding: 0;
+${indent}margin: calc(var(--g2p-image-visually-hidden-size) * -1);
+${indent}overflow: hidden;
+${indent}clip: rect(0 0 0 0);
+${indent}white-space: nowrap;
+${indent}border: 0;`;
+}
 
-  &__inner {
+function renderScss(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, policy: ImageOnlyPolicy, acssBindings: ReturnType<typeof imageAcssBindings>, assets: Map<string, { path: string; width: number; height: number }>): string {
+  const baseBlocks = [...new Set(plan.regions.map((region) => region.block))];
+  const blockRules = baseBlocks.map((block) => {
+    const regions = plan.regions.filter((region) => region.block === block);
+    const flowRegions = regions.filter((region) => !assets.has(region.regionId));
+    const hasInner = flowRegions.length > 0;
+    const hasTitle = flowRegions.some((region) => Boolean(region.heading) && !["header", "footer"].includes(region.tag));
+    const hasCopy = flowRegions.some((region) => region.block !== "card-grid" && !["header", "footer"].includes(region.tag) && region.copy.length > 0);
+    const elementRules = [
+      hasInner ? `  &__inner {
     box-sizing: border-box;
     width: min(calc(100% - (var(--gutter) * 2)), var(--content-width));
     margin-inline: auto;
-    padding: var(--space-xl) var(--space-m);
-  }
-
-  &__title {
-    max-width: 18ch;
+    padding: var(--space-xl) var(--space-m);${["site-header", "site-footer"].includes(block) ? `
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-l);` : ""}${block === "card-grid" ? `
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--g2p-image-card-min-width)), 1fr));
+    gap: var(--space-l);` : ""}
+  }` : "",
+      hasTitle ? `  &__title {
+    box-sizing: border-box;
+    max-width: var(--g2p-image-heading-max-width);
     margin: 0 0 var(--space-m);
-    font: 700 clamp(2rem, 5vw, var(--g2p-region-heading-size, var(--h2)))/0.98 var(--heading-font-family);
-    letter-spacing: -0.035em;
-  }
-
-  &__copy {
-    max-width: 64ch;
+    font-family: var(--heading-font-family);
+    font-size: var(--h2);
+    font-weight: var(--heading-font-weight);
+    line-height: var(--heading-line-height);
+    letter-spacing: var(--g2p-image-heading-letter-spacing);${block === "card-grid" ? `
+    grid-column: 1 / -1;` : ""}
+  }` : "",
+      hasCopy ? `  &__copy {
+    box-sizing: border-box;
+    max-width: var(--g2p-image-copy-max-width);
     margin: 0 0 var(--space-s);
     font-size: var(--text-m);
-    line-height: 1.5;
+    line-height: var(--text-line-height);
+  }` : "",
+    ].filter(Boolean);
+    if (block === "site-header") {
+      if (regions.some((region) => region.copy.length > 1)) elementRules.push(`  &__list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-m);
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
-}`).join("\n\n");
-  const regionRules = plan.regions.map((region) => {
-    const evidence = analysis.regions.find((item) => item.regionId === region.regionId)!;
-    const layout = layoutForRegion(analysis, region.regionId);
-    const contentPosition = policy.layoutStrategy === "flow" ? "margin-inline: auto; text-align: left;" : layout.align === "center" ? "margin-inline: auto; text-align: center;" : `margin-left: ${Math.round(layout.left * 10000) / 100}%; text-align: left;`;
-    const regionHeight = policy.preserveTargetRegionHeights ? Math.max(1, Math.round(region.bbox.height)) : Math.max(240, Math.round(region.bbox.height * 0.68));
-    const regionSize = policy.preserveTargetRegionHeights ? `height: ${regionHeight}px;` : `min-height: ${regionHeight}px;`;
-    const topPadding = policy.layoutStrategy === "geometry-aware" ? Math.round(layout.top * Math.max(region.bbox.height, 1)) : 64;
-    return `.${region.block}--${region.regionId} {
-  ${regionSize}
-  color: var(${acssBindings.colors.get(normalizedColor(evidence.foreground))});
-  background: var(${acssBindings.colors.get(normalizedColor(evidence.background))});
-  --g2p-region-heading-size: var(${acssBindings.regionTypography.get(region.regionId) ?? "--h2"});
 
-  > .${region.block}__inner {
-    max-width: ${Math.round(layout.width + 64)}px;
-    padding-top: ${topPadding}px;
-    ${contentPosition}
+  &__navigation {
+    @media (max-width: $g2p-image-breakpoint) {
+      display: none;
+    }
+  }`);
+      if (regions.some((region) => region.copy.length > 0)) elementRules.push(`  &__brand {
+    font-weight: var(--heading-font-weight);
+  }`);
+    }
+    if (block === "card-grid") elementRules.push(`  &__item {
+    box-sizing: border-box;
+    padding: var(--space-l);
+    border: var(--g2p-image-border-width) solid currentColor;
+    border-radius: var(--radius-m);
   }
+
+  &__item-title {
+    margin-top: 0;
+  }${regions.some((region) => region.copy.length > 1) ? `
+
+  &__item-copy {
+    font-size: var(--text-m);
+    line-height: var(--text-line-height);
+  }` : ""}`);
+    if (block === "media-panel" && regions.some((region) => assets.has(region.regionId))) elementRules.push(`  &__image {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    object-fit: cover;
+  }
+
+  &__caption {
+${visuallyHiddenDeclarations("    ")}
+  }`);
+    const variants = regions.map((region) => {
+      const evidence = analysis.regions.find((item) => item.regionId === region.regionId)!;
+      const layout = layoutForRegion(analysis, region.regionId);
+      const tokens = acssBindings.regionLayout.get(region.regionId)!;
+      const modifier = identifier(region.regionId);
+      const isAsset = assets.has(region.regionId);
+      return `  &--${modifier} {
+    ${policy.preserveTargetRegionHeights ? "height" : "min-height"}: var(${tokens.size});
+    color: var(${acssBindings.colors.get(normalizedColor(evidence.foreground))});
+    background: var(${acssBindings.colors.get(normalizedColor(evidence.background))});
+
+    @media (max-width: $g2p-image-breakpoint) {
+      height: auto;
+      min-height: min(var(${tokens.mobileMinHeight}), var(--g2p-image-mobile-max-height));
+    }
+  }${isAsset ? "" : `
+
+  &__inner--${modifier} {
+    max-width: var(${tokens.contentWidth});
+    margin-left: var(${tokens.marginStart});
+    padding-top: var(${tokens.paddingStart});
+    text-align: ${policy.layoutStrategy === "flow" || layout.align !== "center" ? "left" : "center"};
+
+    @media (max-width: $g2p-image-breakpoint) {
+      margin-inline: auto;
+      padding: var(--space-xl) var(--space-m);
+      text-align: left;
+    }
+  }${region.heading && !["header", "footer"].includes(region.tag) ? `
+
+  &__title--${modifier} {
+    font-size: var(${acssBindings.regionTypography.get(region.regionId) ?? "--h2"});
+  }` : ""}`}`;
+    });
+    return `.${block} {
+  position: relative;
+  box-sizing: border-box;
+  overflow: clip;${block === "media-panel" ? "\n  margin: 0;" : ""}
+
+${[...elementRules, ...variants].join("\n\n")}
 }`;
   }).join("\n\n");
+  const hasResolvedH1 = plan.regions.some((region) => region.heading && !["header", "footer"].includes(region.tag) && !assets.has(region.regionId));
   return `/* Deterministically emitted from image-only observations. */
+$g2p-image-breakpoint: 56.24rem;
+
 :root {
 ${acssBindings.declarations.join("\n")}
 }
 
-*, *::before, *::after { box-sizing: border-box; }
-html { color-scheme: light dark; scroll-behavior: smooth; }
-body.image-page { margin: 0; min-width: 20rem; font-family: var(--body-font-family); background: var(${acssBindings.colors.get(normalizedColor(analysis.regions[0]?.background ?? "#ffffff")) ?? "--white"}); }
-img { display: block; max-width: 100%; }
-a, button { font: inherit; }
-a:focus-visible, button:focus-visible { outline: var(--focus-width) solid var(--focus-color); outline-offset: var(--focus-offset); }
-a:hover, button:hover { opacity: 0.82; }
-a:active, button:active { transform: translateY(1px); }
+.image-page {
+  box-sizing: border-box;
+  min-width: var(--g2p-image-page-min-width);
+  margin: 0;
+  color-scheme: light dark;
+  font-family: var(--body-font-family);
+  background: var(${acssBindings.colors.get(normalizedColor(analysis.regions[0]?.background ?? "#ffffff")) ?? "--white"});
 
-.image-page__unresolved-title, .media-panel__caption {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
+  &__main {
+    box-sizing: border-box;
+  }${hasResolvedH1 ? "" : `
+
+  &__unresolved-title {
+${visuallyHiddenDeclarations("    ")}
+  }`}
+
+  @media (prefers-reduced-motion: reduce) {
+    scroll-behavior: auto;
+  }
 }
 
-${baseRules}
-
-.site-header__inner, .site-footer__inner { display: flex; align-items: center; justify-content: space-between; gap: var(--space-l); }
-.site-header__list { display: flex; flex-wrap: wrap; gap: var(--space-m); margin: 0; padding: 0; list-style: none; }
-.site-header__brand { font-weight: 750; }
-.card-grid__inner { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: var(--space-l); }
-.card-grid__title { grid-column: 1 / -1; }
-.card-grid__item { padding: var(--space-l); border: 1px solid currentColor; border-radius: var(--radius-m); }
-.card-grid__item-title { margin-top: 0; }
-.media-panel { margin: 0; }
-.media-panel__image { width: 100%; height: 100%; object-fit: cover; }
-
-${regionRules}
-
-@media (max-width: 56.24rem) {
-  ${plan.regions.map((region) => `.${region.block}--${region.regionId} { height: auto; min-height: min(${Math.max(320, Math.round(region.bbox.height))}px, 80rem); }`).join("\n  ")}
-  .site-header__navigation { display: none; }
-  ${plan.regions.map((region) => `.${region.block}--${region.regionId} > .${region.block}__inner { margin-inline: auto; padding: var(--space-xl) var(--space-m); text-align: left; }`).join("\n  ")}
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html { scroll-behavior: auto; }
-  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
-}
+${blockRules}
 `;
 }
 
@@ -367,9 +473,16 @@ export async function buildImageTarget(options: BuildImageTargetOptions): Promis
   const maximumCoverage = options.maxRasterCoverage ?? policy.raster.maximumCoverage;
   const raster = await createRasterAssets({ sourcePath, outputDirectory, analysis, plan, maximumCoverage: policy.raster.enabled ? maximumCoverage : 0, dominanceThreshold: policy.raster.imageDominanceThreshold, maximumTextLines: policy.raster.maximumTextLines });
   const bindings = imageAcssBindings(analysis, plan, policy, options.acss);
-  const scss = renderScss(analysis, plan, policy, bindings);
+  const scss = renderScss(analysis, plan, policy, bindings, raster.assets);
   const css = compileString(scss, { style: "expanded" }).css;
   const html = renderHtml(plan, raster.assets);
+  const architecture = analyzeCssSelectorContract(css);
+  const nesting = analyzeScssNestingContract(scss);
+  const tokens = analyzeTokenReferenceContract(css);
+  if (!architecture.passed || !nesting.passed || !tokens.passed) {
+    const failures = [...architecture.violations.map((item) => `${item.kind}:${item.selector}`), ...nesting.violations.map((item) => `${item.kind}:${item.selector}`), ...tokens.unresolvedReferences.map((item) => `unregistered-token:${item}`), ...tokens.localDefinitions.map((item) => `local-token:${item.token}`)];
+    throw new Error(`Image-only styling contract violation: ${failures.join(", ")}`);
+  }
   const htmlPath = join(outputDirectory, "page.html");
   const scssPath = join(outputDirectory, "page.scss");
   const cssPath = join(outputDirectory, "page.css");

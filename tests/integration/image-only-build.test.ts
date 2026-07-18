@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { PNG } from "pngjs";
 import { sha256 } from "../../src/core/hash.ts";
 import { buildImageTarget } from "../../src/image-only/build.ts";
+import { analyzeCssSelectorContract, analyzeScssNestingContract, analyzeTokenReferenceContract } from "../../src/validation/styling-contract.ts";
 
 describe("image-only build", () => {
   test("emits semantic BEM HTML, governed SCSS, and strict provenance", async () => {
@@ -23,7 +24,7 @@ describe("image-only build", () => {
     const bindings = await Bun.file(result.acssBindingsPath).json() as { authority: string; bindings: { runtimeVariable: string; status: string }[] };
     expect(html).toContain('<header class="site-header');
     expect(html).toContain('<main class="image-page__main"');
-    expect(html).toContain('<h1 class="hero__title"');
+    expect(html).toContain('<h1 class="hero__title hero__title--');
     expect(html).not.toContain("private.html");
     expect(html).not.toContain("<script");
     expect(scss).toContain("@media (prefers-reduced-motion: reduce)");
@@ -31,6 +32,12 @@ describe("image-only build", () => {
     expect(scss).toContain("var(--heading-font-family)");
     expect(scss).not.toContain("--image-color-");
     expect(scss).not.toContain("url(target.png)");
+    expect(scss).toContain("$g2p-image-breakpoint:");
+    expect(bindings.bindings.some((binding) => binding.runtimeVariable.startsWith("--g2p-image-") && binding.runtimeVariable.endsWith("-content-width"))).toBeTrue();
+    expect(analyzeScssNestingContract(scss).violations).toEqual([]);
+    const css = await Bun.file(result.cssPath).text();
+    expect(analyzeCssSelectorContract(css).violations).toEqual([]);
+    expect(analyzeTokenReferenceContract(css).passed).toBeTrue();
     expect(provenance.sourceUrlUsedByBuilder).toBe(false);
     expect(provenance.quarantinedInputsUsed).toEqual([]);
     expect(provenance.designSystem.provider).toBe("automaticcss");

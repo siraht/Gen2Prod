@@ -7,6 +7,8 @@ import { capturePage } from "../evidence/capture.ts";
 import { ImageOnlyAnalysisSchema, ImageOnlyBuildPlanSchema, ImageOnlyEvaluationSchema, ImageOnlyTargetManifestSchema, type ImageOnlyEvaluation } from "../schemas/image-only.ts";
 import { classes, flatten, parseElements } from "../validation/dom.ts";
 import { imageDifference } from "../validation/visual.ts";
+import { isBemClass } from "../core/classes.ts";
+import { analyzeCssSelectorContract, analyzeScssNestingContract, analyzeTokenReferenceContract } from "../validation/styling-contract.ts";
 
 export type EvaluateImageBuildOptions = {
   manifestPath: string;
@@ -61,11 +63,12 @@ export async function evaluateImageBuild(options: EvaluateImageBuildOptions): Pr
 
   const html = await Bun.file(htmlPath).text();
   const css = await Bun.file(cssPath).text();
+  const scss = await Bun.file(join(buildDirectory, "page.scss")).text();
   const parsed = parseElements(html);
   const elements = flatten(parsed.roots);
   const classNames = elements.flatMap(classes);
   const authoredClasses = classNames.filter((name) => !/^(?:dark|light|js|no-js)$/.test(name));
-  const bemClasses = authoredClasses.filter((name) => /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:(?:__|--)[a-z0-9]+(?:-[a-z0-9]+)*)?$/.test(name));
+  const bemClasses = authoredClasses.filter(isBemClass);
   const visibleWords = new Set(normalizedWords(elements.map((element) => element.text).join(" ")));
   const colocatedAnalysis = join(buildDirectory, "image-analysis.json");
   const analysis = ImageOnlyAnalysisSchema.parse(await readJson(await pathExists(colocatedAnalysis) ? colocatedAnalysis : join(dirname(manifestPath), "image-analysis.json")));
@@ -74,7 +77,11 @@ export async function evaluateImageBuild(options: EvaluateImageBuildOptions): Pr
   const expectedLandmarks = [...new Set(plan.regions.map((region) => region.tag).filter((tag) => ["header", "nav", "footer"].includes(tag))), "main"];
   const actualTags = new Set(elements.map((element) => element.tag));
   const landmarkRecall = expectedLandmarks.filter((tag) => actualTags.has(tag)).length / Math.max(1, expectedLandmarks.length);
-  const safeStateChecks = [/:focus-visible/.test(css), /:hover/.test(css), /prefers-reduced-motion/.test(css)];
+  const hasInteractiveElements = elements.some((element) => ["a", "button", "input", "select", "textarea", "summary"].includes(element.tag));
+  const safeStateChecks = [!hasInteractiveElements || /\.[a-z][\w-]*:focus-visible/.test(css), !hasInteractiveElements || /\.[a-z][\w-]*:hover/.test(css), /prefers-reduced-motion/.test(css)];
+  const selectorContract = analyzeCssSelectorContract(css);
+  const nestingContract = analyzeScssNestingContract(scss);
+  const tokenContract = analyzeTokenReferenceContract(css);
   const prohibitedClaimCoverage = plan.interactions.length ? plan.interactions.filter((item) => item.prohibitedClaims.length > 0 && item.verification.required).length / plan.interactions.length : 1;
   const unresolvedExpected = ["visible-text-authority", "destinations-and-side-effects", "dynamic-states", "responsive-rules", "asset-meaning"];
   const unresolvedConcernCoverage = unresolvedExpected.filter((concern) => plan.unresolved.some((item) => item.concern === concern)).length / unresolvedExpected.length;
@@ -101,6 +108,9 @@ export async function evaluateImageBuild(options: EvaluateImageBuildOptions): Pr
   if (semantics.parseErrors > 0) hardFailures.push("html-parse-errors");
   if (semantics.h1Count !== 1) hardFailures.push("heading-contract");
   if (semantics.bemCoverage < 0.95) hardFailures.push("bem-contract");
+  if (!selectorContract.passed) hardFailures.push("class-only-bem-selector-contract");
+  if (!nestingContract.passed) hardFailures.push("nested-bem-scss-contract");
+  if (!tokenContract.passed) hardFailures.push("registered-token-contract");
   if (semantics.inlineStyleCount > 0 || semantics.scriptCount > 0) hardFailures.push("unsafe-image-build-output");
   if (dirtyDifference && difference.ratio > dirtyDifference.ratio + 0.002) hardFailures.push("dirty-to-clean-image-regression");
   if (previous && difference.ratio > previous.ratio + 0.002) hardFailures.push("visual-regression-from-incumbent");
