@@ -3,7 +3,7 @@ import { compareFitness } from "../core/fitness.ts";
 import { ensureDirectory, pathExists, readJson, writeJsonAtomic } from "../core/fs.ts";
 import { hashJson } from "../core/hash.ts";
 import { TransformationPolicySchema, type TransformationPolicy } from "../core/policy.ts";
-import { ExperimentResultSchema, TrajectorySchema, type ExperimentResult, type Trajectory } from "../schemas/research.ts";
+import { ExperimentResultSchema, ResearchPromotionSchema, TrajectorySchema, type ExperimentResult, type Trajectory } from "../schemas/research.ts";
 import { defaultPolicy } from "./policy.ts";
 import { evaluatePolicy } from "./evaluate.ts";
 import { proposeMutation, type MutationTrack } from "./mutate.ts";
@@ -55,8 +55,14 @@ async function runResearchWithSession(options: ResearchOptions, captureSession: 
   const root = join(options.workspace, "research");
   const experimentsDirectory = join(root, "experiments");
   await ensureDirectory(experimentsDirectory);
+  const canonicalIncumbentPath = join(root, "incumbent-policy.json");
   const incumbentPath = join(root, `incumbent-${options.track}.json`);
-  let incumbent = (await pathExists(incumbentPath)) ? TransformationPolicySchema.parse(await readJson(incumbentPath)) : defaultPolicy;
+  const resumePath = await pathExists(canonicalIncumbentPath)
+    ? canonicalIncumbentPath
+    : await pathExists(incumbentPath)
+      ? incumbentPath
+      : undefined;
+  let incumbent = resumePath ? TransformationPolicySchema.parse(await readJson(resumePath)) : defaultPolicy;
   let incumbentEvaluation = await evaluatePolicy({ manifestPath: options.manifestPath, policy: incumbent, split: options.split, workDirectory: join(root, "baseline"), captureSession, acss: options.acss });
   const initialFitness = incumbentEvaluation.fitness;
   const experiments: ExperimentResult[] = [];
@@ -99,9 +105,26 @@ async function runResearchWithSession(options: ResearchOptions, captureSession: 
     for (const trajectory of trajectories(experiment, candidateEvaluation)) await append(join(root, "trajectories.jsonl"), JSON.stringify(trajectory));
     experiments.push(experiment);
     if (keep) {
+      const previousFitness = incumbentEvaluation.fitness;
       incumbent = mutation.candidate;
       incumbentEvaluation = candidateEvaluation;
-      await writeJsonAtomic(incumbentPath, incumbent);
+      await Promise.all([
+        writeJsonAtomic(incumbentPath, incumbent),
+        writeJsonAtomic(canonicalIncumbentPath, incumbent),
+        writeJsonAtomic(join(root, "incumbent-promotion.json"), ResearchPromotionSchema.parse({
+          schemaVersion: "0.1.0",
+          promotedAt: new Date().toISOString(),
+          experimentId,
+          track: options.track,
+          policyHash: candidateEvaluation.policyHash,
+          frozenEvaluatorHash: candidateEvaluation.frozenEvaluatorHash,
+          mutationControlRecall: 1,
+          previousFitness,
+          promotedFitness: candidateEvaluation.fitness,
+          canonicalPolicyPath: canonicalIncumbentPath,
+          trackPolicyPath: incumbentPath,
+        })),
+      ]);
     }
   }
   return { incumbent, experiments, accepted: experiments.filter((item) => item.outcome === "keep").length, rejected: experiments.filter((item) => item.outcome === "revert").length, initialFitness, finalFitness: incumbentEvaluation.fitness };

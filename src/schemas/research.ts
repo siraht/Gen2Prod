@@ -59,6 +59,20 @@ export const ExperimentResultSchema = z.object({
   holdoutFitness: FitnessVectorSchema.optional(),
 });
 
+export const ResearchPromotionSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  promotedAt: z.string().datetime(),
+  experimentId: z.string(),
+  track: z.enum(["policy", "pass", "verifier"]),
+  policyHash: z.string(),
+  frozenEvaluatorHash: z.string(),
+  mutationControlRecall: z.literal(1),
+  previousFitness: FitnessVectorSchema,
+  promotedFitness: FitnessVectorSchema,
+  canonicalPolicyPath: z.string(),
+  trackPolicyPath: z.string(),
+});
+
 export const TrajectorySchema = z.object({
   schemaVersion: z.literal("0.1.0"),
   trajectoryId: z.string(),
@@ -77,4 +91,5 @@ export const TrajectorySchema = z.object({
 export type FixtureEvaluation = z.infer<typeof FixtureEvaluationSchema>;
 export type EvaluationResult = z.infer<typeof EvaluationResultSchema>;
 export type ExperimentResult = z.infer<typeof ExperimentResultSchema>;
+export type ResearchPromotion = z.infer<typeof ResearchPromotionSchema>;
 export type Trajectory = z.infer<typeof TrajectorySchema>;
