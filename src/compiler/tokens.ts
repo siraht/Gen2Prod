@@ -288,7 +288,10 @@ function simpleMatches(simple: string, node: PlannedNode, context: SelectorConte
   for (const id of rest.matchAll(/#([a-zA-Z0-9_-]+)/g)) if (node.attributes.id !== id[1]) return false;
   rest = rest.replace(/#[a-zA-Z0-9_-]+/g, "");
   const tag = rest.trim().match(/^(\*|[a-z][a-z0-9-]*)/i)?.[1]?.toLowerCase();
-  if (tag && tag !== "*" && tag !== node.originalTag && tag !== node.tag) return false;
+  // Source CSS was authored against the source DOM. A newly inferred semantic
+  // tag must not retroactively opt into global tag rules that never affected
+  // the dirty render (for example, a div converted to li matching `li {}`).
+  if (tag && tag !== "*" && tag !== node.originalTag) return false;
   rest = rest.trim().replace(/^(?:\*|[a-z][a-z0-9-]*)/i, "").trim();
   return rest.length === 0;
 }
@@ -346,6 +349,16 @@ function cascadeWins(candidate: CssDeclaration, candidateOrder: number, current:
 
 type StyleCondition = NonNullable<StyleIntent["declarations"][number]["condition"]>;
 
+function semanticTagResets(node: PlannedNode, declarations: StyleIntent["declarations"]): StyleIntent["declarations"] {
+  if (node.originalTag === node.tag) return [];
+  const defaultProperties = new Set(declarations.filter((declaration) => !declaration.condition).map((declaration) => declaration.property));
+  const properties: [string, string][] = [];
+  if (["ul", "ol"].includes(node.tag)) properties.push(["margin", "0"], ["padding", "0"], ["list-style", "none"]);
+  if (node.tag === "li") properties.push(["display", "block"], ["list-style", "none"]);
+  if (["figure", "blockquote", "p", "h1", "h2", "h3", "h4", "h5", "h6"].includes(node.tag)) properties.push(["margin", "0"]);
+  return properties.filter(([property]) => !defaultProperties.has(property)).map(([property, value]) => ({ property, value, important: false, source: "compiler:semantic-tag-reset", classification: "browser-default" as const, bindingStatus: "not-applicable" as const }));
+}
+
 function conditionedSelector(declaration: CssDeclaration): { selector: string; condition?: StyleCondition } {
   const states: string[] = [];
   const statePattern = /(?<!:not\():(hover|focus|focus-visible|focus-within|active|visited|checked|disabled|open|indeterminate)\b/g;
@@ -384,8 +397,7 @@ export function resolveStyles(source: SourceDocument, root: PlannedNode, registr
       const current = deduplicated.get(key);
       if (!current || cascadeWins(declaration, order, current.declaration, current.order)) deduplicated.set(key, { declaration, order, ...(condition ? { condition } : {}) });
     }
-    if (deduplicated.size === 0) continue;
-    const declarations = [...deduplicated.values()].map(({ declaration, condition }) => {
+    const sourceIntent = [...deduplicated.values()].map(({ declaration, condition }) => {
       const classification = classifyDeclaration(declaration.property, declaration.value);
       const binding = classification === "governed-design-value" ? bindValue(declaration.property, declaration.value, registry, relativeThreshold) : { value: declaration.value };
       if (classification === "governed-design-value" && !binding.token) {
@@ -393,6 +405,8 @@ export function resolveStyles(source: SourceDocument, root: PlannedNode, registr
       }
       return { property: declaration.property, value: normalizeCssValue(binding.value, declaration.property), important: declaration.important, source: declaration.selector, classification, ...(binding.token ? { tokenRole: binding.token.semanticRole } : {}), bindingStatus: classification !== "governed-design-value" ? "not-applicable" as const : binding.token ? "bound" as const : "exception" as const, ...(condition ? { condition } : {}) };
     });
+    const declarations = [...semanticTagResets(node, sourceIntent), ...sourceIntent];
+    if (declarations.length === 0) continue;
     styles.push({ nodeId: node.nodeId, styleRole: node.role, layoutRole: node.role.includes("layout") || node.role.includes("list") ? node.role : "content-owned", contentRole: node.role, confidence: { value: 0.85, kind: "ordinal-uncalibrated", evidence: [{ source: "compiled-css", nodeId: node.nodeId, signal: `${declarations.length} matched declarations`, authority: "computed-visual-truth", weight: 0.9 }], risk: "low" }, declarations });
   }
   return { styles, exceptions };

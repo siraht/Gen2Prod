@@ -302,6 +302,23 @@ describe("static compilation", () => {
     expect(metric?.declarations.some((declaration) => declaration.property === "font-size")).toBeFalse();
     expect(metric?.declarations.some((declaration) => declaration.property === "opacity")).toBeFalse();
   });
+
+  test("isolates inferred list semantics from source tag rules and browser defaults", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-semantic-tag-reset-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>List reset</title><meta name="description" content="List reset fixture"><style>li{font-size:30px}.metrics{display:grid;margin-top:20px}.metric{padding:5px}</style></head><body><main><h1>Metrics</h1><div class="metrics"><div class="metric">One</div><div class="metric">Two</div></div></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    const allNodes = [output.plan.semantics.root];
+    for (let index = 0; index < allNodes.length; index += 1) allNodes.push(...allNodes[index]!.children);
+    const inferredItems = allNodes.filter((node) => node.originalTag === "div" && node.tag === "li");
+    expect(inferredItems).toHaveLength(2);
+    for (const item of inferredItems) {
+      const declarations = output.plan.styles.find((style) => style.nodeId === item.nodeId)?.declarations ?? [];
+      expect(declarations.find((declaration) => declaration.property === "display")?.value).toBe("block");
+      expect(declarations.some((declaration) => declaration.property === "font-size")).toBeFalse();
+    }
+    expect(output.scss).toContain("list-style: none");
+  });
 });
 
 function inputTokens() {
