@@ -15,6 +15,7 @@ import { prepareBenchmark } from "./research/prepare.ts";
 import { evaluateModalityAblation } from "./research/ablation.ts";
 import { evaluatePolicy } from "./research/evaluate.ts";
 import { runResearch } from "./research/loop.ts";
+import { calibrateEvaluations } from "./research/calibrate.ts";
 import { loadPolicy } from "./runtime/policy.ts";
 import { executeRun } from "./runtime/run.ts";
 import { createPassRegistry } from "./runtime/passes.ts";
@@ -377,6 +378,21 @@ program
     const envelope = result("evaluate", evaluation);
     if (evaluation.mutationControlRecall < 1) envelope.warnings.push("Frozen evaluator did not catch every mutation control.");
     emit(envelope, `Evaluation ${evaluation.evaluationId}\nFixtures: ${evaluation.resourceAccounting.fixtureCount}\nHard failures: ${evaluation.fitness.criticalGateFailures.toFixed(2)}\nSemantic error: ${evaluation.fitness.semanticContractError.toFixed(4)}\nBEM error: ${evaluation.fitness.bemComponentError.toFixed(4)}\nGold visual loss: ${evaluation.fitness.visualLoss.toFixed(6)}\nMean visual recovery: ${(evaluation.fixtureResults.reduce((sum, fixture) => sum + (fixture.metrics.visualRecovery ?? 0), 0) / Math.max(evaluation.fixtureResults.length, 1) * 100).toFixed(1)}%\nBrowser captures: ${evaluation.resourceAccounting.browserCaptures}\nMutation-control recall: ${(evaluation.mutationControlRecall * 100).toFixed(1)}%\nNormalized cost: ${evaluation.resourceAccounting.normalizedCost.toFixed(3)}`);
+  });
+
+program
+  .command("calibrate [evaluations...]")
+  .description("audit independent benchmark coverage and derive activation-gated threshold recommendations")
+  .option("--output <path>", "calibration report path")
+  .action(async (evaluations: string[] | undefined, options: { output?: string }) => {
+    const project = await config();
+    const requested = evaluations?.length ? evaluations : [join(project.workspace, "evaluations"), join(project.workspace, "research")];
+    const output = resolve(options.output ?? join(project.workspace, "calibration", "report.json"));
+    const report = await calibrateEvaluations(requested, output);
+    const visual = report.recommendations.maxVisualPixelRatio;
+    const bem = report.recommendations.minBemCoverage;
+    const token = report.recommendations.minTokenCoverage;
+    emit(result("calibrate", report), `Calibration ${report.status}\nIndependent groups: ${report.support.uniqueFixtureGroups}/${report.requirements.fixtureGroups}; eligible: ${report.support.eligibleFixtureGroups}/${report.requirements.eligibleFixtureGroups}\nVisual diagnostic: ${visual.diagnosticCandidate ?? "insufficient data"}; activatable: ${visual.activatableValue ?? "withheld"}\nBEM diagnostic: ${bem.diagnosticCandidate ?? "insufficient data"}; activatable: ${bem.activatableValue ?? "withheld"}\nToken diagnostic: ${token.diagnosticCandidate ?? "insufficient data"}; activatable: ${token.activatableValue ?? "withheld"}\nCoverage gaps: ${report.coverageGaps.length ? report.coverageGaps.join("; ") : "none"}\nReport: ${output}`);
   });
 
 program

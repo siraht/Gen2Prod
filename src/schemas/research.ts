@@ -111,6 +111,48 @@ export const ResearchPromotionSchema = z.object({
   trackPolicyPath: z.string(),
 });
 
+const CalibrationDistributionSchema = z.object({
+  sampleCount: z.number().int().nonnegative(),
+  min: z.number().nullable(),
+  p05: z.number().nullable(),
+  p50: z.number().nullable(),
+  p95: z.number().nullable(),
+  max: z.number().nullable(),
+  diagnosticCandidate: z.number().nullable(),
+  activatableValue: z.number().nullable(),
+  method: z.string(),
+});
+
+export const CalibrationReportSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  generatedAt: z.string().datetime(),
+  status: z.enum(["provisional", "calibrated"]),
+  inputs: z.object({ requested: z.array(z.string()), accepted: z.array(z.string()), rejected: z.array(z.object({ path: z.string(), reason: z.string() })) }),
+  support: z.object({
+    evaluations: z.number().int().nonnegative(),
+    rawFixtureObservations: z.number().int().nonnegative(),
+    uniqueFixtureGroups: z.number().int().nonnegative(),
+    duplicateFixtureObservations: z.number().int().nonnegative(),
+    eligibleFixtureGroups: z.number().int().nonnegative(),
+    archetypes: z.array(z.string()),
+    generatorFamilies: z.array(z.string()),
+    contentFamilies: z.array(z.string()),
+    corruptionKinds: z.array(z.string()),
+    seeds: z.array(z.number().int()),
+    splits: z.array(z.string()),
+    captureEnvironmentHashes: z.array(z.string()),
+    policyHashes: z.array(z.string()),
+  }),
+  requirements: z.object({ fixtureGroups: z.number().int().positive(), eligibleFixtureGroups: z.number().int().positive(), archetypes: z.number().int().positive(), generatorFamilies: z.number().int().positive(), contentFamilies: z.number().int().positive(), corruptionKinds: z.number().int().positive(), seeds: z.number().int().positive(), splits: z.number().int().positive(), captureEnvironments: z.number().int().positive() }),
+  coverageGaps: z.array(z.string()),
+  recommendations: z.object({
+    maxVisualPixelRatio: CalibrationDistributionSchema,
+    minBemCoverage: CalibrationDistributionSchema,
+    minTokenCoverage: CalibrationDistributionSchema,
+  }),
+  activation: z.object({ allowed: z.boolean(), reason: z.string() }),
+});
+
 export const TrajectorySchema = z.object({
   schemaVersion: z.literal("0.1.0"),
   trajectoryId: z.string(),
@@ -132,4 +174,5 @@ export type FixtureEvaluation = z.infer<typeof FixtureEvaluationSchema>;
 export type EvaluationResult = z.infer<typeof EvaluationResultSchema>;
 export type ExperimentResult = z.infer<typeof ExperimentResultSchema>;
 export type ResearchPromotion = z.infer<typeof ResearchPromotionSchema>;
+export type CalibrationReport = z.infer<typeof CalibrationReportSchema>;
 export type Trajectory = z.infer<typeof TrajectorySchema>;
