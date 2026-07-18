@@ -27,6 +27,7 @@ import { captureImageTarget } from "./image-only/capture.ts";
 import { analyzeImageTarget } from "./image-only/analyze.ts";
 import { buildImageTarget } from "./image-only/build.ts";
 import { evaluateImageBuild } from "./image-only/evaluate.ts";
+import { runImageResearch } from "./image-only/research.ts";
 
 type GlobalOptions = { config: string; workspace: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -246,6 +247,18 @@ image
     emit(envelope, `Image-only run ${evaluation.evaluationId}\nRegions: ${analysis.regions.length}; text observations: ${analysis.text.length}\nPixel loss: ${(evaluation.visual.pixelDifferenceRatio * 100).toFixed(2)}%; semantic loss: ${(evaluation.fitness.semanticLoss * 100).toFixed(2)}%\nFitness: ${evaluation.fitness.score.toFixed(4)}\nArtifacts: ${output}`);
     if (!evaluation.accepted) process.exitCode = 3;
   });
+image
+  .command("research")
+  .description("run one-policy-change image reconstruction experiments with hidden holdout audit")
+  .option("--catalog <path>", "project-isolated image target catalog", "fixtures/image-only/live-sites.json")
+  .option("--captures <path>", "prepared capture and analysis root", ".gen2prod/image-only/live")
+  .option("--workspace <path>", "image research workspace", ".gen2prod/image-only/research")
+  .option("--budget <number>", "maximum one-change experiments", "8")
+  .action(async (options: { catalog: string; captures: string; workspace: string; budget: string }) => {
+    const project = await config();
+    const summary = await runImageResearch({ catalogPath: resolve(options.catalog), captureRoot: resolve(options.captures), workspace: resolve(options.workspace), budget: Number.parseInt(options.budget, 10), browserExecutable: project.capture.browserExecutable });
+    emit(result("image research", summary), `Image research ${summary.researchId}\nKept: ${summary.accepted}; reverted: ${summary.rejected}\nTrain fitness: ${summary.baseline.train.meanScore.toFixed(4)} → ${summary.final.train.meanScore.toFixed(4)}\nValidation fitness: ${summary.baseline.validation.meanScore.toFixed(4)} → ${summary.final.validation.meanScore.toFixed(4)}\nHidden holdout fitness: ${summary.final.holdout.meanScore.toFixed(4)}\nHoldout idempotence: ${(summary.final.holdout.idempotenceRate * 100).toFixed(1)}%\nTrajectories: ${summary.trajectories.path}`);
+  });
 
 program
   .command("evaluate")
@@ -323,13 +336,14 @@ program
   .description("export datasets and train selector, verifier, and planner models")
   .option("--trajectories <path>", "research trajectory JSONL")
   .option("--naturalistic <path>", "naturalistic evaluation trajectory JSONL to blend without project leakage")
+  .option("--image <path>", "image-only reconstruction trajectory JSONL to blend without project leakage")
   .option("--output <path>", "model output directory")
   .addOption(new Option("--target <target>", "model target").choices(["selector", "verifier", "planner", "all"]).default("all"))
-  .action(async (options: { trajectories?: string; naturalistic?: string; output?: string; target: DistillTarget }) => {
+  .action(async (options: { trajectories?: string; naturalistic?: string; image?: string; output?: string; target: DistillTarget }) => {
     const project = await config();
     const trajectoryPath = resolve(options.trajectories ?? join(project.workspace, "research", "trajectories.jsonl"));
     const output = resolve(options.output ?? join(project.workspace, "distilled"));
-    const trajectoryPaths = [trajectoryPath, ...(options.naturalistic ? [resolve(options.naturalistic)] : [])];
+    const trajectoryPaths = [trajectoryPath, ...(options.naturalistic ? [resolve(options.naturalistic)] : []), ...(options.image ? [resolve(options.image)] : [])];
     const distilled = await distill(trajectoryPaths, output, options.target);
     emit(result("distill", distilled), `Distilled ${distilled.dataset.trajectories} trajectories\nSupervised: ${distilled.dataset.supervised}\nPreferences: ${distilled.dataset.preferences}\nVerifier: ${distilled.dataset.verifier}\nModels: ${Object.keys(distilled.models).join(", ")}\nOutput: ${output}`);
   });
