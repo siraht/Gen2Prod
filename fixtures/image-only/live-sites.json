@@ -1,12 +1,12 @@
 {
   "schemaVersion": "0.1.0",
   "targets": [
-    { "targetId": "getframes-home", "projectId": "getframes", "url": "https://getframes.io/", "split": "train" },
-    { "targetId": "automaticcss-home", "projectId": "automaticcss", "url": "https://automaticcss.com/", "split": "train" },
-    { "targetId": "digitalgravy-home", "projectId": "digitalgravy", "url": "https://digitalgravy.co/", "split": "train" },
-    { "targetId": "apple-home", "projectId": "apple", "url": "https://www.apple.com/", "split": "validation" },
-    { "targetId": "corrida-home", "projectId": "corrida", "url": "https://www.corridaboulder.com/", "split": "validation" },
-    { "targetId": "stripe-home", "projectId": "stripe", "url": "https://stripe.com/", "split": "holdout" },
-    { "targetId": "thekitchen-home", "projectId": "thekitchen", "url": "https://www.thekitchen.com/", "split": "holdout" }
+    { "targetId": "getframes-home", "projectId": "getframes", "url": "https://getframes.io/", "split": "train", "auditArtifact": ".firecrawl/image-only/getframes.json" },
+    { "targetId": "automaticcss-home", "projectId": "automaticcss", "url": "https://automaticcss.com/", "split": "train", "auditArtifact": ".firecrawl/image-only/automaticcss.json" },
+    { "targetId": "digitalgravy-home", "projectId": "digitalgravy", "url": "https://digitalgravy.co/", "split": "train", "auditArtifact": ".firecrawl/image-only/digitalgravy.json" },
+    { "targetId": "apple-home", "projectId": "apple", "url": "https://www.apple.com/", "split": "validation", "auditArtifact": ".firecrawl/image-only/apple.json" },
+    { "targetId": "corrida-home", "projectId": "corrida", "url": "https://www.corridaboulder.com/", "split": "validation", "auditArtifact": ".firecrawl/image-only/corrida.json" },
+    { "targetId": "stripe-home", "projectId": "stripe", "url": "https://stripe.com/", "split": "holdout", "auditArtifact": ".firecrawl/image-only/stripe.json" },
+    { "targetId": "thekitchen-home", "projectId": "thekitchen", "url": "https://www.thekitchen.com/", "split": "holdout", "auditArtifact": ".firecrawl/image-only/thekitchen.json" }
   ]
 }

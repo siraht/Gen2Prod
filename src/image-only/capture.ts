@@ -18,6 +18,7 @@ export type CaptureImageTargetOptions = {
   checkpointFractions?: number[] | undefined;
   probePoints?: { x: number; y: number; action: "hover" | "focus" }[] | undefined;
   temporalProbeDelayMs?: number | undefined;
+  quarantinedArtifacts?: { path: string; kind: "source-html" | "rendered-dom" | "accessibility-tree" | "computed-styles" | "web-extraction" | "human-reference"; permittedUse: "post-build-audit" | "never" }[] | undefined;
 };
 
 async function boundedStage<T>(page: import("playwright-core").Page, label: string, milliseconds: number, action: () => Promise<T>): Promise<T> {
@@ -187,7 +188,7 @@ export async function captureImageTarget(options: CaptureImageTargetOptions): Pr
     },
     frames,
     builderInputs: { images: builderImages },
-    quarantinedArtifacts: [],
+    quarantinedArtifacts: options.quarantinedArtifacts ?? [],
     authority: {
       pixels: "authoritative-for-captured-frame",
       visibleText: "advisory-until-reviewed",

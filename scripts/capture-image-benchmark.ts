@@ -11,6 +11,7 @@ const CatalogSchema = z.object({
     projectId: z.string(),
     url: z.string().url(),
     split: z.enum(["train", "validation", "holdout"]),
+    auditArtifact: z.string().optional(),
   })),
 });
 
@@ -37,6 +38,7 @@ for (const target of targets) {
       viewport: { width: 1440, height: 900 },
       capturePolicy: "visual-probe-sequence",
       checkpointFractions: [0, 0.25, 0.5, 0.75, 1],
+      quarantinedArtifacts: target.auditArtifact ? [{ path: resolve(target.auditArtifact), kind: "web-extraction", permittedUse: "post-build-audit" }] : [],
     });
     process.stdout.write(`${JSON.stringify({ targetId: target.targetId, split: target.split, frames: manifest.frames.length, scrollPositionsVisited: manifest.acquisition.scrollPositionsVisited, builderInputs: manifest.builderInputs.images })}\n`);
   } catch (error) {
