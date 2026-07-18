@@ -30,6 +30,7 @@ import { evaluateImageBuild } from "./image-only/evaluate.ts";
 import { runImageResearch } from "./image-only/research.ts";
 import { analyzeImageStateSequence } from "./image-only/state.ts";
 import { prepareSyntheticImageCurriculum } from "./image-only/synthetic.ts";
+import { writeImageContentStrategy } from "./image-only/strategy.ts";
 
 type GlobalOptions = { config: string; workspace: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -215,7 +216,8 @@ image
     const analysisPath = options.output ? resolve(options.output) : join(dirname(manifestPath), "image-analysis.json");
     const analysis = await analyzeImageTarget({ manifestPath, outputPath: analysisPath, downsample: Number.parseInt(options.downsample, 10), ocr: options.ocr });
     const states = await analyzeImageStateSequence(manifestPath, join(dirname(analysisPath), "image-state-analysis.json"));
-    emit(result("image analyze", { analysis, states }), `Analyzed ${analysis.targetId}\nRegions: ${analysis.regions.length}; OCR lines: ${analysis.text.length}; palette colors: ${analysis.palette.length}\nVisual state observations: ${states.observations.length}; dynamic hypotheses: ${states.hypotheses.length}\nInput hash: ${analysis.sourceFrameHash}`);
+    const strategy = await writeImageContentStrategy(analysis, dirname(analysisPath), states);
+    emit(result("image analyze", { analysis, states, strategy }), `Analyzed ${analysis.targetId}\nRegions: ${analysis.regions.length}; OCR lines: ${analysis.text.length}; palette colors: ${analysis.palette.length}\nVisual state observations: ${states.observations.length}; dynamic hypotheses: ${states.hypotheses.length}\nPage strategy: ${strategy.pageTypeHypothesis}\nInput hash: ${analysis.sourceFrameHash}`);
   });
 image
   .command("build <manifest>")
@@ -257,9 +259,10 @@ image
     const analysisPath = join(output, "image-analysis.json");
     const analysis = await analyzeImageTarget({ manifestPath, outputPath: analysisPath, ocr: options.ocr });
     const states = await analyzeImageStateSequence(manifestPath, join(output, "image-state-analysis.json"));
+    const strategy = await writeImageContentStrategy(analysis, output, states);
     const built = await buildImageTarget({ manifestPath, analysisPath, outputDirectory: output });
     const evaluation = await evaluateImageBuild({ manifestPath, buildDirectory: output, outputDirectory: join(output, "evaluation"), acceptancePixelRatio: Number.parseFloat(options.acceptancePixelRatio), browserExecutable: project.capture.browserExecutable });
-    const envelope = result("image run", { analysis: { regions: analysis.regions.length, text: analysis.text.length, stateObservations: states.observations.length, dynamicHypotheses: states.hypotheses.length }, build: built, evaluation }); envelope.ok = evaluation.accepted;
+    const envelope = result("image run", { analysis: { regions: analysis.regions.length, text: analysis.text.length, stateObservations: states.observations.length, dynamicHypotheses: states.hypotheses.length, pageType: strategy.pageTypeHypothesis }, build: built, evaluation }); envelope.ok = evaluation.accepted;
     envelope.requiredActions.push(...await Bun.file(built.requiredActionsPath).json() as ResultEnvelope<unknown>["requiredActions"]);
     emit(envelope, `Image-only run ${evaluation.evaluationId}\nRegions: ${analysis.regions.length}; text observations: ${analysis.text.length}; dynamic hypotheses: ${states.hypotheses.length}\nPixel loss: ${(evaluation.visual.pixelDifferenceRatio * 100).toFixed(2)}%; semantic loss: ${(evaluation.fitness.semanticLoss * 100).toFixed(2)}%\nFitness: ${evaluation.fitness.score.toFixed(4)}\nArtifacts: ${output}`);
     if (!evaluation.accepted) process.exitCode = 3;

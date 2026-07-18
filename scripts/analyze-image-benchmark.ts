@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { z } from "zod";
 import { analyzeImageTarget } from "../src/image-only/analyze.ts";
 import { analyzeImageStateSequence } from "../src/image-only/state.ts";
+import { writeImageContentStrategy } from "../src/image-only/strategy.ts";
 
 const CatalogSchema = z.object({ schemaVersion: z.literal("0.1.0"), targets: z.array(z.object({ targetId: z.string() })) });
 const args = process.argv.slice(2);
@@ -24,7 +25,8 @@ for (const target of targets) {
   try {
     const analysis = await analyzeImageTarget({ manifestPath, outputPath: join(directory, "image-analysis.json"), ocr: !args.includes("--no-ocr") });
     const states = await analyzeImageStateSequence(manifestPath, join(directory, "image-state-analysis.json"));
-    process.stdout.write(`${JSON.stringify({ targetId: target.targetId, regions: analysis.regions.length, textObservations: analysis.text.length, stateObservations: states.observations.length, dynamicHypotheses: states.hypotheses.length })}\n`);
+    const strategy = await writeImageContentStrategy(analysis, directory, states);
+    process.stdout.write(`${JSON.stringify({ targetId: target.targetId, regions: analysis.regions.length, textObservations: analysis.text.length, stateObservations: states.observations.length, dynamicHypotheses: states.hypotheses.length, pageType: strategy.pageTypeHypothesis })}\n`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     failures.push({ targetId: target.targetId, error: message });
