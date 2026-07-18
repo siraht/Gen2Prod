@@ -45,7 +45,7 @@ export async function prepareSyntheticCurriculum(options: PrepareOptions): Promi
         writeJsonAtomic(join(fixtureDirectory, "fixture.node-correspondence.json"), corruption.correspondence),
         writeJsonAtomic(join(fixtureDirectory, "fixture.expected-gates.json"), { goldPasses: ["A", "B", "C", "D", "E", "F", "G", "H", "I"], corruptedFails: expectedGateFailures, thresholds: { status: "provisional", representative: false } }),
       ]);
-      fixtureEntries.push({ id: fixtureId, archetype: spec.archetype, split: splitFor(spec.archetype), directory: relative(process.cwd(), fixtureDirectory), corruptionKinds: corruption.trace.operations.map((item) => item.kind), expectedGateFailures });
+      fixtureEntries.push({ id: fixtureId, archetype: spec.archetype, split: splitFor(spec.archetype), directory: relative(process.cwd(), fixtureDirectory), corruptionKinds: corruption.trace.operations.map((item) => item.kind), expectedGateFailures, generatorFamily: "procedural-canonical-v1" });
     }
   }
   const manifest = SyntheticManifestSchema.parse({

@@ -52,6 +52,7 @@ export const CorruptionOperationSchema = z.object({
     "component-corruption",
     "behavior-corruption",
     "accessibility-corruption",
+    "model-generated",
   ]),
   targetNodeIds: z.array(z.string()),
   before: z.string(),
@@ -86,6 +87,7 @@ export const SyntheticManifestSchema = z.object({
     directory: z.string(),
     corruptionKinds: z.array(z.string()),
     expectedGateFailures: z.array(z.string()),
+    generatorFamily: z.string().default("procedural-canonical-v1"),
   })),
 });
 
