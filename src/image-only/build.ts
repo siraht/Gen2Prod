@@ -56,7 +56,7 @@ function layoutForRegion(analysis: ImageOnlyAnalysis, regionId: string) {
 }
 
 function renderHeader(region: ImageOnlyBuildPlan["regions"][number]): string {
-  const items = region.copy.slice(0, 12);
+  const items = [...region.copy];
   const brand = items.shift() ?? "";
   return `<header class="site-header site-header--${escapeHtml(region.regionId)}">
   <div class="site-header__inner">
@@ -69,7 +69,7 @@ function renderHeader(region: ImageOnlyBuildPlan["regions"][number]): string {
 }
 
 function renderCards(region: ImageOnlyBuildPlan["regions"][number]): string {
-  const values = region.copy.slice(0, 12);
+  const values = region.copy;
   const cards: string[] = [];
   for (let index = 0; index < values.length; index += 2) {
     const heading = values[index];

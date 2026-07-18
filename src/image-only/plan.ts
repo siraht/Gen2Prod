@@ -63,7 +63,7 @@ export function planImageOnlyBuild(analysis: ImageOnlyAnalysis): ImageOnlyBuildP
     const candidates = [...text].sort((left, right) => right.bbox.height - left.bbox.height || left.bbox.y - right.bbox.y);
     const headingCandidate = ["header", "footer", "media"].includes(region.visualRole) ? undefined : candidates[0];
     const heading = headingCandidate ? normalizedText(headingCandidate.text) : undefined;
-    const copy = text.filter((item) => item !== headingCandidate).map((item) => normalizedText(item.text)).filter(Boolean).slice(0, 16);
+    const copy = text.filter((item) => item !== headingCandidate).map((item) => normalizedText(item.text)).filter(Boolean).slice(0, 48);
     return { regionId: region.regionId, tag: contract.tag, block: contract.block, ...(heading ? { heading } : {}), copy, bbox: region.bbox, confidence: Math.min(region.confidence, headingCandidate?.confidence ?? region.confidence) };
   });
   const interactions = analysis.regions.flatMap((region) => interactionForRegion(region, regionText(analysis, region)));
