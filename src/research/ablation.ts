@@ -2,6 +2,7 @@ import type { TransformationPolicy } from "../core/policy.ts";
 import type { EvaluationResult } from "../schemas/research.ts";
 import { evaluatePolicy } from "./evaluate.ts";
 import { openCaptureSession } from "../evidence/capture.ts";
+import type { AutomaticCssBundle } from "../acss/schema.ts";
 
 export type AblationResult = { id: "A" | "B" | "C" | "D" | "E" | "F"; evidence: string[]; evaluation: EvaluationResult };
 
@@ -14,7 +15,7 @@ const CONFIGURATIONS: { id: AblationResult["id"]; fields: (keyof TransformationP
   { id: "F", fields: ["sourceAst", "renderedDom", "computedStyles", "pageIntent", "fullScreenshot", "uncertaintyTriggeredCrops", "crossPageInventory"], evidence: ["E", "cross-page component inventory"] },
 ];
 
-export async function evaluateModalityAblation(options: { manifestPath: string; policy: TransformationPolicy; split: "train" | "validation" | "holdout" | "all"; workDirectory: string }): Promise<AblationResult[]> {
+export async function evaluateModalityAblation(options: { manifestPath: string; policy: TransformationPolicy; split: "train" | "validation" | "holdout" | "all"; workDirectory: string; acss?: AutomaticCssBundle | undefined }): Promise<AblationResult[]> {
   const results: AblationResult[] = [];
   const captureSession = await openCaptureSession();
   try {
@@ -22,7 +23,7 @@ export async function evaluateModalityAblation(options: { manifestPath: string; 
       const policy = structuredClone(options.policy);
       for (const field of Object.keys(policy.modalities) as (keyof TransformationPolicy["modalities"])[]) policy.modalities[field] = configuration.fields.includes(field);
       policy.name = `${options.policy.name}-ablation-${configuration.id}`;
-      const evaluation = await evaluatePolicy({ manifestPath: options.manifestPath, policy, split: options.split, workDirectory: `${options.workDirectory}/ablation-${configuration.id}`, captureSession });
+      const evaluation = await evaluatePolicy({ manifestPath: options.manifestPath, policy, split: options.split, workDirectory: `${options.workDirectory}/ablation-${configuration.id}`, captureSession, acss: options.acss });
       results.push({ id: configuration.id, evidence: configuration.evidence, evaluation });
     }
   } finally {

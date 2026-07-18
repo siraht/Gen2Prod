@@ -7,7 +7,7 @@ import { TokenRegistrySchema, type Token, type TokenRegistry } from "../schemas/
 import { openAutomaticCssSource } from "./archive.ts";
 import { AutomaticCssCatalogSchema, AutomaticCssProvenanceSchema, type AutomaticCssBundle } from "./schema.ts";
 
-export type PrepareAutomaticCssOptions = { sourcePath: string; outputDirectory: string; force?: boolean | undefined };
+export type PrepareAutomaticCssOptions = { sourcePath: string; outputDirectory: string; mode?: "full" | "pro" | "classless" | "mixed" | undefined; force?: boolean | undefined };
 
 const cache = new Map<string, Promise<AutomaticCssBundle>>();
 
@@ -110,7 +110,7 @@ async function prepare(options: PrepareAutomaticCssOptions): Promise<AutomaticCs
   const provenancePath = join(outputDirectory, "acss.provenance.json");
   if (!options.force && await pathExists(provenancePath)) {
     const existing = AutomaticCssProvenanceSchema.safeParse(await readJson(provenancePath));
-    if (existing.success && existing.data.sourceHash === source.sourceHash) return loadBundle(outputDirectory);
+    if (existing.success && existing.data.sourceHash === source.sourceHash && existing.data.moduleMode === (options.mode ?? "full")) return loadBundle(outputDirectory);
   }
   const plugin = await source.readText("automaticcss-plugin.php");
   const version = plugin.match(/Version:\s*([^\r\n]+)/i)?.[1]?.trim();
@@ -137,6 +137,7 @@ async function prepare(options: PrepareAutomaticCssOptions): Promise<AutomaticCs
     schemaVersion: "0.1.0",
     provider: "automaticcss",
     version,
+    moduleMode: options.mode ?? "full",
     sourceHash: source.sourceHash,
     sourceKind: source.sourceKind,
     authority: "release-default-fallback",
@@ -153,13 +154,13 @@ async function prepare(options: PrepareAutomaticCssOptions): Promise<AutomaticCs
   const files = { registry: join(outputDirectory, "acss.registry.json"), catalog: join(outputDirectory, "acss.catalog.json"), provenance: provenancePath, compiledCss: join(outputDirectory, "acss.defaults.css") };
   const registryHash = hashJson(registry);
   const catalogHash = hashJson(catalog);
-  const provenance = AutomaticCssProvenanceSchema.parse({ schemaVersion: "0.1.0", provider: "automaticcss", version, source: source.sourcePath, sourceHash: source.sourceHash, sourceKind: source.sourceKind, authority: "release-default-fallback", generatedAt: new Date().toISOString(), registryHash, catalogHash, compiledCssHash: catalog.compiledCssHash });
+  const provenance = AutomaticCssProvenanceSchema.parse({ schemaVersion: "0.1.0", provider: "automaticcss", version, moduleMode: options.mode ?? "full", source: source.sourcePath, sourceHash: source.sourceHash, sourceKind: source.sourceKind, authority: "release-default-fallback", generatedAt: new Date().toISOString(), registryHash, catalogHash, compiledCssHash: catalog.compiledCssHash });
   await Promise.all([writeJsonAtomic(files.registry, registry), writeJsonAtomic(files.catalog, catalog), writeJsonAtomic(files.provenance, provenance), writeTextAtomic(files.compiledCss, compiledCss)]);
   return { registry, catalog, provenance, compiledCss, files };
 }
 
 export async function prepareAutomaticCss(options: PrepareAutomaticCssOptions): Promise<AutomaticCssBundle> {
-  const key = `${resolve(options.sourcePath)}\0${resolve(options.outputDirectory)}\0${options.force ? "force" : "cache"}`;
+  const key = `${resolve(options.sourcePath)}\0${resolve(options.outputDirectory)}\0${options.mode ?? "full"}\0${options.force ? "force" : "cache"}`;
   if (!options.force) {
     const existing = cache.get(key);
     if (existing) return existing;

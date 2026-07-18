@@ -8,6 +8,7 @@ import { defaultPolicy } from "./policy.ts";
 import { evaluatePolicy } from "./evaluate.ts";
 import { proposeMutation, type MutationTrack } from "./mutate.ts";
 import { openCaptureSession, type CaptureSession } from "../evidence/capture.ts";
+import type { AutomaticCssBundle } from "../acss/schema.ts";
 
 export type ResearchOptions = {
   manifestPath: string;
@@ -16,6 +17,7 @@ export type ResearchOptions = {
   budget: number;
   split: "train" | "validation";
   hiddenHoldoutEvery: number;
+  acss?: AutomaticCssBundle | undefined;
 };
 
 export type ResearchSummary = {
@@ -55,7 +57,7 @@ async function runResearchWithSession(options: ResearchOptions, captureSession: 
   await ensureDirectory(experimentsDirectory);
   const incumbentPath = join(root, `incumbent-${options.track}.json`);
   let incumbent = (await pathExists(incumbentPath)) ? TransformationPolicySchema.parse(await readJson(incumbentPath)) : defaultPolicy;
-  let incumbentEvaluation = await evaluatePolicy({ manifestPath: options.manifestPath, policy: incumbent, split: options.split, workDirectory: join(root, "baseline"), captureSession });
+  let incumbentEvaluation = await evaluatePolicy({ manifestPath: options.manifestPath, policy: incumbent, split: options.split, workDirectory: join(root, "baseline"), captureSession, acss: options.acss });
   const initialFitness = incumbentEvaluation.fitness;
   const experiments: ExperimentResult[] = [];
   for (let iteration = 0; iteration < options.budget; iteration += 1) {
@@ -64,13 +66,13 @@ async function runResearchWithSession(options: ResearchOptions, captureSession: 
     const directory = join(experimentsDirectory, experimentId);
     await ensureDirectory(directory);
     await writeJsonAtomic(join(directory, "candidate-policy.json"), mutation.candidate);
-    const candidateEvaluation = await evaluatePolicy({ manifestPath: options.manifestPath, policy: mutation.candidate, split: options.split, workDirectory: join(directory, "evaluation"), captureSession });
+    const candidateEvaluation = await evaluatePolicy({ manifestPath: options.manifestPath, policy: mutation.candidate, split: options.split, workDirectory: join(directory, "evaluation"), captureSession, acss: options.acss });
     const controlsPass = candidateEvaluation.mutationControlRecall === 1;
     const improved = compareFitness(candidateEvaluation.fitness, incumbentEvaluation.fitness) < 0;
     const keep = controlsPass && improved && candidateEvaluation.frozenEvaluatorHash === incumbentEvaluation.frozenEvaluatorHash;
     let holdoutFitness: ExperimentResult["holdoutFitness"];
     if ((iteration + 1) % options.hiddenHoldoutEvery === 0) {
-      const holdout = await evaluatePolicy({ manifestPath: options.manifestPath, policy: mutation.candidate, split: "holdout", workDirectory: join(directory, "holdout"), captureSession });
+      const holdout = await evaluatePolicy({ manifestPath: options.manifestPath, policy: mutation.candidate, split: "holdout", workDirectory: join(directory, "holdout"), captureSession, acss: options.acss });
       holdoutFitness = holdout.fitness;
     }
     const experiment = ExperimentResultSchema.parse({

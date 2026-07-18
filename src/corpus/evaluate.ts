@@ -14,6 +14,7 @@ import { NaturalisticCorpusManifestSchema, type NaturalisticArtifact, type Natur
 import { writeNaturalisticTrajectories } from "./trajectories.ts";
 import { parseFragment, type DefaultTreeAdapterMap } from "parse5";
 import { nativeDestinationFromHandler } from "../compiler/behavior.ts";
+import type { AutomaticCssBundle } from "../acss/schema.ts";
 
 export type NaturalisticEvaluationOptions = {
   manifestPath: string;
@@ -25,6 +26,7 @@ export type NaturalisticEvaluationOptions = {
   capture: boolean;
   captureLive: boolean;
   browserExecutable?: string | undefined;
+  acss?: AutomaticCssBundle | undefined;
 };
 
 type Preservation = { textRecall: number; urlRecall: number; formRecall: number; sourceTextTokens: number; sourceUrls: number; sourceFormControls: number };
@@ -269,7 +271,7 @@ async function evaluateArtifact(input: {
     await writeTextAtomic(materializedHtmlPath, compilerHtml);
     await writeTextAtomic(materializedCssPath, compilerCss);
     const registry = extractTokenRegistry(compilerCss);
-    const compiled = await compileStaticPage({ htmlPath: materializedHtmlPath, cssPath: materializedCssPath, tokenRegistry: registry });
+    const compiled = await compileStaticPage({ htmlPath: materializedHtmlPath, cssPath: materializedCssPath, tokenRegistry: registry, ...(options.acss ? { fallbackTokenRegistry: options.acss.registry, frameworkClassCatalog: options.acss.catalog.utilityClasses } : {}) });
     if (compiled.plan.source.executableScripts.length) result.requiredActions.push(`${compiled.plan.source.executableScripts.length} executable script(s) were excluded; reimplement approved behavior from typed interaction contracts.`);
     const unresolvedEvents = compiled.plan.source.executableEvents.filter((event) => !event.nativeDestination);
     if (unresolvedEvents.length) result.requiredActions.push(`${unresolvedEvents.length} inline event handler(s) were excluded; reimplement approved behavior from typed interaction contracts.`);
@@ -402,6 +404,7 @@ export async function evaluateNaturalisticCorpus(options: NaturalisticEvaluation
   const evaluationId = `naturalistic-${crypto.randomUUID()}`;
   const outputDirectory = resolve(options.outputDirectory, evaluationId);
   await ensureDirectory(outputDirectory);
+  if (options.acss) await writeJsonAtomic(join(outputDirectory, "acss-provenance.json"), { ...options.acss.provenance, role: "naturalistic-compiler-design-system-fallback" });
   const session = options.capture ? await openCaptureSession(options.browserExecutable) : undefined;
   let liveOutcomes: NaturalisticEvaluation["liveOutcomes"] = [];
   const liveCaptures = new Map<string, CaptureResult>();
@@ -428,7 +431,7 @@ export async function evaluateNaturalisticCorpus(options: NaturalisticEvaluation
       evaluationId,
       createdAt: new Date().toISOString(),
       corpusFingerprint: manifest.fingerprint,
-      evaluatorHash: await naturalEvaluatorHash(options.manifestPath),
+      evaluatorHash: options.acss ? hashJson({ evaluator: await naturalEvaluatorHash(options.manifestPath), automaticcss: { sourceHash: options.acss.provenance.sourceHash, registryHash: options.acss.provenance.registryHash, moduleMode: options.acss.provenance.moduleMode } }) : await naturalEvaluatorHash(options.manifestPath),
       split: options.split,
       fixtureSelectionHash: hashJson(selected.map((artifact) => artifact.artifactId)),
       projectIds: projects.map((project) => project.projectId),

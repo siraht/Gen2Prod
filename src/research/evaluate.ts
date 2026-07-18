@@ -14,6 +14,7 @@ import { EVALUATOR_MUTATIONS } from "../validation/mutations.ts";
 import { ensureVisualBenchmark, evaluateCandidateVisuals, VISUAL_VIEWPORTS } from "../synthetic/visual-benchmark.ts";
 import { openCaptureSession, type CaptureSession } from "../evidence/capture.ts";
 import { imageDifference, imageDifferenceMasked } from "../validation/visual.ts";
+import type { AutomaticCssBundle } from "../acss/schema.ts";
 
 export type EvaluateOptions = {
   manifestPath: string;
@@ -21,6 +22,7 @@ export type EvaluateOptions = {
   split: "train" | "validation" | "holdout" | "all";
   workDirectory: string;
   captureSession?: CaptureSession;
+  acss?: AutomaticCssBundle | undefined;
 };
 
 function flattenDom(root: DomNode): DomNode[] {
@@ -267,11 +269,13 @@ async function evaluateFixtureCase(options: {
   gold: NormalForm;
   policy: TransformationPolicy;
   captureSession: CaptureSession;
+  acss?: AutomaticCssBundle | undefined;
 }): Promise<EvaluatedFixtureCase> {
   const compiled = await compileStaticPage({
     htmlPath: join(options.fixtureDirectory, options.htmlName),
     cssPath: join(options.fixtureDirectory, options.cssName),
     tokenRegistry: join(options.fixtureDirectory, "fixture.gold.tokens.json"),
+    ...(options.acss ? { fallbackTokenRegistry: options.acss.registry, frameworkClassCatalog: options.acss.catalog.utilityClasses } : {}),
     policy: options.policy,
   });
   const report = await validate(contextFromCompiled(compiled, { minBemCoverage: 0.95, minTokenCoverage: 0.95, maxVisualPixelRatio: options.policy.thresholds.visualPixelRatio, provisional: true }));
@@ -396,6 +400,7 @@ export async function evaluatePolicy(options: EvaluateOptions): Promise<Evaluati
   const controlFixture = manifest.fixtures.find((fixture) => fixture.archetype === "hero-cta") ?? manifest.fixtures[0];
   if (!controlFixture) throw new Error("Mutation control base fixture was not found");
   await ensureDirectory(options.workDirectory);
+  if (options.acss) await writeJsonAtomic(join(options.workDirectory, "acss-provenance.json"), { ...options.acss.provenance, role: "frozen-research-design-system-fallback" });
   const fixtureResults: FixtureEvaluation[] = [];
   const captureSession = options.captureSession ?? await openCaptureSession();
   const ownsCaptureSession = !options.captureSession;
@@ -403,15 +408,16 @@ export async function evaluatePolicy(options: EvaluateOptions): Promise<Evaluati
   let visualMutationCaught = false;
   try {
     for (const fixture of manifest.fixtures) await ensureVisualBenchmark(resolve(fixture.directory), undefined, captureSession);
-    evaluatorHash = await frozenEvaluatorHash(options.manifestPath, manifest);
+    const codeAndCorpusHash = await frozenEvaluatorHash(options.manifestPath, manifest);
+    evaluatorHash = options.acss ? hashJson({ codeAndCorpusHash, automaticcss: { sourceHash: options.acss.provenance.sourceHash, registryHash: options.acss.provenance.registryHash, moduleMode: options.acss.provenance.moduleMode } }) : codeAndCorpusHash;
     for (const fixture of selected) {
       const fixtureStarted = performance.now();
       const directory = resolve(fixture.directory);
       const gold = await readJson<NormalForm>(join(directory, "fixture.gold.semantic.json"));
       const fixtureWorkDirectory = join(options.workDirectory, fixture.id);
       const cases = await Promise.all([
-        evaluateFixtureCase({ label: "marked", fixtureDirectory: directory, fixtureWorkDirectory, htmlName: "fixture.corrupted.html", cssName: "corrupted.css", gold, policy, captureSession }),
-        evaluateFixtureCase({ label: "unmarked", fixtureDirectory: directory, fixtureWorkDirectory, htmlName: "fixture.unmarked.html", cssName: "unmarked.css", gold, policy, captureSession }),
+        evaluateFixtureCase({ label: "marked", fixtureDirectory: directory, fixtureWorkDirectory, htmlName: "fixture.corrupted.html", cssName: "corrupted.css", gold, policy, captureSession, acss: options.acss }),
+        evaluateFixtureCase({ label: "unmarked", fixtureDirectory: directory, fixtureWorkDirectory, htmlName: "fixture.unmarked.html", cssName: "unmarked.css", gold, policy, captureSession, acss: options.acss }),
       ]);
       const marked = cases[0]!;
       const unmarked = cases[1]!;
@@ -487,7 +493,7 @@ export async function evaluatePolicy(options: EvaluateOptions): Promise<Evaluati
     if (ownsCaptureSession) await captureSession.close();
   }
   const controlDirectory = resolve(controlFixture.directory);
-  const mutationBase = await compileStaticPage({ htmlPath: join(controlDirectory, "fixture.gold.html"), cssPath: join(controlDirectory, "gold.css"), tokenRegistry: join(controlDirectory, "fixture.gold.tokens.json"), policy });
+  const mutationBase = await compileStaticPage({ htmlPath: join(controlDirectory, "fixture.gold.html"), cssPath: join(controlDirectory, "gold.css"), tokenRegistry: join(controlDirectory, "fixture.gold.tokens.json"), ...(options.acss ? { fallbackTokenRegistry: options.acss.registry, frameworkClassCatalog: options.acss.catalog.utilityClasses } : {}), policy });
   const normalizedCost = policyCost(policy);
   const staticMutationRecall = await evaluateMutationControls(mutationBase, policy.thresholds.visualPixelRatio);
   const mutationControlRecall = (staticMutationRecall * EVALUATOR_MUTATIONS.length + (visualMutationCaught ? 1 : 0)) / (EVALUATOR_MUTATIONS.length + 1);

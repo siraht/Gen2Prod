@@ -16,6 +16,7 @@ export async function prepareConfiguredAutomaticCss(
   return prepareAutomaticCss({
     sourcePath,
     outputDirectory: resolve(config.workspace, "acss"),
+    mode: config.designSystem?.mode ?? "full",
     force: options.force,
   });
 }

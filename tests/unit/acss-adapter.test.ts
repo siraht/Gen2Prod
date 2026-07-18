@@ -21,6 +21,7 @@ describe("Automatic.css release adapter", () => {
     const outputDirectory = join(directory, "adapter");
     const bundle = await prepareAutomaticCss({ sourcePath, outputDirectory });
     expect(bundle.provenance.version).toBe("4.0.0-test");
+    expect(bundle.provenance.moduleMode).toBe("full");
     expect(bundle.provenance.sourceHash).toHaveLength(64);
     expect(bundle.catalog.license.name).toBe("GPLv2 or later");
     expect(bundle.catalog.utilityClasses).toEqual(["bg--primary", "grid--3", "text--m"]);
