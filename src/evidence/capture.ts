@@ -76,6 +76,11 @@ async function materializeScrollStates(page: Page): Promise<number> {
     for (const position of positions) { scrollTo(0, position); await settle(); }
     scrollTo(0, 0);
     await settle();
+    const hasSmoothScrollRuntime = [...document.scripts].some((script) => /(?:lenis|gsap|scrolltrigger)/i.test(`${script.src} ${script.textContent ?? ""}`));
+    if (hasSmoothScrollRuntime) {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await settle();
+    }
     return positions.length;
   });
 }
