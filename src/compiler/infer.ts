@@ -180,7 +180,7 @@ function elementName(node: DomNode, role: string, block: string, classRoles: Map
     "email-input": "input", "email-label": "label", "form-submit": "action", "navigation-title": "title",
   };
   if (aliases[nodeId]) return aliases[nodeId];
-  const roleAliases: Record<string, string> = { "primary-heading": "title", "section-heading": "title", "card-heading": "title", "supporting-copy": block === "hero" ? "lede" : "text", "body-copy": "text", "price": "price", "layout-container": "inner", "content-stack": "content", "action-group": "actions", "visual-container": "media", "meaningful-image": "image", "navigation": "nav", "link": "link", "list": "list", "list-item": "item", "field-label": "label", "field-input": "input", "disclosure": "item", "disclosure-button": "question", "disclosure-answer": "answer", "attribution": "attribution", "quote": "quote" };
+  const roleAliases: Record<string, string> = { "primary-heading": "title", "section-heading": "title", "card-heading": "title", "supporting-copy": block === "hero" ? "lede" : "text", "body-copy": "text", "price": "price", "layout-container": "inner", "content-stack": "content", "action-group": "actions", "visual-container": "media", "meaningful-image": "image", "navigation": "nav", "link": "link", "button": "button", "dialog": "dialog", "list": "list", "list-item": "item", "field-label": "label", "field-input": "input", "disclosure": "item", "disclosure-button": "question", "disclosure-answer": "answer", "attribution": "attribution", "quote": "quote" };
   if (roleAliases[role]) return roleAliases[role];
   if (/^faq-summary-?\d*$/.test(nodeId)) return "question";
   if (/^faq-answer-?\d*$/.test(nodeId)) return "answer";
