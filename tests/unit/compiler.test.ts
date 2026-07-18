@@ -140,12 +140,13 @@ describe("static compilation", () => {
   test("preserves third-party icon font classes as explicit style-contract mixes", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-icon-contract-"));
     const htmlPath = join(directory, "page.html");
-    await Bun.write(htmlPath, '<!doctype html><html><head><title>Icons</title><meta name="description" content="Icon contract fixture"><link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet"><style>.toolbar{display:flex}.material-icons-outlined{font-size:20px}</style></head><body><main><h1>Icons</h1><div class="toolbar"><span class="material-icons-outlined">settings</span></div></main></body></html>');
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Icons</title><meta name="description" content="Icon contract fixture"><link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet"><style>.toolbar{display:flex}.material-icons-outlined.small{font-size:20px}.material-icons-outlined.large{font-size:32px}</style></head><body><main><h1>Icons</h1><div class="toolbar"><span class="material-icons-outlined small">settings</span><span class="material-icons-outlined large">search</span></div></main></body></html>');
     const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
     expect(output.html).toContain("material-icons-outlined");
     expect(output.html).toMatch(/class="[^"]*__[^"]* material-icons-outlined"/);
     expect(output.plan.bem.blocks.flatMap((block) => block.nodes).some((node) => node.className === "material-icons-outlined" && node.kind === "mix")).toBeTrue();
     expect(output.plan.components.some((component) => component.name === "material-icons-outlined")).toBeFalse();
+    expect(output.html).toMatch(/class="[^\"]*__[^\"]*--[^\"]* material-icons-outlined"/);
     const canonicalHtml = join(directory, "canonical.html");
     const canonicalCss = join(directory, "canonical.css");
     await Bun.write(canonicalHtml, output.html);

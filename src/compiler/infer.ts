@@ -479,6 +479,15 @@ export function differentiateStyleVariants(root: PlannedNode, styles: StyleInten
       }
     }
   }
+  // Variant modifiers are discovered after the initial class plan. Reapply
+  // the canonical ownership order so external presentation mixes remain last
+  // on both the first compile and every subsequent compile.
+  for (const node of plannedNodes(root)) {
+    node.classes = [
+      ...node.classes.filter((className) => !externalPresentationClass(className)),
+      ...node.classes.filter((className) => externalPresentationClass(className)),
+    ];
+  }
 }
 
 export function inferComponents(plan: SemanticPlan): ComponentContract[] {
