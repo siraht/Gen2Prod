@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "0.1.0",
+  "targets": [
+    { "targetId": "getframes-home", "projectId": "getframes", "url": "https://getframes.io/", "split": "train" },
+    { "targetId": "automaticcss-home", "projectId": "automaticcss", "url": "https://automaticcss.com/", "split": "train" },
+    { "targetId": "digitalgravy-home", "projectId": "digitalgravy", "url": "https://digitalgravy.co/", "split": "train" },
+    { "targetId": "apple-home", "projectId": "apple", "url": "https://www.apple.com/", "split": "validation" },
+    { "targetId": "corrida-home", "projectId": "corrida", "url": "https://www.corridaboulder.com/", "split": "validation" },
+    { "targetId": "stripe-home", "projectId": "stripe", "url": "https://stripe.com/", "split": "holdout" },
+    { "targetId": "thekitchen-home", "projectId": "thekitchen", "url": "https://www.thekitchen.com/", "split": "holdout" }
+  ]
+}
