@@ -37,7 +37,7 @@ export type NaturalisticFixtureEvaluation = {
   inputPath: string;
   generatorFamily?: string;
   status: "evaluated" | "failed";
-  materialization?: { staticTextTokens: number; renderedTextTokens: number; scriptsRemoved: number; inlineEventHandlers: number; styleSheetCount: number; inaccessibleStyleSheets: string[]; canvasSnapshots: number; canvasSnapshotFailures: number; sourceMode: "static" | "browser-materialized" };
+  materialization?: { staticTextTokens: number; renderedTextTokens: number; scriptsRemoved: number; inlineEventHandlers: number; scrollPositionsVisited: number; styleSheetCount: number; inaccessibleStyleSheets: string[]; canvasSnapshots: number; canvasSnapshotFailures: number; sourceMode: "static" | "browser-materialized" };
   preservation?: Preservation;
   gates?: {
     passed: boolean;
@@ -259,7 +259,7 @@ async function evaluateArtifact(input: {
     const sourceMode = rendered && (renderedTokenCount > staticTokenCount || rendered.scriptsRemoved > 0 || rendered.css.length > 0) ? "browser-materialized" as const : "static" as const;
     const compilerHtml = sourceMode === "browser-materialized" ? rendered!.html : staticHtml;
     const compilerCss = sourceMode === "browser-materialized" ? rendered!.css : "";
-    result.materialization = { staticTextTokens: staticTokenCount, renderedTextTokens: renderedTokenCount, scriptsRemoved: rendered?.scriptsRemoved ?? 0, inlineEventHandlers: rendered?.inlineEventHandlers ?? 0, styleSheetCount: rendered?.styleSheetCount ?? 0, inaccessibleStyleSheets: rendered?.inaccessibleStyleSheets ?? [], canvasSnapshots: rendered?.canvasSnapshots ?? 0, canvasSnapshotFailures: rendered?.canvasSnapshotFailures ?? 0, sourceMode };
+    result.materialization = { staticTextTokens: staticTokenCount, renderedTextTokens: renderedTokenCount, scriptsRemoved: rendered?.scriptsRemoved ?? 0, inlineEventHandlers: rendered?.inlineEventHandlers ?? 0, scrollPositionsVisited: rendered?.scrollPositionsVisited ?? 0, styleSheetCount: rendered?.styleSheetCount ?? 0, inaccessibleStyleSheets: rendered?.inaccessibleStyleSheets ?? [], canvasSnapshots: rendered?.canvasSnapshots ?? 0, canvasSnapshotFailures: rendered?.canvasSnapshotFailures ?? 0, sourceMode };
     if (rendered?.scriptsRemoved) result.requiredActions.push(`${rendered.scriptsRemoved} executable script(s) require explicit interaction contracts; browser materialization retained their rendered DOM but did not copy code.`);
     if (rendered?.inlineEventHandlers) result.requiredActions.push(`${rendered.inlineEventHandlers} inline event handler(s) require explicit interaction contracts; executable attribute code was not copied.`);
     if (rendered?.inaccessibleStyleSheets.length) result.requiredActions.push(`Could not inspect ${rendered.inaccessibleStyleSheets.length} stylesheet(s): ${rendered.inaccessibleStyleSheets.join(", ")}`);

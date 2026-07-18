@@ -21,3 +21,13 @@ test("captures stabilized browser, DOM, AX, style, SEO and screenshot evidence",
   expect(capture.captures[0]!.renderedSource?.css).toContain("color: blue");
   expect(await Bun.file(capture.captures[0]!.screenshot).exists()).toBeTrue();
 });
+
+test("visits scroll states before freezing observer-driven rendered DOM", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "gen2prod-scroll-capture-"));
+  const page = join(directory, "index.html");
+  await Bun.write(page, '<!doctype html><html><head><title>Scroll state</title><meta name="description" content="scroll"><style>body{min-height:2400px}.late{margin-top:1500px;opacity:0}.late.revealed{opacity:1}</style></head><body><main><h1>Scroll state</h1><section class="late">Loaded later</section></main><script>const target=document.querySelector(".late");const observer=new IntersectionObserver(entries=>{if(entries.some(entry=>entry.isIntersecting)){target.classList.add("revealed");observer.disconnect()}});observer.observe(target)</script></body></html>');
+  const capture = await capturePage({ url: pathToFileURL(page).href, outputDirectory: join(directory, "capture"), viewports: [360], states: ["default"], themes: ["light"], collectRenderedSource: true });
+  expect(capture.captures[0]!.renderedSource?.html).toContain('class="late revealed"');
+  expect(capture.captures[0]!.renderedSource?.scriptsRemoved).toBe(1);
+  expect(capture.captures[0]!.renderedSource?.scrollPositionsVisited).toBeGreaterThan(1);
+});

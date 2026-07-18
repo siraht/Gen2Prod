@@ -12,6 +12,7 @@ export type CaptureOptions = {
   browserExecutable?: string | undefined;
   collectRenderedSource?: boolean | undefined;
   viewportHeight?: number | undefined;
+  materializeScrollStates?: boolean | undefined;
 };
 
 export type RenderedSource = {
@@ -21,6 +22,7 @@ export type RenderedSource = {
   inaccessibleStyleSheets: string[];
   scriptsRemoved: number;
   inlineEventHandlers: number;
+  scrollPositionsVisited: number;
   canvasSnapshots: number;
   canvasSnapshotFailures: number;
 };
@@ -63,6 +65,19 @@ async function captureAccessibility(page: Page): Promise<unknown[]> {
   const tree = await session.send("Accessibility.getFullAXTree");
   await session.detach();
   return tree.nodes as unknown[];
+}
+
+async function materializeScrollStates(page: Page): Promise<number> {
+  return page.evaluate(async () => {
+    const maximum = Math.max(0, document.documentElement.scrollHeight - innerHeight);
+    const increment = Math.max(1, Math.floor(innerHeight * 0.8));
+    const positions = [...new Set([...Array.from({ length: Math.ceil(maximum / increment) + 1 }, (_, index) => Math.min(maximum, index * increment)), maximum])];
+    const settle = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+    for (const position of positions) { scrollTo(0, position); await settle(); }
+    scrollTo(0, 0);
+    await settle();
+    return positions.length;
+  });
 }
 
 async function captureDom(page: Page): Promise<unknown[]> {
@@ -134,6 +149,7 @@ async function captureRenderedSource(page: Page): Promise<RenderedSource> {
       inaccessibleStyleSheets,
       scriptsRemoved: scripts.length,
       inlineEventHandlers,
+      scrollPositionsVisited: 0,
       canvasSnapshots,
       canvasSnapshotFailures,
     };
@@ -149,7 +165,8 @@ async function captureOne(browser: Browser, options: CaptureOptions, viewport: n
   await page.goto(options.url, { waitUntil: "load" });
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   await page.evaluate(() => document.fonts.ready);
-  const renderedSource = options.collectRenderedSource ? await captureRenderedSource(page) : undefined;
+  const scrollPositionsVisited = options.materializeScrollStates === false ? 0 : await materializeScrollStates(page);
+  const renderedSource = options.collectRenderedSource ? { ...await captureRenderedSource(page), scrollPositionsVisited } : undefined;
   await stabilize(page, theme);
   if (state === "focus-visible") await page.keyboard.press("Tab");
   if (state === "open") await page.locator("details").first().evaluate((element) => element.setAttribute("open", ""));
