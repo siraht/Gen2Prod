@@ -1,0 +1,31 @@
+import { expect, test } from "bun:test";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { createArchetypes } from "../../src/synthetic/archetypes.ts";
+import { renderGold } from "../../src/synthetic/render.ts";
+import { compileStaticPage } from "../../src/compiler/pipeline.ts";
+import { capturePage } from "../../src/evidence/capture.ts";
+import { visualTargetFromImage } from "../../src/convergence/target.ts";
+import { convergeVisualTarget } from "../../src/convergence/loop.ts";
+
+test("stops discrete convergence when the approved target threshold is met", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "gen2prod-convergence-"));
+  const spec = createArchetypes()[0]!;
+  const gold = renderGold(spec);
+  const sourceHtml = join(directory, "source.html");
+  const sourceCss = join(directory, "source.css");
+  await Bun.write(sourceHtml, gold.html.replace("gold.css", "source.css"));
+  await Bun.write(sourceCss, gold.css);
+  const compiled = await compileStaticPage({ htmlPath: sourceHtml, cssPath: sourceCss, tokenRegistry: spec.tokens });
+  const candidateHtml = join(directory, "candidate.html");
+  await Bun.write(candidateHtml, compiled.html);
+  await Bun.write(join(directory, "page.css"), compiled.css);
+  const targetCapture = await capturePage({ url: pathToFileURL(candidateHtml).href, outputDirectory: join(directory, "target-capture"), viewports: [360], states: ["default"], themes: ["light"] });
+  const target = await visualTargetFromImage(targetCapture.captures[0]!.screenshot, 360);
+  const result = await convergeVisualTarget(compiled, target, join(directory, "converge"), { maxIterations: 2, threshold: 0.001 });
+  expect(result.finalLoss).toBeLessThanOrEqual(0.001);
+  expect(result.iterations).toHaveLength(0);
+  expect(result.stopReason).toContain("threshold met");
+});
