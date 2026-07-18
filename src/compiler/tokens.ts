@@ -345,7 +345,10 @@ function cascadeWins(candidate: CssDeclaration, candidateOrder: number, current:
 }
 
 function aliasFallbackEligible(selector: string): boolean {
-  return !/::|:(?:hover|focus|focus-visible|focus-within|active|visited|checked|disabled|open|indeterminate)\b/i.test(selector);
+  // Alias recovery is only safe for a selector that addresses the aliased
+  // element itself. Descendant/combinator rules are handled by selectorMatches
+  // and must never be flattened onto the owning BEM block.
+  return !/[\s>+~]|:/.test(selector);
 }
 
 type StyleCondition = NonNullable<StyleIntent["declarations"][number]["condition"]>;

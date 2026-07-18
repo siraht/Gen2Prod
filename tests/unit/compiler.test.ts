@@ -269,6 +269,17 @@ describe("static compilation", () => {
     expect(byNode.get("second")?.color).toBe("#123456");
     expect(byNode.get("main")?.["box-sizing"]).toBe("border-box");
   });
+
+  test("does not flatten descendant declarations onto an aliased block root", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-descendant-alias-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Descendants</title><meta name="description" content="Descendant alias fixture"><style>.metric{padding:8px}.metric strong{font-size:40px}</style></head><body><main><section><h1>Descendants</h1><div class="metric"><strong>42</strong></div></section></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    const metricNodeId = output.plan.source.dom.children[0]?.children[0]?.children[1]?.nodeId;
+    const metric = output.plan.styles.find((style) => style.nodeId === metricNodeId);
+    expect(metric?.declarations.some((declaration) => declaration.property === "padding")).toBeTrue();
+    expect(metric?.declarations.some((declaration) => declaration.property === "font-size")).toBeFalse();
+  });
 });
 
 function inputTokens() {
