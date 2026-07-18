@@ -205,6 +205,7 @@ async function accessibilityGate(context: ValidationContext): Promise<GateResult
     const emittedHooks = new Set(elements.map((element) => element.attributes["data-hook"]).filter(Boolean));
     const missingHooks = expectedHooks.filter((hook) => !emittedHooks.has(hook));
     const focusSuppressions = selectorClasses(context.css).rawDeclarations.filter((declaration) => /:focus(?:-visible)?\b/.test(declaration.selector) && declaration.property === "outline" && /^(?:none|0(?:px)?)$/i.test(declaration.value.trim()));
+    const positiveTabIndexes = elements.filter((element) => Number(element.attributes.tabindex) > 0);
     const staticIssues = [
       ...anchors.filter((element) => !element.attributes.href).map(() => "anchor missing href"),
       ...buttons.filter((element) => !element.attributes.type).map(() => "button missing explicit type"),
@@ -217,6 +218,7 @@ async function accessibilityGate(context: ValidationContext): Promise<GateResult
       ...divButtons.map(() => "noninteractive element styled as button"),
       ...missingHooks.map((hook) => `behavior hook removed: ${hook}`),
       ...focusSuppressions.map(() => "focus outline suppressed without a verified replacement"),
+      ...positiveTabIndexes.map((element) => `${element.tag} uses positive tabindex ${element.attributes.tabindex}`),
     ];
     const axeCritical = context.accessibility?.violations.filter((violation) => violation.impact === "critical" || violation.impact === "serious") ?? [];
     const keyboardPassed = !context.accessibility || (context.accessibility.keyboard.tabStopsReached >= Math.min(context.accessibility.keyboard.focusables, 1) && context.accessibility.interactions.disclosureToggle);
@@ -226,7 +228,7 @@ async function accessibilityGate(context: ValidationContext): Promise<GateResult
       assertion("keyboard", keyboardPassed, "critical", keyboardPassed ? "Keyboard interaction smoke tests pass" : "Keyboard path or disclosure behavior failed"),
       assertion("focus-visible", !context.accessibility || context.accessibility.keyboard.focusVisibleMissing.length === 0, "error", context.accessibility?.keyboard.focusVisibleMissing.length ? `Missing visible focus: ${context.accessibility.keyboard.focusVisibleMissing.join(", ")}` : "Focus-visible evidence passes"),
       assertion("manual-review", true, "info", "Manual assistive-technology review remains explicitly required"),
-    ], metrics: { staticAccessibilityIssues: staticIssues.length, missingBehaviorHooks: missingHooks.length, focusSuppressions: focusSuppressions.length, automatedViolations: context.accessibility?.violations.length ?? 0, seriousViolations: axeCritical.length, focusVisibleMissing: context.accessibility?.keyboard.focusVisibleMissing.length ?? 0 } };
+    ], metrics: { staticAccessibilityIssues: staticIssues.length, missingBehaviorHooks: missingHooks.length, focusSuppressions: focusSuppressions.length, positiveTabIndexes: positiveTabIndexes.length, automatedViolations: context.accessibility?.violations.length ?? 0, seriousViolations: axeCritical.length, focusVisibleMissing: context.accessibility?.keyboard.focusVisibleMissing.length ?? 0 } };
   });
 }
 

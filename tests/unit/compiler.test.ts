@@ -194,6 +194,17 @@ describe("static compilation", () => {
     expect(output.html).toContain('content="A description with an apostrophe\'s stable parsing."');
   });
 
+  test("normalizes positive tabindex into document-order keyboard flow", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-tab-order-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Tab order</title><meta name="description" content="Keyboard order fixture"></head><body><main><h1>Keyboard flow</h1><a href="#next" tabindex="9">Next</a><div tabindex="4">Custom focus target</div></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    expect(output.html).toContain('<a href="#next"');
+    expect(output.html).not.toMatch(/<a[^>]+tabindex/);
+    expect(output.html).toMatch(/<div tabindex="0"/);
+    expect(output.plan.semantics.review.filter((item) => item.concern.includes("positive tabindex"))).toHaveLength(2);
+  });
+
   test("snaps only complete CSS atoms inside compound values", () => {
     const registry = inputTokens();
     const untouched = bindValue("gap", "clamp(1.5rem, 4vw, 4rem)", registry);

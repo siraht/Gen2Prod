@@ -261,6 +261,11 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
     attrs.href = attrs["data-g2p-destination"];
     delete attrs["data-g2p-destination"];
   }
+  if (attrs.tabindex && Number(attrs.tabindex) > 0) {
+    if (["a", "button", "input", "select", "textarea", "summary"].includes(semantic.tag)) delete attrs.tabindex;
+    else attrs.tabindex = "0";
+    review.push({ nodeId: node.nodeId, concern: "positive tabindex was normalized to preserve logical document-order navigation", evidenceNeeded: ["keyboard-flow verification"] });
+  }
   if (["input", "select", "textarea"].includes(semantic.tag) && !attrs["aria-label"] && attrs.name) attrs["aria-label"] = attrs.name.replace(/[-_]+/g, " ").replace(/^./, (value) => value.toUpperCase());
   if (semantic.tag === "img" && !("alt" in attrs)) {
     attrs.alt = "";

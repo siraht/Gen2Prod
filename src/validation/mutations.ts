@@ -17,6 +17,7 @@ export const EVALUATOR_MUTATIONS: EvaluatorMutation[] = [
   { id: "leaked-secret", expectedGate: "H", apply: (input) => ({ ...input, html: `${input.html}\n<!-- api_key=sk-abcdefghijklmnopqrstuvwxyz -->` }) },
   { id: "skip-heading-level", expectedGate: "F", apply: (input) => ({ ...input, html: input.html.replace("<h1", "<h3").replace("</h1>", "</h3>") }) },
   { id: "suppress-focus-outline", expectedGate: "E", apply: (input) => ({ ...input, scss: `${input.scss}\n.button:focus { outline: none; }`, css: `${input.css}\n.button:focus { outline: none; }` }) },
+  { id: "positive-tabindex", expectedGate: "E", apply: (input) => ({ ...input, html: input.html.replace(/<(a|button)\b/, '<$1 tabindex="7"') }) },
   { id: "duplicate-false-component", expectedGate: "I", apply: (input) => {
     const scssDeclarations = input.scss.match(/\.button(?:--[a-z0-9-]+)?\s*\{([^{}]+)\}/)?.[1] ?? "display: inline-flex;";
     const cssDeclarations = input.css.match(/\.button(?:--[a-z0-9-]+)?\s*\{([^{}]+)\}/)?.[1] ?? "display: inline-flex;";
