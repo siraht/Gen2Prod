@@ -105,3 +105,28 @@ test("records accepted production runs as distillation trajectories", async () =
   expect(await Bun.file(join(run.runDirectory, "capture", "diff", "baseline-vs-candidate-360-light-default.png")).exists()).toBeTrue();
   expect(await Bun.file(join(run.runDirectory, "distilled-controller.json")).exists()).toBeTrue();
 });
+
+test("keeps a gate-improving localized repair in the production run", async () => {
+  const root = await mkdtemp(join(tmpdir(), "gen2prod-production-repair-"));
+  const input = join(root, "page.html");
+  await Bun.write(input, '<!doctype html><html><head><title>Repair run</title><meta name="description" content="Repair run fixture"></head><body><main><h1>Repair run</h1><a href="https://example.com" target="_blank">Reference</a></main></body></html>');
+  const config: Gen2ProdConfig = {
+    schemaVersion: "0.1.0",
+    mode: "legacy-conversion",
+    profile: "migration",
+    workspace: join(root, "workspace"),
+    capture: { viewports: [360], themes: ["light"], states: ["default"], browserExecutable: "auto" },
+    policy: { file: "src/research/policy.ts" },
+    research: { budget: 1, split: "validation", hiddenHoldoutEvery: 1 },
+    validation: { wcag: "WCAG2AA", provisionalThresholds: true, maxVisualPixelRatio: 0.01, minBemCoverage: 0.95, minTokenCoverage: 0.95 },
+  };
+
+  const run = await executeRun({ input, mode: "legacy-conversion", profile: "migration", capture: false, config, policy: defaultPolicy });
+  const history = await Bun.file(join(run.runDirectory, "repair-history.json")).json() as { attempts: { outcome: string; hardFailuresBefore: number; hardFailuresAfter: number }[] };
+
+  expect(run.compiled.html).toMatch(/rel="noopener"[^>]*target="_blank"|target="_blank"[^>]*rel="noopener"/);
+  expect(history.attempts).toHaveLength(1);
+  expect(history.attempts[0]?.outcome).toBe("keep");
+  expect(history.attempts[0]!.hardFailuresAfter).toBeLessThan(history.attempts[0]!.hardFailuresBefore);
+  expect(run.validation.gates.find((gate) => gate.gate === "H")?.passed).toBeTrue();
+});

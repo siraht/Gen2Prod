@@ -17,8 +17,8 @@ import { capturePage, type CaptureResult } from "../evidence/capture.ts";
 import { cropUncertainRegions } from "../evidence/crops.ts";
 import { generateGreenfield } from "../greenfield/pipeline.ts";
 import { auditAccessibility } from "../validation/accessibility.ts";
-import { validate, type ValidationReport } from "../validation/gates.ts";
-import { planLocalizedRepairs } from "../validation/repair.ts";
+import { contextFromCompiled, validate, type ValidationReport } from "../validation/gates.ts";
+import { applyAutomaticRepairs, planLocalizedRepairs } from "../validation/repair.ts";
 import { visualTargetFromImage } from "../convergence/target.ts";
 import { convergeVisualTarget } from "../convergence/loop.ts";
 import { generateProductReports } from "../report/generate.ts";
@@ -130,6 +130,24 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
     availableRuntimeVariables: compiledInput.acss.registry.tokens.length,
   });
   let compiled = compiledInput.compiled;
+  await replay.append(event(id, options.mode === "greenfield" ? "strategy-to-normal-form" : "source-ingestion", policyHash, "accepted", "Typed input artifacts and authorities were materialized."));
+  const structuralThresholds = { minBemCoverage: options.config.validation.minBemCoverage, minTokenCoverage: options.config.validation.minTokenCoverage, maxVisualPixelRatio: options.config.validation.maxVisualPixelRatio, provisional: options.config.validation.provisionalThresholds };
+  const repairHistory: { attempt: number; applied: ReturnType<typeof planLocalizedRepairs>; changedNodes: string[]; hardFailuresBefore: number; hardFailuresAfter: number; outcome: "keep" | "revert" }[] = [];
+  let preflight = await validate(contextFromCompiled(compiled, structuralThresholds));
+  for (let attempt = 1; attempt <= options.policy.thresholds.repairEscalation; attempt += 1) {
+    const proposed = planLocalizedRepairs(preflight.gates).filter((repair) => repair.automatic);
+    const repaired = applyAutomaticRepairs(compiled, proposed);
+    if (repaired.applied.length === 0) break;
+    const candidateReport = await validate(contextFromCompiled(repaired.compiled, structuralThresholds));
+    const before = preflight.gates.filter((gate) => gate.hard && !gate.passed).length;
+    const after = candidateReport.gates.filter((gate) => gate.hard && !gate.passed).length;
+    const keep = after < before;
+    repairHistory.push({ attempt, applied: repaired.applied, changedNodes: repaired.changedNodes, hardFailuresBefore: before, hardFailuresAfter: after, outcome: keep ? "keep" : "revert" });
+    await replay.append(event(id, "localized-preflight-repair", policyHash, keep ? "accepted" : "rejected", `${repaired.applied.map((repair) => repair.operation).join(", ")}: hard failures ${before} → ${after}.`, candidateReport.gates));
+    if (!keep) break;
+    compiled = repaired.compiled;
+    preflight = candidateReport;
+  }
   const distilledController = await loadDistilledController(resolve(options.config.workspace));
   const controllerRecommendation = recommendWithController(distilledController, compiled);
   if (distilledController?.loadErrors.length) requiredActions.push({ id: "distilled-model-refresh", summary: "Refresh incompatible distilled model artifacts", detail: distilledController.loadErrors.join("; "), blocking: false });
@@ -138,9 +156,8 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
   if (compiled.plan.source.executableScripts.length) requiredActions.push({ id: "interaction-contract-required", summary: "Reimplement source behavior from explicit interaction contracts", detail: `${compiled.plan.source.executableScripts.length} executable script(s) were intentionally excluded from deterministic output. Preserve only approved behavior through typed interaction contracts and tested modules.`, blocking: false });
   const unresolvedEvents = compiled.plan.source.executableEvents.filter((event) => !event.nativeDestination);
   if (unresolvedEvents.length) requiredActions.push({ id: "inline-interaction-contract-required", summary: "Reimplement inline behavior from explicit interaction contracts", detail: `${unresolvedEvents.length} inline event handler(s) were intentionally excluded from deterministic output. Preserve only approved behavior through typed interaction contracts and tested modules.`, blocking: false });
-  await replay.append(event(id, options.mode === "greenfield" ? "strategy-to-normal-form" : "source-ingestion", policyHash, "accepted", "Typed input artifacts and authorities were materialized."));
   await replay.append(event(id, "semantic-component-bem-token-planning", policyHash, compiled.plan.semantics.review.length ? "review" : "accepted", `${compiled.plan.semantics.confidenceSummary.high} high-confidence semantic decisions; ${compiled.plan.semantics.review.length} review items.`));
-  await Promise.all([writeTextAtomic(join(outputDirectory, "page.html"), compiled.html), writeTextAtomic(join(outputDirectory, "page.scss"), compiled.scss), writeTextAtomic(join(outputDirectory, "page.css"), compiled.css)]);
+  await Promise.all([writeTextAtomic(join(outputDirectory, "page.html"), compiled.html), writeTextAtomic(join(outputDirectory, "page.scss"), compiled.scss), writeTextAtomic(join(outputDirectory, "page.css"), compiled.css), writeJsonAtomic(join(runDirectory, "repair-history.json"), { schemaVersion: "0.1.0", attempts: repairHistory })]);
   await replay.append(event(id, "deterministic-emission", policyHash, "accepted", "Markup and Sass compiled from the accepted structured plan."));
 
   let baselineCapture: CaptureResult | undefined;

@@ -8,6 +8,7 @@ import { renderGold } from "../../src/synthetic/render.ts";
 import { compileStaticPage } from "../../src/compiler/pipeline.ts";
 import { EVALUATOR_MUTATIONS } from "../../src/validation/mutations.ts";
 import { contextFromCompiled, validate } from "../../src/validation/gates.ts";
+import { applyAutomaticRepairs, planLocalizedRepairs } from "../../src/validation/repair.ts";
 import { compareCaptures, imageDifference, imageDifferenceMasked, imageDifferenceWidthNormalized } from "../../src/validation/visual.ts";
 
 const thresholds = { minBemCoverage: 0.95, minTokenCoverage: 0.5, maxVisualPixelRatio: 0.01, provisional: true };
@@ -57,6 +58,24 @@ describe("validation gates", () => {
     const report = await validate({ ...contextFromCompiled(compiled, thresholds), html });
     const accessibility = report.gates.find((gate) => gate.gate === "E")!;
     expect(accessibility.assertions.find((item) => item.id === "static-a11y")?.passed).toBeTrue();
+  });
+
+  test("applies only schema-valid localized repairs and revalidates the result", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-local-repair-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Repair</title><meta name="description" content="Repair fixture"></head><body><main><h1>Repair</h1><a href="https://example.com" target="_blank">Reference</a></main></body></html>');
+    const compiled = await compileStaticPage({ htmlPath, tokenRegistry: { schemaVersion: "dtcg-2025-10+gen2prod-0.1.0", conformsTo: ["DTCG Format Module 2025.10"], adapterSchema: "gen2prod-token-adapter-0.1.0", tokens: [] } });
+    const before = await validate(contextFromCompiled(compiled, thresholds));
+    expect(before.gates.find((gate) => gate.gate === "H")?.passed).toBeFalse();
+
+    const proposals = planLocalizedRepairs(before.gates);
+    expect(proposals.find((repair) => repair.operation === "ensure-noopener")?.automatic).toBeTrue();
+    const repaired = applyAutomaticRepairs(compiled, proposals);
+    const after = await validate(contextFromCompiled(repaired.compiled, thresholds));
+
+    expect(repaired.changedNodes).not.toHaveLength(0);
+    expect(repaired.compiled.html).toMatch(/rel="noopener"[^>]*target="_blank"|target="_blank"[^>]*rel="noopener"/);
+    expect(after.gates.find((gate) => gate.gate === "H")?.passed).toBeTrue();
   });
 });
 
