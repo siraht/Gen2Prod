@@ -404,14 +404,14 @@ program
   .description("export datasets and train selector, verifier, and planner models")
   .option("--trajectories <path>", "research trajectory JSONL")
   .option("--naturalistic <path>", "naturalistic evaluation trajectory JSONL to blend without project leakage")
-  .option("--image <path>", "image-only reconstruction trajectory JSONL to blend without project leakage")
+  .option("--image <paths...>", "one or more image-only reconstruction trajectory JSONLs to blend without project leakage")
   .option("--output <path>", "model output directory")
   .addOption(new Option("--target <target>", "model target").choices(["selector", "verifier", "planner", "all"]).default("all"))
-  .action(async (options: { trajectories?: string; naturalistic?: string; image?: string; output?: string; target: DistillTarget }) => {
+  .action(async (options: { trajectories?: string; naturalistic?: string; image?: string[]; output?: string; target: DistillTarget }) => {
     const project = await config();
     const trajectoryPath = resolve(options.trajectories ?? join(project.workspace, "research", "trajectories.jsonl"));
     const output = resolve(options.output ?? join(project.workspace, "distilled"));
-    const trajectoryPaths = [trajectoryPath, ...(options.naturalistic ? [resolve(options.naturalistic)] : []), ...(options.image ? [resolve(options.image)] : [])];
+    const trajectoryPaths = [trajectoryPath, ...(options.naturalistic ? [resolve(options.naturalistic)] : []), ...(options.image ?? []).map((path) => resolve(path))];
     const distilled = await distill(trajectoryPaths, output, options.target);
     emit(result("distill", distilled), `Distilled ${distilled.dataset.trajectories} trajectories\nSupervised: ${distilled.dataset.supervised}\nPreferences: ${distilled.dataset.preferences}\nVerifier: ${distilled.dataset.verifier}\nModels: ${Object.keys(distilled.models).join(", ")}\nOutput: ${output}`);
   });
