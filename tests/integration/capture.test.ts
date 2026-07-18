@@ -43,3 +43,16 @@ test("freezes time and randomness across independent captures", async () => {
   expect(first.environment.fontSetHash).not.toBe("system-fonts");
   expect(first.environment.stabilization?.epochMs).toBe(Date.UTC(2024, 0, 1, 12, 0, 0));
 });
+
+test("materializes explicit dialog and hover evidence states", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "gen2prod-state-capture-"));
+  const page = join(directory, "index.html");
+  await Bun.write(page, '<!doctype html><html><head><title>States</title><meta name="description" content="states"><style>.trigger{background:#fff}.trigger:hover{background:#1f4dcc}.dialog{padding:20px}</style></head><body><main><h1>States</h1><button class="trigger" type="button">Open</button><dialog class="dialog" data-g2p-node="dialog"><h2>Confirm</h2></dialog></main></body></html>');
+  const capture = await capturePage({ url: pathToFileURL(page).href, outputDirectory: join(directory, "capture"), viewports: [360], states: ["default", "dialog-open", "hover"], themes: ["light"] });
+  const dialogNode = (state: string) => (capture.captures.find((item) => item.state === state)?.dom as { nodeId: string; visible: boolean; attributes: Record<string, string> }[]).find((node) => node.nodeId === "dialog");
+
+  expect(dialogNode("default")?.visible).toBeFalse();
+  expect(dialogNode("dialog-open")?.visible).toBeTrue();
+  expect(dialogNode("dialog-open")?.attributes.open).toBe("");
+  expect(capture.captures.find((item) => item.state === "hover")?.screenshotHash).not.toBe(capture.captures.find((item) => item.state === "default")?.screenshotHash);
+});

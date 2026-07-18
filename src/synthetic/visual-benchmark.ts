@@ -54,8 +54,8 @@ async function loadCapture(directory: string): Promise<CaptureResult> {
   return capture;
 }
 
-async function captureFixturePage(htmlPath: string, outputDirectory: string, browserExecutable?: string, session?: CaptureSession): Promise<CaptureResult> {
-  const options = { url: pathToFileURL(htmlPath).href, outputDirectory, viewports: [...VISUAL_VIEWPORTS], themes: [...VISUAL_THEMES], states: [...VISUAL_STATES], browserExecutable };
+async function captureFixturePage(htmlPath: string, outputDirectory: string, browserExecutable?: string, session?: CaptureSession, states: string[] = [...VISUAL_STATES]): Promise<CaptureResult> {
+  const options = { url: pathToFileURL(htmlPath).href, outputDirectory, viewports: [...VISUAL_VIEWPORTS], themes: [...VISUAL_THEMES], states, browserExecutable };
   return session ? session.capture(options) : capturePage(options);
 }
 
@@ -63,10 +63,18 @@ export async function ensureVisualBenchmark(fixtureDirectory: string, browserExe
   const baselinePath = join(fixtureDirectory, "fixture.visual-baseline.json");
   const goldDirectory = join(fixtureDirectory, "visual", "gold");
   const dirtyDirectory = join(fixtureDirectory, "visual", "dirty");
-  if (await pathExists(baselinePath) && await pathExists(join(goldDirectory, "capture.json")) && await pathExists(join(dirtyDirectory, "capture.json"))) return SyntheticVisualBaselineSchema.parse(await readJson(baselinePath));
+  const mockupPath = join(fixtureDirectory, "fixture.mockup.json");
+  const mockup = await pathExists(mockupPath) ? SyntheticMockupSchema.parse(await readJson(mockupPath)) : undefined;
+  const states = mockup?.states.length ? mockup.states : [...VISUAL_STATES];
+  if (await pathExists(baselinePath) && await pathExists(join(goldDirectory, "capture.json")) && await pathExists(join(dirtyDirectory, "capture.json"))) {
+    const existing = SyntheticVisualBaselineSchema.parse(await readJson(baselinePath));
+    const actualConditions = new Set(existing.conditions.map((condition) => `${condition.viewport}:${condition.theme}:${condition.state}`));
+    const expectedConditions = new Set(VISUAL_VIEWPORTS.flatMap((viewport) => VISUAL_THEMES.flatMap((theme) => states.map((state) => `${viewport}:${theme}:${state}`))));
+    if (actualConditions.size === expectedConditions.size && [...expectedConditions].every((condition) => actualConditions.has(condition))) return existing;
+  }
   const [gold, dirty] = await Promise.all([
-    captureFixturePage(join(fixtureDirectory, "fixture.gold.html"), goldDirectory, browserExecutable, session),
-    captureFixturePage(join(fixtureDirectory, "fixture.corrupted.html"), dirtyDirectory, browserExecutable, session),
+    captureFixturePage(join(fixtureDirectory, "fixture.gold.html"), goldDirectory, browserExecutable, session, states),
+    captureFixturePage(join(fixtureDirectory, "fixture.corrupted.html"), dirtyDirectory, browserExecutable, session, states),
   ]);
   const dirtyByCondition = new Map(dirty.captures.map((capture) => [conditionKey(capture), capture]));
   const conditions: SyntheticVisualBaseline["conditions"] = [];
@@ -78,18 +86,18 @@ export async function ensureVisualBenchmark(fixtureDirectory: string, browserExe
   }
   const baseline = SyntheticVisualBaselineSchema.parse({ schemaVersion: "0.1.0", fixtureId: basename(fixtureDirectory), conditions, aggregate: aggregate(conditions.map((condition) => condition.dirtyToGold)), environment: gold.environment });
   await writeJsonAtomic(baselinePath, baseline);
-  const mockupPath = join(fixtureDirectory, "fixture.mockup.json");
   if (await pathExists(mockupPath)) {
-    const mockup = SyntheticMockupSchema.parse(await readJson(mockupPath));
-    mockup.screenshots = conditions.map((condition) => ({ viewport: condition.viewport, theme: condition.theme, state: condition.state, path: condition.goldScreenshot }));
-    await writeJsonAtomic(mockupPath, mockup);
+    const updatedMockup = SyntheticMockupSchema.parse(await readJson(mockupPath));
+    updatedMockup.screenshots = conditions.map((condition) => ({ viewport: condition.viewport, theme: condition.theme, state: condition.state, path: condition.goldScreenshot }));
+    await writeJsonAtomic(mockupPath, updatedMockup);
   }
   return baseline;
 }
 
 export async function evaluateCandidateVisuals(fixtureDirectory: string, candidateHtmlPath: string, outputDirectory: string, browserExecutable?: string, session?: CaptureSession): Promise<SyntheticVisualEvaluation> {
   const baseline = await ensureVisualBenchmark(fixtureDirectory, browserExecutable, session);
-  const [gold, dirty, candidate] = await Promise.all([loadCapture(join(fixtureDirectory, "visual", "gold")), loadCapture(join(fixtureDirectory, "visual", "dirty")), captureFixturePage(candidateHtmlPath, join(outputDirectory, "candidate"), browserExecutable, session)]);
+  const states = [...new Set(baseline.conditions.map((condition) => condition.state))];
+  const [gold, dirty, candidate] = await Promise.all([loadCapture(join(fixtureDirectory, "visual", "gold")), loadCapture(join(fixtureDirectory, "visual", "dirty")), captureFixturePage(candidateHtmlPath, join(outputDirectory, "candidate"), browserExecutable, session, states)]);
   const goldByCondition = new Map(gold.captures.map((capture) => [conditionKey(capture), capture]));
   const dirtyByCondition = new Map(dirty.captures.map((capture) => [conditionKey(capture), capture]));
   const conditions: SyntheticVisualEvaluation["conditions"] = [];

@@ -202,6 +202,11 @@ async function captureOne(browser: Browser, options: CaptureOptions, viewport: n
   await stabilize(page, theme);
   if (state === "focus-visible") await page.keyboard.press("Tab");
   if (state === "open") await page.locator("details").first().evaluate((element) => element.setAttribute("open", ""));
+  if (state === "dialog-open") await page.locator("dialog").first().evaluate((element) => {
+    const dialog = element as HTMLDialogElement;
+    if (!dialog.open) dialog.showModal();
+  });
+  if (state === "hover") await page.locator("button, a, summary").first().hover();
   const screenshot = join(options.outputDirectory, `capture-${viewport}-${theme}-${state}.png`);
   await page.screenshot({ path: screenshot, fullPage: true, animations: "disabled" });
   const performanceEvidence: Record<string, unknown> = await page.evaluate(() => {

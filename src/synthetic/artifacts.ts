@@ -27,7 +27,14 @@ export function contentArtifact(spec: CanonicalPageSpec): SyntheticContent {
 }
 
 export function mockupArtifact(spec: CanonicalPageSpec, screenshots: SyntheticMockup["screenshots"] = []): SyntheticMockup {
-  return SyntheticMockupSchema.parse({ schemaVersion: "0.1.0", fixtureId: spec.id, kind: "browser-rendered-canonical-target", authority: { pixels: "gold-render", content: "strategy-and-page-brief", semantics: "canonical-normal-form" }, viewports: [360, 1280], themes: ["light"], states: ["default"], strategyPath: "fixture.strategy.json", pageBriefPath: "fixture.page-brief.json", goldHtmlPath: "fixture.gold.html", dirtyHtmlPath: "fixture.corrupted.html", screenshots });
+  const nodes = walk(spec.root);
+  const states = [
+    "default",
+    ...(spec.interactions.some((interaction) => interaction.kind === "disclosure") ? ["open"] : []),
+    ...(spec.interactions.some((interaction) => interaction.kind === "dialog") ? ["dialog-open"] : []),
+    ...(nodes.some((node) => node.conditionalStyles.some((style) => style.condition.states.includes("hover"))) ? ["hover"] : []),
+  ];
+  return SyntheticMockupSchema.parse({ schemaVersion: "0.1.0", fixtureId: spec.id, kind: "browser-rendered-canonical-target", authority: { pixels: "gold-render", content: "strategy-and-page-brief", semantics: "canonical-normal-form" }, viewports: [360, 1280], themes: ["light"], states, strategyPath: "fixture.strategy.json", pageBriefPath: "fixture.page-brief.json", goldHtmlPath: "fixture.gold.html", dirtyHtmlPath: "fixture.corrupted.html", screenshots });
 }
 
 export function trainingExampleArtifact(spec: CanonicalPageSpec, observedPair = false) {

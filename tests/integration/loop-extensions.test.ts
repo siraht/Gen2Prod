@@ -51,7 +51,7 @@ test("runs all controlled A-F modality configurations under one evaluator", asyn
   const results = await evaluateModalityAblation({ manifestPath: join(root, "manifest.json"), policy: defaultPolicy, split: "holdout", workDirectory: workspace });
   expect(results.map((result) => result.id)).toEqual(["A", "B", "C", "D", "E", "F"]);
   expect(results.every((result) => result.evaluation.mutationControlRecall === 1)).toBeTrue();
-  expect(results.every((result) => result.evaluation.resourceAccounting.browserCaptures === 6)).toBeTrue();
+  expect(results.every((result) => result.evaluation.resourceAccounting.browserCaptures === 18)).toBeTrue();
   expect(new Set(results.map((result) => result.evaluation.resourceAccounting.normalizedCost)).size).toBe(1);
   expect(results.map((result) => result.evaluation.resourceAccounting.requestedNormalizedCost)).toEqual([...results.map((result) => result.evaluation.resourceAccounting.requestedNormalizedCost)].sort((left, right) => left - right));
   expect(results[2]?.evaluation.resourceAccounting.visionCalls).toBe(0);

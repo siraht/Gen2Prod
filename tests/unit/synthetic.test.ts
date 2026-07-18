@@ -5,6 +5,7 @@ import { normalFormFromSpec, renderGold } from "../../src/synthetic/render.ts";
 import { CanonicalPageSpecSchema, CorruptionTraceSchema } from "../../src/synthetic/types.ts";
 import { NormalFormSchema } from "../../src/schemas/normal-form.ts";
 import { analyzeCssSelectorContract, analyzeScssNestingContract } from "../../src/validation/styling-contract.ts";
+import { mockupArtifact } from "../../src/synthetic/artifacts.ts";
 
 describe("synthetic curriculum", () => {
   test("contains all first-benchmark archetypes", () => {
@@ -20,6 +21,8 @@ describe("synthetic curriculum", () => {
     const responsive = archetypes.find((item) => item.archetype === "responsive-media")!;
     expect(renderGold(dialog).html).toContain("<dialog");
     expect(dialog.interactions[0]?.focusManagement).toContain("restore");
+    expect(mockupArtifact(dialog).states).toEqual(["default", "dialog-open", "hover"]);
+    expect(mockupArtifact(archetypes.find((item) => item.archetype === "faq")!).states).toEqual(["default", "open"]);
     expect(renderGold(longForm).html.match(/<section/g)?.length).toBeGreaterThanOrEqual(4);
     expect(renderGold(responsive).html).toContain("<picture");
     expect(renderGold(responsive).html).toContain("srcset=");

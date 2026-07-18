@@ -8,7 +8,7 @@ import type { FitnessVector } from "../core/fitness.ts";
 import { TransformationPolicySchema, type TransformationPolicy } from "../core/policy.ts";
 import type { DomNode, NormalForm } from "../schemas/normal-form.ts";
 import { EvaluationResultSchema, type EvaluationResult, type FixtureEvaluation } from "../schemas/research.ts";
-import { SyntheticManifestSchema, SyntheticObservedPairSchema, type SyntheticManifest, type SyntheticObservedPair, type SyntheticVisualEvaluation } from "../synthetic/types.ts";
+import { SyntheticManifestSchema, SyntheticObservedPairSchema, SyntheticVisualBaselineSchema, type SyntheticManifest, type SyntheticObservedPair, type SyntheticVisualEvaluation } from "../synthetic/types.ts";
 import { contextFromCompiled, validate, type ValidationReport } from "../validation/gates.ts";
 import { EVALUATOR_MUTATIONS } from "../validation/mutations.ts";
 import { ensureVisualBenchmark, evaluateCandidateVisuals, VISUAL_VIEWPORTS } from "../synthetic/visual-benchmark.ts";
@@ -393,6 +393,11 @@ async function frozenEvaluatorHash(manifestPath: string, manifest: SyntheticMani
   for (const fixture of manifest.fixtures) {
     const directory = resolve(fixture.directory);
     fixturePaths.push(...fixtureNames.map((name) => join(directory, name)));
+    const visualBaselinePath = join(directory, "fixture.visual-baseline.json");
+    if (await pathExists(visualBaselinePath)) {
+      const visualBaseline = SyntheticVisualBaselineSchema.parse(await readJson(visualBaselinePath));
+      fixturePaths.push(...visualBaseline.conditions.flatMap((condition) => [condition.goldScreenshot, condition.dirtyScreenshot, condition.diffImage].map((path) => resolve(directory, path))));
+    }
     const observedPairPath = join(directory, "fixture.observed-pair.json");
     if (await pathExists(observedPairPath)) {
       fixturePaths.push(observedPairPath);
@@ -401,7 +406,7 @@ async function frozenEvaluatorHash(manifestPath: string, manifest: SyntheticMani
       for (const condition of pair.conditions) for (const path of [condition.dirtyScreenshot, condition.cleanScreenshot]) if (path && await pathExists(resolve(directory, path))) fixturePaths.push(resolve(directory, path));
     }
   }
-  const hashes = await Promise.all([...sourcePaths, resolve(manifestPath), ...fixturePaths].map(async (path) => ({ name: path.split("/").at(-1), hash: await hashFile(path) })));
+  const hashes = await Promise.all([...new Set([...sourcePaths, resolve(manifestPath), ...fixturePaths])].map(async (path) => ({ name: path.split("/").at(-1), hash: await hashFile(path) })));
   return hashJson(hashes);
 }
 
@@ -421,6 +426,7 @@ export async function evaluatePolicy(options: EvaluateOptions): Promise<Evaluati
   const captureEnvironments = new Map<string, Record<string, unknown>>();
   let evaluatorHash = "";
   let visualMutationCaught = false;
+  let browserCaptures = 0;
   try {
     for (const fixture of manifest.fixtures) {
       const baseline = await ensureVisualBenchmark(resolve(fixture.directory), undefined, captureSession);
@@ -439,6 +445,7 @@ export async function evaluatePolicy(options: EvaluateOptions): Promise<Evaluati
       ]);
       const marked = cases[0]!;
       const unmarked = cases[1]!;
+      browserCaptures += cases.reduce((total, item) => total + item.visual.conditions.length, 0);
       const hardGateFailures = cases.flatMap((item) => item.hardGateFailures.map((gate) => `${item.label}:${gate}`));
       const effectiveVisualLoss = (item: EvaluatedFixtureCase) => Math.max(item.visual.candidateAggregate.compositeLoss, item.observed?.usedInFitness ? item.observed.candidatePixelDifferenceRatio : 0);
       const effectivePixelLoss = (item: EvaluatedFixtureCase) => Math.max(item.visual.candidateAggregate.pixelDifferenceRatio, item.observed?.usedInFitness ? item.observed.candidatePixelDifferenceRatio : 0);
@@ -511,6 +518,7 @@ export async function evaluatePolicy(options: EvaluateOptions): Promise<Evaluati
     await Bun.write(controlHtmlPath, (await Bun.file(join(controlDirectory, "fixture.gold.html")).text()).replace('href="gold.css"', 'href="page.css"'));
     await Bun.write(join(visualControlDirectory, "page.css"), `${await Bun.file(join(controlDirectory, "gold.css")).text()}\n.page { filter: invert(1) hue-rotate(90deg); }\n`);
     const visualControl = await evaluateCandidateVisuals(controlDirectory, controlHtmlPath, join(visualControlDirectory, "evidence"), undefined, captureSession);
+    browserCaptures += visualControl.conditions.length;
     visualMutationCaught = visualControl.candidateAggregate.pixelDifferenceRatio > policy.thresholds.visualPixelRatio;
   } finally {
     if (ownsCaptureSession) await captureSession.close();
@@ -547,7 +555,7 @@ export async function evaluatePolicy(options: EvaluateOptions): Promise<Evaluati
       wallTimeMs: performance.now() - started,
       normalizedCost,
       requestedNormalizedCost,
-      browserCaptures: (selected.length * 2 + 1) * VISUAL_VIEWPORTS.length,
+      browserCaptures,
       visionCalls: 0,
       modelCandidates: 0,
       actionCoverage: requestedCount ? executedRequested / requestedCount : 1,
