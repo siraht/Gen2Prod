@@ -108,6 +108,26 @@ function renderDeclarations(style: StyleIntent, indent: string): string {
   return rendered.filter(Boolean).join("\n\n");
 }
 
+function primaryClass(node: PlannedNode): string | undefined {
+  return [...node.classes].reverse().find((name) => name.includes("--"))
+    ?? node.classes.find((name) => name.includes("__"))
+    ?? node.classes.find((name) => !name.includes("--"))
+    ?? node.classes[0];
+}
+
+function mergeScopedFoundationDeclarations(styles: StyleIntent[]): StyleIntent["declarations"] {
+  const merged = new Map<string, StyleIntent["declarations"][number]>();
+  for (const declaration of styles.flatMap((style) => style.declarations)) {
+    const key = `${declaration.condition ? JSON.stringify(declaration.condition) : "default"}\0${declaration.property}`;
+    // A body-level inherit consumed the document foundation in the source. Once
+    // both are scoped to .page, retaining the inherited value would discard the
+    // value it was meant to inherit and would break canonical recompilation.
+    if (declaration.value === "inherit" && merged.has(key)) continue;
+    merged.set(key, declaration);
+  }
+  return [...merged.values()];
+}
+
 export function emitScss(plan: CompilationPlan): string {
   const styleMap = stylesByNode(plan.styles);
   const documentStyle = styleMap.get("g2p-document-root");
@@ -116,13 +136,27 @@ export function emitScss(plan: CompilationPlan): string {
   for (const node of allNodes(plan.semantics.root)) {
     const style = styleMap.get(node.nodeId);
     if (!style || node.classes.length === 0) continue;
-    const primary = [...node.classes].reverse().find((name) => name.includes("--"))
-      ?? node.classes.find((name) => name.includes("__"))
-      ?? node.classes.find((name) => !name.includes("--"))
-      ?? node.classes[0]!;
+    const primary = primaryClass(node)!;
     const block = primary.split(/__|--/)[0]!;
     const rules = groups.get(block) ?? [];
     if (!rules.some((rule) => rule.className === primary)) rules.push({ node, className: primary, style });
+    groups.set(block, rules);
+  }
+  // Source document/universal foundations are useful, but element and
+  // universal selectors are not part of the production architecture. Scope
+  // those declarations to the semantic page block so canonical output remains
+  // class-only, nested, and idempotent.
+  const pageNode = plan.semantics.root;
+  const pageClass = primaryClass(pageNode);
+  const foundations = [documentStyle, universalStyle].filter((style): style is StyleIntent => Boolean(style));
+  if (pageClass && foundations.length > 0) {
+    const block = pageClass.split(/__|--/)[0]!;
+    const rules = groups.get(block) ?? [];
+    const existing = rules.find((rule) => rule.className === pageClass);
+    const template = existing?.style ?? foundations[0]!;
+    const style: StyleIntent = { ...template, nodeId: pageNode.nodeId, styleRole: pageNode.role, contentRole: pageNode.role, declarations: mergeScopedFoundationDeclarations([...foundations, ...(existing ? [existing.style] : [])]) };
+    if (existing) existing.style = style;
+    else rules.push({ node: pageNode, className: pageClass, style });
     groups.set(block, rules);
   }
   const rendered = [...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([block, rules]) => {
@@ -148,9 +182,7 @@ export function emitScss(plan: CompilationPlan): string {
     const sample = token.sampledValues["default@1280"] ?? Object.values(token.sampledValues)[0];
     return sample ? [`  ${token.runtimeVariable}: ${sample};`] : [];
   }).join("\n");
-  const documentRule = documentStyle ? `html {\n${renderDeclarations(documentStyle, "  ")}\n}\n\n` : "";
-  const universalRule = universalStyle ? `* {\n${renderDeclarations(universalStyle, "  ")}\n}\n\n` : "";
-  return `/* Generated deterministically from G2P-NF. */\n:root {\n${tokenDefinitions}\n}\n\n${documentRule}${universalRule}${rendered}\n`;
+  return `/* Generated deterministically from G2P-NF. */\n:root {\n${tokenDefinitions}\n}\n\n${rendered}\n`;
 }
 
 export function emitHtml(plan: CompilationPlan, cssHref = "page.css", includeNodeIds = false): string {

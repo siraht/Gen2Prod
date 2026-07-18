@@ -80,13 +80,14 @@ describe("static compilation", () => {
     const htmlPath = join(directory, "page.html");
     await Bun.write(htmlPath, '<!doctype html><html><head><title>Root styles</title><meta name="description" content="Root style fixture"><style>html,:host{line-height:1.5;font-family:system-ui}:root{tab-size:4}body{line-height:inherit}</style></head><body><main><h1>Root styles</h1></main></body></html>');
     const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
-    expect(output.scss).toContain("html {");
+    expect(output.scss).toContain(".page {");
+    expect(output.scss).not.toContain("html {");
     expect(output.scss).toContain("--g2p-line-height-");
     expect(output.scss).toContain("line-height: var(--g2p-line-height-");
     expect(output.scss).toContain("--g2p-font-family-");
     expect(output.scss).toContain("font-family: var(--g2p-font-family-");
     expect(output.scss).toContain("tab-size: 4;");
-    expect(output.scss).toContain("line-height: inherit;");
+    expect(output.scss).not.toContain("line-height: inherit;");
     const canonicalHtml = join(directory, "canonical.html");
     const canonicalCss = join(directory, "canonical.css");
     await Bun.write(canonicalHtml, output.html);
@@ -96,12 +97,13 @@ describe("static compilation", () => {
     expect(rerun.scss).toBe(output.scss);
   });
 
-  test("hoists universal reset and pseudo styles instead of cloning them into every BEM rule", async () => {
+  test("scopes universal source foundations to the page BEM block", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-universal-root-"));
     const htmlPath = join(directory, "page.html");
     await Bun.write(htmlPath, '<!doctype html><html><head><title>Universal styles</title><meta name="description" content="Universal style fixture"><style>*{box-sizing:border-box}*::before{content:"";border-width:0}*:disabled{cursor:default}.card{padding:1rem}</style></head><body><main><h1>Universal styles</h1><div class="card">Card</div></main></body></html>');
     const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
-    expect(output.scss).toContain("* {");
+    expect(output.scss).toContain(".page {");
+    expect(output.scss).not.toContain("* {");
     expect(output.scss).toContain("&::before {");
     expect(output.scss).toContain("&:disabled {");
     expect(output.scss.match(/box-sizing: border-box;/g)).toHaveLength(1);
