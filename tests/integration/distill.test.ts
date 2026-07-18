@@ -15,8 +15,11 @@ function trajectory(index: number, accepted: boolean): Trajectory {
 test("exports training datasets and reloadable distilled models", async () => {
   const directory = await mkdtemp(join(tmpdir(), "gen2prod-distill-"));
   const path = join(directory, "trajectories.jsonl");
+  const naturalisticPath = join(directory, "naturalistic.jsonl");
   await Bun.write(path, `${[trajectory(0, true), trajectory(1, false), trajectory(2, true), trajectory(3, false), trajectory(4, true)].map((row) => JSON.stringify(row)).join("\n")}\n`);
-  const result = await distill(path, join(directory, "models"), "all");
+  await Bun.write(naturalisticPath, `${JSON.stringify({ ...trajectory(5, false), fixtureId: "natural-project-page", observations: { ...trajectory(5, false).observations, corpus: "naturalistic-project-holdout" } })}\n`);
+  const result = await distill([path, naturalisticPath], join(directory, "models"), "all");
+  expect(result.dataset.trajectories).toBe(6);
   expect(result.dataset.supervised).toBe(3);
   expect(result.dataset.preferences).toBeGreaterThan(0);
   const selector = await loadSelector(join(directory, "models", "selector.model.json"));

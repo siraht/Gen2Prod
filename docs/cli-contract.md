@@ -9,12 +9,12 @@ gen2prod init [directory]
 gen2prod synth prepare [--seed N] [--count N] [--force]
 gen2prod synth import <canonical> <dirty-html> --css path --family name [--alignment exact|partial|non-1-to-1] [--dirty-image path] [--clean-image path] [--clean-html path] [--clean-css path] [--strategy path] [--change-manifest path]
 gen2prod corpus prepare [--projects path] [--output path]
-gen2prod corpus evaluate [--split train|validation|holdout|all] [--max-per-project N] [--viewport N] [--no-live]
+gen2prod corpus evaluate [--split train|validation|holdout|all] [--max-per-project N] [--viewport N] [--no-capture] [--no-live]
 gen2prod evaluate [--split validation|holdout|all] [--policy path]
 gen2prod run <input> [--mode MODE] [--profile PROFILE] [--visual-target path]
 gen2prod validate <run-or-output>
 gen2prod research [--track policy|pass|verifier] [--budget N]
-gen2prod distill [--target selector|verifier|planner|all]
+gen2prod distill [--trajectories path] [--naturalistic path] [--target selector|verifier|planner|all]
 gen2prod report [run]
 gen2prod doctor
 ```
@@ -28,6 +28,7 @@ Global flags are `--config <path>`, `--workspace <path>`, `--json`, `--no-input`
 - Research evaluates candidates in isolated run directories and promotes only candidates that pass hard gates and improve the lexicographic fitness vector.
 - Re-running deterministic compilation from the same artifact hashes must yield the same patch and output hashes.
 - A command failure never weakens an evaluator or edits the frozen fixture manifest.
+- Naturalistic evaluation writes a frozen evaluator hash, gate-level failures, candidate provenance, cross-page advisory metrics, and a project-split trajectory JSONL. `distill --naturalistic` blends that evidence with synthetic research trajectories while preserving the original project split labels.
 
 ## Exit codes
 

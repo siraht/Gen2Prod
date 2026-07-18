@@ -32,20 +32,26 @@ export type DistillationDatasets = {
   verifier: VerifierExample[];
 };
 
-export async function readTrajectories(path: string): Promise<Trajectory[]> {
-  if (!(await pathExists(path))) throw new Error(`Trajectory file does not exist: ${path}`);
-  const lines = (await Bun.file(path).text()).split("\n").filter(Boolean);
-  return lines.map((line, index) => {
-    try { return TrajectorySchema.parse(JSON.parse(line)); }
-    catch (error) { throw new Error(`Invalid trajectory at line ${index + 1}: ${error instanceof Error ? error.message : String(error)}`); }
-  });
+export async function readTrajectories(input: string | string[]): Promise<Trajectory[]> {
+  const paths = Array.isArray(input) ? input : [input];
+  const trajectories: Trajectory[] = [];
+  for (const path of paths) {
+    if (!(await pathExists(path))) throw new Error(`Trajectory file does not exist: ${path}`);
+    const lines = (await Bun.file(path).text()).split("\n").filter(Boolean);
+    trajectories.push(...lines.map((line, index) => {
+      try { return TrajectorySchema.parse(JSON.parse(line)); }
+      catch (error) { throw new Error(`Invalid trajectory in ${path} at line ${index + 1}: ${error instanceof Error ? error.message : String(error)}`); }
+    }));
+  }
+  const unique = new Map(trajectories.map((trajectory) => [trajectory.trajectoryId, trajectory]));
+  return [...unique.values()];
 }
 
 async function writeJsonl(path: string, values: unknown[]): Promise<void> {
   await Bun.write(path, `${values.map((value) => JSON.stringify(value)).join("\n")}\n`);
 }
 
-export async function buildDatasets(trajectoryPath: string, outputDirectory: string): Promise<DistillationDatasets> {
+export async function buildDatasets(trajectoryPath: string | string[], outputDirectory: string): Promise<DistillationDatasets> {
   const trajectories = await readTrajectories(trajectoryPath);
   const supervised: SupervisedExample[] = trajectories.filter((trajectory) => trajectory.accepted && trajectory.verifierLabels.hardGatesPass !== false).map((trajectory) => ({ id: `sft-${trajectory.trajectoryId}`, input: trajectory.observations, target: { actions: trajectory.actions, planSummary: trajectory.planSummary }, weight: 1 / Math.max(trajectory.cost, 0.1) }));
   const byFixture = new Map<string, Trajectory[]>();

@@ -88,7 +88,7 @@ function trainPlanner(trajectories: Trajectory[]): PlannerModel {
   return PlannerModelSchema.parse({ schemaVersion: "0.1.0", kind: "structured-planner", trainedAt: new Date().toISOString(), examples: trajectories.length, observationBuckets, vocabulary: { passes, evidenceActions }, evaluation: { actionCoverage: covered / Math.max(parts.holdout.length, 1), holdoutExamples: parts.holdout.length } });
 }
 
-export async function distill(trajectoryPath: string, outputDirectory: string, target: DistillTarget = "all"): Promise<DistillationResult> {
+export async function distill(trajectoryPath: string | string[], outputDirectory: string, target: DistillTarget = "all"): Promise<DistillationResult> {
   const datasets: DistillationDatasets = await buildDatasets(trajectoryPath, join(outputDirectory, "datasets"));
   const models: DistillationResult["models"] = {};
   if (target === "selector" || target === "all") { models.selector = trainSelector(datasets.trajectories); await writeJsonAtomic(join(outputDirectory, "selector.model.json"), models.selector); }

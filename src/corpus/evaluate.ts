@@ -2,13 +2,16 @@ import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { PNG } from "pngjs";
 import { compileStaticPage } from "../compiler/pipeline.ts";
+import type { CompiledPage } from "../compiler/types.ts";
 import { extractTokenRegistry } from "../compiler/tokens.ts";
 import { ensureDirectory, readJson, writeJsonAtomic, writeTextAtomic } from "../core/fs.ts";
-import { hashJson } from "../core/hash.ts";
+import { hashFile, hashJson } from "../core/hash.ts";
 import { openCaptureSession, type CaptureResult, type CaptureSession } from "../evidence/capture.ts";
+import { slotEntropy } from "../report/consistency.ts";
 import { validate } from "../validation/gates.ts";
 import { compareCaptures, imageDifference, imageDifferenceWidthNormalized, type NormalizedImageDifference } from "../validation/visual.ts";
 import { NaturalisticCorpusManifestSchema, type NaturalisticArtifact, type NaturalisticCorpusManifest, type NaturalisticProject } from "./types.ts";
+import { writeNaturalisticTrajectories } from "./trajectories.ts";
 
 export type NaturalisticEvaluationOptions = {
   manifestPath: string;
@@ -30,11 +33,25 @@ export type NaturalisticFixtureEvaluation = {
   projectId: string;
   split: string;
   inputPath: string;
+  generatorFamily?: string;
   status: "evaluated" | "failed";
   materialization?: { staticTextTokens: number; renderedTextTokens: number; scriptsRemoved: number; styleSheetCount: number; inaccessibleStyleSheets: string[]; canvasSnapshots: number; canvasSnapshotFailures: number; sourceMode: "static" | "browser-materialized" };
   preservation?: Preservation;
-  gates?: { passed: boolean; hardFailures: number; bemCoverage: number; tokenCoverage: number; inlineStyles: number; inlineScripts: number };
+  gates?: {
+    passed: boolean;
+    hardFailures: number;
+    bemCoverage: number;
+    tokenCoverage: number;
+    inlineStyles: number;
+    inlineScripts: number;
+    metrics: Record<string, number>;
+    failures: { gate: string; name: string; hard: boolean; assertions: { id: string; severity: string; message: string }[] }[];
+  };
   idempotent?: boolean;
+  candidateHtml?: string;
+  candidateCss?: string;
+  outputHash?: string;
+  consistency?: { comparedPages: number; contractDrift: number; equivalentComponents: number; highEntropyTokenSlots: number; meanSlotEntropy: number };
   visuals?: {
     viewport: number;
     dirtyScreenshot: string;
@@ -61,11 +78,13 @@ export type NaturalisticEvaluation = {
   evaluationId: string;
   createdAt: string;
   corpusFingerprint: string;
+  evaluatorHash: string;
   split: NaturalisticEvaluationOptions["split"];
   fixtureSelectionHash: string;
   projectIds: string[];
   fixtures: NaturalisticFixtureEvaluation[];
   liveOutcomes: { projectId: string; url: string; captureDirectory: string; status: "captured" | "failed"; error?: string }[];
+  trajectoryExport: { path: string; total: number; accepted: number; rejected: number };
   aggregate: {
     evaluated: number;
     failed: number;
@@ -79,9 +98,13 @@ export type NaturalisticEvaluation = {
     livePreferenceImprovements: number;
     livePreferenceComparisons: number;
     idempotenceRate: number;
+    meanCrossPageContractDrift: number;
+    highEntropyTokenSlots: number;
   };
   requiredActions: string[];
 };
+
+type InternalArtifactEvaluation = { fixture: NaturalisticFixtureEvaluation; compiled?: CompiledPage };
 
 function tokens(html: string): string[] {
   const visible = html
@@ -188,9 +211,9 @@ async function evaluateArtifact(input: {
   session?: CaptureSession;
   liveCapture?: CaptureResult;
   options: NaturalisticEvaluationOptions;
-}): Promise<NaturalisticFixtureEvaluation> {
+}): Promise<InternalArtifactEvaluation> {
   const { artifact, project, directory, session, liveCapture, options } = input;
-  const result: NaturalisticFixtureEvaluation = { artifactId: artifact.artifactId, projectId: project.projectId, split: project.split, inputPath: artifact.path, status: "failed", requiredActions: [] };
+  const result: NaturalisticFixtureEvaluation = { artifactId: artifact.artifactId, projectId: project.projectId, split: project.split, inputPath: artifact.path, ...(artifact.generatorFamily ? { generatorFamily: artifact.generatorFamily } : {}), status: "failed", requiredActions: [] };
   try {
     const sourcePath = resolve(artifact.path);
     const staticHtml = await Bun.file(sourcePath).text();
@@ -219,23 +242,40 @@ async function evaluateArtifact(input: {
     await writeTextAtomic(materializedCssPath, compilerCss);
     const registry = extractTokenRegistry(compilerCss);
     const compiled = await compileStaticPage({ htmlPath: materializedHtmlPath, cssPath: materializedCssPath, tokenRegistry: registry });
+    if (compiled.plan.source.executableScripts.length) result.requiredActions.push(`${compiled.plan.source.executableScripts.length} executable script(s) were excluded; reimplement approved behavior from typed interaction contracts.`);
     const candidateDirectory = join(fixtureDirectory, "candidate");
+    const candidateHtmlPath = join(candidateDirectory, "page.html");
+    const candidateCssPath = join(candidateDirectory, "page.css");
     await Promise.all([
-      writeTextAtomic(join(candidateDirectory, "page.html"), compiled.html),
+      writeTextAtomic(candidateHtmlPath, compiled.html),
       writeTextAtomic(join(candidateDirectory, "page.scss"), compiled.scss),
-      writeTextAtomic(join(candidateDirectory, "page.css"), compiled.css),
+      writeTextAtomic(candidateCssPath, compiled.css),
     ]);
+    result.candidateHtml = candidateHtmlPath;
+    result.candidateCss = candidateCssPath;
+    result.outputHash = hashJson({ html: compiled.html, scss: compiled.scss });
     let candidate: CaptureResult | undefined;
     if (options.capture && session) candidate = await session.capture({ url: pathToFileURL(join(candidateDirectory, "page.html")).href, outputDirectory: join(candidateDirectory, "capture"), viewports: [viewport], viewportHeight, states: ["default"], themes: ["light"], browserExecutable: options.browserExecutable });
     result.preservation = contentPreservation(compilerHtml, compiled.html);
     const report = await validate({ html: compiled.html, scss: compiled.scss, css: compiled.css, plan: compiled.plan, baselineCapture: baseline, candidateCapture: candidate, mode: "legacy-conversion", profile: "refactor", thresholds: { minBemCoverage: 0.95, minTokenCoverage: 0.95, maxVisualPixelRatio: 0.01, provisional: true } });
+    await writeJsonAtomic(join(fixtureDirectory, "validation.json"), report);
     const hardFailures = report.gates.filter((gate) => gate.hard && !gate.passed).length;
-    result.gates = { passed: report.passed, hardFailures, bemCoverage: report.metrics.bemCoverage ?? 0, tokenCoverage: report.metrics.tokenCoverage ?? 0, inlineStyles: report.metrics.inlineStyles ?? 0, inlineScripts: report.metrics.inlineScripts ?? 0 };
+    result.gates = {
+      passed: report.passed,
+      hardFailures,
+      bemCoverage: report.metrics.bemCoverage ?? 0,
+      tokenCoverage: report.metrics.tokenCoverage ?? 0,
+      inlineStyles: report.metrics.inlineStyles ?? 0,
+      inlineScripts: report.metrics.inlineScripts ?? 0,
+      metrics: report.metrics,
+      failures: report.gates.filter((gate) => !gate.passed).map((gate) => ({ gate: gate.gate, name: gate.name, hard: gate.hard, assertions: gate.assertions.filter((assertion) => !assertion.passed).map((assertion) => ({ id: assertion.id, severity: assertion.severity, message: assertion.message })) })),
+    };
+    for (const gate of result.gates.failures.filter((failure) => failure.hard)) result.requiredActions.push(`Gate ${gate.gate} (${gate.name}): ${gate.assertions.map((assertion) => assertion.message).join("; ")}`);
     const rerunDirectory = join(fixtureDirectory, "idempotence");
     await Promise.all([writeTextAtomic(join(rerunDirectory, "page.html"), compiled.html), writeTextAtomic(join(rerunDirectory, "page.css"), compiled.css)]);
     const rerun = await compileStaticPage({ htmlPath: join(rerunDirectory, "page.html"), cssPath: join(rerunDirectory, "page.css"), tokenRegistry: compiled.plan.tokens });
     await Promise.all([writeTextAtomic(join(rerunDirectory, "rerun.html"), rerun.html), writeTextAtomic(join(rerunDirectory, "rerun.scss"), rerun.scss)]);
-    result.idempotent = hashJson({ html: compiled.html, scss: compiled.scss }) === hashJson({ html: rerun.html, scss: rerun.scss });
+    result.idempotent = result.outputHash === hashJson({ html: rerun.html, scss: rerun.scss });
     const dirtyCapture = captureForViewport(baseline, viewport);
     const candidateCapture = captureForViewport(candidate, viewport);
     if (dirtyCapture && candidateCapture) {
@@ -270,15 +310,56 @@ async function evaluateArtifact(input: {
       }
     }
     result.status = "evaluated";
-    return result;
+    return { fixture: result, compiled };
   } catch (error) {
     result.error = error instanceof Error ? error.message : String(error);
     result.requiredActions.push(`Fixture failed before scoring: ${result.error}`);
-    return result;
+    return { fixture: result };
+  }
+}
+
+function applyProjectConsistency(evaluations: InternalArtifactEvaluation[]): void {
+  const projectIds = [...new Set(evaluations.map((evaluation) => evaluation.fixture.projectId))];
+  for (const projectId of projectIds) {
+    const pages = evaluations.filter((evaluation) => evaluation.fixture.projectId === projectId && evaluation.compiled);
+    if (pages.length < 2) continue;
+    const contracts = new Map<string, Set<string>>();
+    const namesBySignature = new Map<string, Set<string>>();
+    for (const page of pages) for (const component of page.compiled!.plan.components) {
+      const signature = JSON.stringify({ elements: [...component.bem.elements].sort(), modifiers: [...component.bem.modifiers].sort(), slots: [...component.slots].sort() });
+      const signatures = contracts.get(component.name) ?? new Set<string>();
+      signatures.add(signature);
+      contracts.set(component.name, signatures);
+      const names = namesBySignature.get(signature) ?? new Set<string>();
+      names.add(component.name);
+      namesBySignature.set(signature, names);
+    }
+    const contractDrift = [...contracts.values()].filter((signatures) => signatures.size > 1).length;
+    const equivalentComponents = [...namesBySignature.values()].reduce((count, names) => count + Math.max(0, names.size - 1), 0);
+    const entropy = slotEntropy(pages.map((page) => ({ page: page.fixture.artifactId, plan: page.compiled!.plan })));
+    const supported = entropy.filter((slot) => slot.support >= 3 && slot.entropy !== null);
+    const highEntropyTokenSlots = supported.filter((slot) => (slot.entropy ?? 0) > 0.75).length;
+    const meanSlotEntropy = mean(supported.map((slot) => slot.entropy ?? 0));
+    for (const page of pages) page.fixture.consistency = { comparedPages: pages.length, contractDrift, equivalentComponents, highEntropyTokenSlots, meanSlotEntropy };
   }
 }
 
 function mean(values: number[]): number { return values.reduce((sum, value) => sum + value, 0) / Math.max(values.length, 1); }
+
+async function naturalEvaluatorHash(manifestPath: string): Promise<string> {
+  const paths = [
+    import.meta.filename,
+    new URL("../compiler/pipeline.ts", import.meta.url).pathname,
+    new URL("../compiler/infer.ts", import.meta.url).pathname,
+    new URL("../compiler/tokens.ts", import.meta.url).pathname,
+    new URL("../compiler/emit.ts", import.meta.url).pathname,
+    new URL("../evidence/capture.ts", import.meta.url).pathname,
+    new URL("../validation/gates.ts", import.meta.url).pathname,
+    new URL("../validation/visual.ts", import.meta.url).pathname,
+    resolve(manifestPath),
+  ];
+  return hashJson(await Promise.all(paths.map(async (path) => ({ path: basename(path), hash: await hashFile(path) }))));
+}
 
 export async function evaluateNaturalisticCorpus(options: NaturalisticEvaluationOptions): Promise<NaturalisticEvaluation> {
   const manifest = NaturalisticCorpusManifestSchema.parse(await readJson(resolve(options.manifestPath)));
@@ -300,12 +381,14 @@ export async function evaluateNaturalisticCorpus(options: NaturalisticEvaluation
       liveOutcomes = live.summaries;
       for (const [id, capture] of live.captures) liveCaptures.set(id, capture);
     }
-    const fixtures: NaturalisticFixtureEvaluation[] = [];
+    const internal: InternalArtifactEvaluation[] = [];
     for (const artifact of selected) {
       const project = projects.find((item) => item.projectId === artifact.projectId)!;
       const liveCapture = liveCaptures.get(project.projectId);
-      fixtures.push(await evaluateArtifact({ artifact, project, manifest, directory: outputDirectory, ...(session ? { session } : {}), ...(liveCapture ? { liveCapture } : {}), options }));
+      internal.push(await evaluateArtifact({ artifact, project, manifest, directory: outputDirectory, ...(session ? { session } : {}), ...(liveCapture ? { liveCapture } : {}), options }));
     }
+    applyProjectConsistency(internal);
+    const fixtures = internal.map((evaluation) => evaluation.fixture);
     const evaluated = fixtures.filter((fixture) => fixture.status === "evaluated");
     const exact = evaluated.filter((fixture) => fixture.visuals?.pairedTarget?.fitnessUse === "exact-if-calibrated");
     const live = evaluated.filter((fixture) => fixture.visuals?.liveOutcome);
@@ -315,11 +398,13 @@ export async function evaluateNaturalisticCorpus(options: NaturalisticEvaluation
       evaluationId,
       createdAt: new Date().toISOString(),
       corpusFingerprint: manifest.fingerprint,
+      evaluatorHash: await naturalEvaluatorHash(options.manifestPath),
       split: options.split,
       fixtureSelectionHash: hashJson(selected.map((artifact) => artifact.artifactId)),
       projectIds: projects.map((project) => project.projectId),
       fixtures,
       liveOutcomes,
+      trajectoryExport: { path: join(outputDirectory, "trajectories.jsonl"), total: 0, accepted: 0, rejected: 0 },
       aggregate: {
         evaluated: evaluated.length,
         failed: fixtures.length - evaluated.length,
@@ -333,9 +418,12 @@ export async function evaluateNaturalisticCorpus(options: NaturalisticEvaluation
         livePreferenceImprovements: live.filter((fixture) => (fixture.visuals?.liveOutcome?.movementTowardLive ?? 0) > 0).length,
         livePreferenceComparisons: live.length,
         idempotenceRate: mean(evaluated.map((fixture) => fixture.idempotent ? 1 : 0)),
+        meanCrossPageContractDrift: mean(evaluated.map((fixture) => fixture.consistency?.contractDrift ?? 0)),
+        highEntropyTokenSlots: Math.max(0, ...evaluated.map((fixture) => fixture.consistency?.highEntropyTokenSlots ?? 0)),
       },
       requiredActions,
     };
+    report.trajectoryExport = await writeNaturalisticTrajectories(report, report.trajectoryExport.path);
     await writeJsonAtomic(join(outputDirectory, "evaluation.json"), report);
     return report;
   } finally {

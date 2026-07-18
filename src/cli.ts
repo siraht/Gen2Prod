@@ -165,6 +165,7 @@ corpus
       `Exact image non-regressions: ${evaluation.aggregate.exactTargetNonRegressions}/${evaluation.aggregate.exactTargetComparisons}`,
       `Advisory movement toward live outcomes: ${evaluation.aggregate.livePreferenceImprovements}/${evaluation.aggregate.livePreferenceComparisons}`,
       `Idempotence: ${(evaluation.aggregate.idempotenceRate * 100).toFixed(1)}%`,
+      `Natural trajectories: ${evaluation.trajectoryExport.total} (${evaluation.trajectoryExport.accepted} accepted / ${evaluation.trajectoryExport.rejected} rejected)`,
     ].join("\n"));
   });
 
@@ -243,13 +244,15 @@ program
   .command("distill")
   .description("export datasets and train selector, verifier, and planner models")
   .option("--trajectories <path>", "research trajectory JSONL")
+  .option("--naturalistic <path>", "naturalistic evaluation trajectory JSONL to blend without project leakage")
   .option("--output <path>", "model output directory")
   .addOption(new Option("--target <target>", "model target").choices(["selector", "verifier", "planner", "all"]).default("all"))
-  .action(async (options: { trajectories?: string; output?: string; target: DistillTarget }) => {
+  .action(async (options: { trajectories?: string; naturalistic?: string; output?: string; target: DistillTarget }) => {
     const project = await config();
     const trajectoryPath = resolve(options.trajectories ?? join(project.workspace, "research", "trajectories.jsonl"));
     const output = resolve(options.output ?? join(project.workspace, "distilled"));
-    const distilled = await distill(trajectoryPath, output, options.target);
+    const trajectoryPaths = [trajectoryPath, ...(options.naturalistic ? [resolve(options.naturalistic)] : [])];
+    const distilled = await distill(trajectoryPaths, output, options.target);
     emit(result("distill", distilled), `Distilled ${distilled.dataset.trajectories} trajectories\nSupervised: ${distilled.dataset.supervised}\nPreferences: ${distilled.dataset.preferences}\nVerifier: ${distilled.dataset.verifier}\nModels: ${Object.keys(distilled.models).join(", ")}\nOutput: ${output}`);
   });
 
