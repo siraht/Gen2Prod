@@ -51,6 +51,19 @@ function trajectories(experiment: ExperimentResult, evaluation: Awaited<ReturnTy
   }));
 }
 
+function interventionEffect(incumbent: Awaited<ReturnType<typeof evaluatePolicy>>, candidate: Awaited<ReturnType<typeof evaluatePolicy>>) {
+  const incumbentOutputs = new Map(incumbent.fixtureResults.map((fixture) => [fixture.fixtureId, fixture.outputHash]));
+  const outputChanged = candidate.fixtureResults.some((fixture) => incumbentOutputs.get(fixture.fixtureId) !== fixture.outputHash);
+  const { normalizedComputeCost: _incumbentCost, ...incumbentFitness } = incumbent.fitness;
+  const { normalizedComputeCost: _candidateCost, ...candidateFitness } = candidate.fitness;
+  const nonCostFitnessChanged = hashJson(incumbentFitness) !== hashJson(candidateFitness);
+  const actualResourceUseChanged = incumbent.resourceAccounting.normalizedCost !== candidate.resourceAccounting.normalizedCost
+    || incumbent.resourceAccounting.modelCandidates !== candidate.resourceAccounting.modelCandidates
+    || incumbent.resourceAccounting.visionCalls !== candidate.resourceAccounting.visionCalls
+    || incumbent.resourceAccounting.browserCaptures !== candidate.resourceAccounting.browserCaptures;
+  return { outputChanged, nonCostFitnessChanged, actualResourceUseChanged, effective: outputChanged || nonCostFitnessChanged || actualResourceUseChanged };
+}
+
 async function runResearchWithSession(options: ResearchOptions, captureSession: CaptureSession): Promise<ResearchSummary> {
   const root = join(options.workspace, "research");
   const experimentsDirectory = join(root, "experiments");
@@ -74,8 +87,10 @@ async function runResearchWithSession(options: ResearchOptions, captureSession: 
     await writeJsonAtomic(join(directory, "candidate-policy.json"), mutation.candidate);
     const candidateEvaluation = await evaluatePolicy({ manifestPath: options.manifestPath, policy: mutation.candidate, split: options.split, workDirectory: join(directory, "evaluation"), captureSession, acss: options.acss });
     const controlsPass = candidateEvaluation.mutationControlRecall === 1;
+    const intervention = interventionEffect(incumbentEvaluation, candidateEvaluation);
     const improved = compareFitness(candidateEvaluation.fitness, incumbentEvaluation.fitness) < 0;
-    const keep = controlsPass && improved && candidateEvaluation.frozenEvaluatorHash === incumbentEvaluation.frozenEvaluatorHash;
+    const policySafetyPass = mutation.candidate.compiler.preserveUnknownClasses && !mutation.candidate.compiler.inferMissingBehavior;
+    const keep = controlsPass && policySafetyPass && intervention.effective && improved && candidateEvaluation.frozenEvaluatorHash === incumbentEvaluation.frozenEvaluatorHash;
     let holdoutFitness: ExperimentResult["holdoutFitness"];
     if ((iteration + 1) % options.hiddenHoldoutEvery === 0) {
       const holdout = await evaluatePolicy({ manifestPath: options.manifestPath, policy: mutation.candidate, split: "holdout", workDirectory: join(directory, "holdout"), captureSession, acss: options.acss });
@@ -95,9 +110,18 @@ async function runResearchWithSession(options: ResearchOptions, captureSession: 
       candidateFitness: candidateEvaluation.fitness,
       mutationControlRecall: candidateEvaluation.mutationControlRecall,
       outcome: keep ? "keep" : "revert",
-      reason: !controlsPass ? "Rejected: frozen evaluator mutation-control recall regressed." : !improved ? "Reverted: candidate did not improve lexicographic fitness." : "Kept: hard controls pass and lexicographic fitness improved.",
+      reason: !controlsPass
+        ? "Rejected: frozen evaluator mutation-control recall regressed."
+        : !policySafetyPass
+          ? "Rejected: candidate weakened a non-negotiable unknown-class or behavior-inference safety constraint."
+          : !intervention.effective
+            ? "Reverted: requested policy change had no measured output, fitness, or actual resource-use effect."
+            : !improved
+              ? "Reverted: candidate did not improve lexicographic fitness."
+              : "Kept: hard controls pass and an effective intervention improved lexicographic fitness.",
       patchHash: hashJson({ field: mutation.changedField, before: mutation.before, after: mutation.after }),
       frozenEvaluatorHash: candidateEvaluation.frozenEvaluatorHash,
+      intervention,
       ...(holdoutFitness ? { holdoutFitness } : {}),
     });
     await writeJsonAtomic(join(directory, "experiment-result.json"), experiment);

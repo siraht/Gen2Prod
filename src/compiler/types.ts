@@ -81,6 +81,15 @@ export type CompilationPlan = {
   styles: StyleIntent[];
   interactions: InteractionContract[];
   tokenExceptions: TokenException[];
+  policyExecution: PolicyExecution;
+};
+
+export type PolicyExecution = {
+  requestedActions: string[];
+  executedActions: string[];
+  ignoredActions: { action: string; reason: string }[];
+  consumedEvidence: { kind: string; purpose: string; decisionImpact: string }[];
+  modelCandidates: number;
 };
 
 export type CompiledPage = {

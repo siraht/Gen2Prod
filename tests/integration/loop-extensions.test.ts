@@ -52,9 +52,11 @@ test("runs all controlled A-F modality configurations under one evaluator", asyn
   expect(results.map((result) => result.id)).toEqual(["A", "B", "C", "D", "E", "F"]);
   expect(results.every((result) => result.evaluation.mutationControlRecall === 1)).toBeTrue();
   expect(results.every((result) => result.evaluation.resourceAccounting.browserCaptures === 6)).toBeTrue();
-  expect(results.map((result) => result.evaluation.resourceAccounting.normalizedCost)).toEqual([...results.map((result) => result.evaluation.resourceAccounting.normalizedCost)].sort((left, right) => left - right));
+  expect(new Set(results.map((result) => result.evaluation.resourceAccounting.normalizedCost)).size).toBe(1);
+  expect(results.map((result) => result.evaluation.resourceAccounting.requestedNormalizedCost)).toEqual([...results.map((result) => result.evaluation.resourceAccounting.requestedNormalizedCost)].sort((left, right) => left - right));
   expect(results[2]?.evaluation.resourceAccounting.visionCalls).toBe(0);
-  expect(results[3]?.evaluation.resourceAccounting.visionCalls).toBe(2);
+  expect(results[3]?.evaluation.resourceAccounting.visionCalls).toBe(0);
+  expect(results[3]?.evaluation.resourceAccounting.ignoredActions).toContain("evidence:fullScreenshot");
 }, 60_000);
 
 test("fingerprints evaluator code and the complete frozen fixture corpus", async () => {

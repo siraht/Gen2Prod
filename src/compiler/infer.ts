@@ -219,7 +219,7 @@ function externalPresentationClasses(source: SourceDocument): Set<string> {
   ));
 }
 
-function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: string | null, counts: SemanticPlan["confidenceSummary"], review: SemanticPlan["review"], useStableNodeHints: boolean, preserveExplicitSemantics: boolean, classRoles: Map<string, ClassRole>, externalClasses: Set<string>): PlannedNode {
+function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: string | null, counts: SemanticPlan["confidenceSummary"], review: SemanticPlan["review"], useStableNodeHints: boolean, preserveExplicitSemantics: boolean, preserveUnknownClasses: boolean, semanticReviewThreshold: number, classRoles: Map<string, ClassRole>, externalClasses: Set<string>): PlannedNode {
   const semantic = semanticTag(node, parent, useStableNodeHints, preserveExplicitSemantics);
   const nativeDestination = node.attributes.find((attribute) => attribute.name.toLowerCase() === "onclick")?.value;
   const loweredDestination = nativeDestination ? nativeDestinationFromHandler(nativeDestination) : undefined;
@@ -229,7 +229,8 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
   }
   if (node.tag !== "div" && node.tag !== "span") semantic.role = explicitRole(node, parent);
   counts[semantic.confidence] += 1;
-  if (semantic.confidence === "low" && (node.tag === "div" || node.tag === "span")) review.push({ nodeId: node.nodeId, concern: "ambiguous semantic container", evidenceNeeded: ["accessibility tree", "section crop if visually separated"] });
+  const confidenceScore = semantic.confidence === "high" ? 0.9 : semantic.confidence === "medium" ? 0.7 : 0.4;
+  if (confidenceScore < semanticReviewThreshold && (node.tag === "div" || node.tag === "span")) review.push({ nodeId: node.nodeId, concern: "ambiguous semantic container", evidenceNeeded: ["accessibility tree", "section crop if visually separated"] });
   const block = rootBlock(node, semantic, parentBlock, useStableNodeHints, classRoles, parent);
   const isNewBlock = block !== null && block !== parentBlock;
   let classes: string[] = [];
@@ -276,10 +277,11 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
   }
   for (const className of oldClasses(node)) {
     if (/^(js-|qa-|e2e-)/.test(className)) attrs["data-hook"] = className;
+    if (preserveUnknownClasses && classRoles.get(className) === "unknown") review.push({ nodeId: node.nodeId, concern: `unknown source class role requires removal approval: ${className}`, evidenceNeeded: ["compiled CSS evidence", "source behavior usage", "framework class binding inventory"] });
   }
   if (semantic.tag === "button" && !attrs.type) attrs.type = "button";
   if (semantic.tag === "a") delete attrs.type;
-  const children = node.children.filter((child) => child.tag !== "script").map((child) => planNode(child, node, block, counts, review, useStableNodeHints, preserveExplicitSemantics, classRoles, externalClasses));
+  const children = node.children.filter((child) => child.tag !== "script").map((child) => planNode(child, node, block, counts, review, useStableNodeHints, preserveExplicitSemantics, preserveUnknownClasses, semanticReviewThreshold, classRoles, externalClasses));
   const childIds = new Set(children.map((child) => child.nodeId));
   const content = node.content?.filter((item) => item.kind === "text" || childIds.has(item.nodeId));
   return {
@@ -301,11 +303,11 @@ function plannedSourceHasId(node: DomNode, fragment: string): boolean {
   return node.nodeId.includes(fragment) || node.children.some((child) => plannedSourceHasId(child, fragment));
 }
 
-export function inferSemantics(source: SourceDocument, options: { useStableNodeHints?: boolean; preserveExplicitSemantics?: boolean } = {}): SemanticPlan {
+export function inferSemantics(source: SourceDocument, options: { useStableNodeHints?: boolean; preserveExplicitSemantics?: boolean; preserveUnknownClasses?: boolean; semanticReviewThreshold?: number } = {}): SemanticPlan {
   const counts = { high: 0, medium: 0, low: 0 };
   const review: SemanticPlan["review"] = [];
   const classRoles = new Map(source.classInventory.map((item) => [item.name, item.role]));
-  const root = planNode(source.dom, undefined, null, counts, review, options.useStableNodeHints ?? true, options.preserveExplicitSemantics ?? false, classRoles, externalPresentationClasses(source));
+  const root = planNode(source.dom, undefined, null, counts, review, options.useStableNodeHints ?? true, options.preserveExplicitSemantics ?? false, options.preserveUnknownClasses ?? true, options.semanticReviewThreshold ?? 0.65, classRoles, externalPresentationClasses(source));
   normalizeListValidity(root);
   normalizeHeadingOrder(root, review);
   addMissingFormLabels(root, review);

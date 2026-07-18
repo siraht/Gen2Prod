@@ -205,7 +205,7 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
     fixtureId: basename(options.input),
     split: "production",
     observations: { mode: options.mode, profile: options.profile, capture: options.capture, semanticReview: compiled.plan.semantics.review.length, hardGateFailures: hardFailures.length, mutationControlRecall },
-    actions: policyActions(options.policy),
+    actions: policyActions(compiled),
     planSummary: { runId: id, outputHash, idempotenceHash, passes: replayEvents.map((item) => item.pass) },
     verifierLabels: { hardGatesPass: hardFailures.length === 0, idempotent, mutationControlsPass: mutationControlRecall === 1 },
     fitness: {
@@ -219,10 +219,10 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
       crossPageDrift: validation.metrics.driftedComponents ?? 0,
       idempotenceError: idempotent ? 0 : 1,
       reviewBurden: compiled.plan.semantics.review.length + compiled.plan.tokenExceptions.length + validation.manualReview.length,
-      normalizedComputeCost: policyCost(options.policy),
+      normalizedComputeCost: policyCost(options.policy, compiled),
     },
     accepted: validation.passed,
-    cost: policyCost(options.policy),
+    cost: policyCost(options.policy, compiled),
   });
   await appendJsonLine(join(resolve(options.config.workspace), "research", "trajectories.jsonl"), trajectory);
   return { runId: id, runDirectory, compiled, validation, manifest, repairs, reports };

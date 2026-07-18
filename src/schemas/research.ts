@@ -35,7 +35,18 @@ export const EvaluationResultSchema = z.object({
   fitness: FitnessVectorSchema,
   mutationControlRecall: z.number().min(0).max(1),
   fixtureResults: z.array(FixtureEvaluationSchema),
-  resourceAccounting: z.object({ fixtureCount: z.number().int(), wallTimeMs: z.number(), normalizedCost: z.number(), browserCaptures: z.number().int(), visionCalls: z.number().int(), modelCandidates: z.number().int() }),
+  resourceAccounting: z.object({
+    fixtureCount: z.number().int(),
+    wallTimeMs: z.number(),
+    normalizedCost: z.number(),
+    requestedNormalizedCost: z.number(),
+    browserCaptures: z.number().int(),
+    visionCalls: z.number().int(),
+    modelCandidates: z.number().int(),
+    actionCoverage: z.number().min(0).max(1),
+    executedActions: z.array(z.string()),
+    ignoredActions: z.array(z.string()),
+  }),
   frozenEvaluatorHash: z.string(),
 });
 
@@ -56,6 +67,12 @@ export const ExperimentResultSchema = z.object({
   reason: z.string(),
   patchHash: z.string(),
   frozenEvaluatorHash: z.string(),
+  intervention: z.object({
+    outputChanged: z.boolean(),
+    nonCostFitnessChanged: z.boolean(),
+    actualResourceUseChanged: z.boolean(),
+    effective: z.boolean(),
+  }),
   holdoutFitness: FitnessVectorSchema.optional(),
 });
 

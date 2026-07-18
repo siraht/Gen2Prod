@@ -198,16 +198,30 @@ export function semanticAndBemError(gold: NormalForm, candidate: PlannedNode): {
   };
 }
 
-export function policyActions(policy: TransformationPolicy): string[] {
-  const modalityActions = Object.entries(policy.modalities).filter(([, enabled]) => enabled).map(([name]) => `evidence:${name}`);
-  return [...policy.passOrder.map((pass) => `pass:${pass}`), ...modalityActions];
+export function policyActions(compiled: CompiledPage): string[] {
+  return [
+    ...compiled.plan.policyExecution.executedActions,
+    "pass:capture",
+    "pass:validate",
+    "pass:idempotence",
+    "measurement:browser-render",
+    "measurement:image-diff",
+  ];
 }
 
-export function policyCost(policy: TransformationPolicy): number {
+export function requestedPolicyCost(policy: TransformationPolicy): number {
   const mapping: Record<keyof TransformationPolicy["modalities"], string> = { sourceAst: "source-ast", renderedDom: "rendered-dom", accessibilityTree: "accessibility-tree", computedStyles: "computed-styles", pageIntent: "page-intent", fullScreenshot: "full-screenshot", uncertaintyTriggeredCrops: "section-crops", crossPageInventory: "cross-page-inventory" };
   const modalityCost = Object.entries(mapping).reduce((sum, [field, cost]) => sum + (policy.modalities[field as keyof TransformationPolicy["modalities"]] ? (policy.costs[cost] ?? 0) : 0), 0);
   const candidateCount = policy.candidates.semantic + policy.candidates.component + policy.candidates.token;
   return modalityCost + candidateCount * (policy.costs["model-candidate"] ?? 0);
+}
+
+export function policyCost(policy: TransformationPolicy, compiled?: CompiledPage): number {
+  const evidenceCost: Record<string, string> = { sourceAst: "source-ast", renderedDom: "rendered-dom", accessibilityTree: "accessibility-tree", computedStyles: "computed-styles", pageIntent: "page-intent", fullScreenshot: "full-screenshot", uncertaintyTriggeredCrops: "section-crops", crossPageInventory: "cross-page-inventory" };
+  const executed = new Set(compiled?.plan.policyExecution.executedActions ?? ["evidence:sourceAst"]);
+  const actualEvidenceCost = Object.entries(evidenceCost).reduce((sum, [field, cost]) => sum + (executed.has(`evidence:${field}`) ? (policy.costs[cost] ?? 0) : 0), 0);
+  const modelCandidates = compiled?.plan.policyExecution.modelCandidates ?? 0;
+  return actualEvidenceCost + modelCandidates * (policy.costs["model-candidate"] ?? 0);
 }
 
 type EvaluatedFixtureCase = {
@@ -440,7 +454,7 @@ export async function evaluatePolicy(options: EvaluateOptions): Promise<Evaluati
         crossPageDrift: maxCaseMetric(cases, "driftedComponents"),
         idempotenceError: cases.every((item) => item.outputHash === item.idempotenceHash) ? 0 : 1,
         reviewBurden: Math.max(...cases.map((item) => item.reviewBurden)),
-        normalizedComputeCost: policyCost(policy),
+        normalizedComputeCost: policyCost(policy, marked.compiled),
       };
       fixtureResults.push({
         fixtureId: fixture.id,
@@ -475,7 +489,7 @@ export async function evaluatePolicy(options: EvaluateOptions): Promise<Evaluati
           unmarkedObservedCandidatePixelDifferenceRatio: unmarked.observed?.candidatePixelDifferenceRatio ?? 0,
           observedVisualRecovery: Math.min(...cases.map((item) => item.observed?.recovery ?? 1)),
         },
-        policyActions: policyActions(policy),
+        policyActions: policyActions(marked.compiled),
         durationMs: performance.now() - fixtureStarted,
         outputHash: marked.outputHash,
         idempotenceHash: marked.idempotenceHash,
@@ -494,7 +508,21 @@ export async function evaluatePolicy(options: EvaluateOptions): Promise<Evaluati
   }
   const controlDirectory = resolve(controlFixture.directory);
   const mutationBase = await compileStaticPage({ htmlPath: join(controlDirectory, "fixture.gold.html"), cssPath: join(controlDirectory, "gold.css"), tokenRegistry: join(controlDirectory, "fixture.gold.tokens.json"), ...(options.acss ? { fallbackTokenRegistry: options.acss.registry, frameworkClassCatalog: options.acss.catalog.utilityClasses } : {}), policy });
-  const normalizedCost = policyCost(policy);
+  const representative = fixtureResults[0];
+  const representativeCompiled = selected.length ? await compileStaticPage({
+    htmlPath: join(resolve(selected[0]!.directory), "fixture.corrupted.html"),
+    cssPath: join(resolve(selected[0]!.directory), "corrupted.css"),
+    tokenRegistry: join(resolve(selected[0]!.directory), "fixture.gold.tokens.json"),
+    ...(options.acss ? { fallbackTokenRegistry: options.acss.registry, frameworkClassCatalog: options.acss.catalog.utilityClasses } : {}),
+    policy,
+  }) : undefined;
+  const normalizedCost = policyCost(policy, representativeCompiled);
+  const requestedNormalizedCost = requestedPolicyCost(policy);
+  const execution = representativeCompiled?.plan.policyExecution;
+  const evaluatorActions = ["pass:capture", "pass:validate", "pass:idempotence", "measurement:browser-render", "measurement:image-diff"];
+  const effectiveIgnored = execution?.ignoredActions.filter((item) => !evaluatorActions.includes(item.action)) ?? [];
+  const requestedCount = execution?.requestedActions.length ?? 0;
+  const executedRequested = execution ? execution.requestedActions.filter((action) => !effectiveIgnored.some((ignored) => ignored.action === action)).length : 0;
   const staticMutationRecall = await evaluateMutationControls(mutationBase, policy.thresholds.visualPixelRatio);
   const mutationControlRecall = (staticMutationRecall * EVALUATOR_MUTATIONS.length + (visualMutationCaught ? 1 : 0)) / (EVALUATOR_MUTATIONS.length + 1);
   const evaluation = EvaluationResultSchema.parse({
@@ -505,7 +533,18 @@ export async function evaluatePolicy(options: EvaluateOptions): Promise<Evaluati
     fitness: aggregateFitness(fixtureResults, normalizedCost),
     mutationControlRecall,
     fixtureResults,
-    resourceAccounting: { fixtureCount: selected.length, wallTimeMs: performance.now() - started, normalizedCost, browserCaptures: (selected.length * 2 + 1) * VISUAL_VIEWPORTS.length, visionCalls: policy.modalities.fullScreenshot ? selected.length * 2 : 0, modelCandidates: selected.length * 2 * (policy.candidates.semantic + policy.candidates.component + policy.candidates.token) },
+    resourceAccounting: {
+      fixtureCount: selected.length,
+      wallTimeMs: performance.now() - started,
+      normalizedCost,
+      requestedNormalizedCost,
+      browserCaptures: (selected.length * 2 + 1) * VISUAL_VIEWPORTS.length,
+      visionCalls: 0,
+      modelCandidates: 0,
+      actionCoverage: requestedCount ? executedRequested / requestedCount : 1,
+      executedActions: [...(execution?.executedActions ?? []), ...evaluatorActions],
+      ignoredActions: effectiveIgnored.map((item) => item.action),
+    },
     frozenEvaluatorHash: evaluatorHash,
   });
   await writeJsonAtomic(join(options.workDirectory, "evaluation.json"), evaluation);
