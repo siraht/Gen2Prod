@@ -176,6 +176,12 @@ function selectorTokens(selector: string): { simples: string[]; combinators: str
   let pendingDescendant = false;
   for (let index = 0; index < selector.length; index += 1) {
     const character = selector[index]!;
+    if (character === "\\") {
+      // Escaped punctuation belongs to a class name; it is not a selector
+      // combinator or attribute/function delimiter.
+      index += 1;
+      continue;
+    }
     if (character === "(" || character === "[") { depth += 1; continue; }
     if (character === ")" || character === "]") { depth = Math.max(0, depth - 1); continue; }
     if (depth > 0) continue;
@@ -280,8 +286,9 @@ function simpleMatches(simple: string, node: PlannedNode, context: SelectorConte
   if (/:disabled\b/.test(rest) && !("disabled" in node.attributes)) return false;
   rest = rest.replace(/:(?:checked|disabled)\b/g, "");
   if (/:(?:hover|focus|focus-visible|focus-within|active|visited|open|indeterminate)\b|::/.test(rest)) return false;
-  for (const attribute of rest.matchAll(/\[([^\]]+)\]/g)) if (!attribute[1] || !attributeMatches(node, attribute[1])) return false;
-  rest = rest.replace(/\[[^\]]+\]/g, "");
+  const attributePattern = /(?<!\\)\[((?:\\.|[^\]\\])*)\]/g;
+  for (const attribute of rest.matchAll(attributePattern)) if (!attribute[1] || !attributeMatches(node, attribute[1])) return false;
+  rest = rest.replace(attributePattern, "");
   const classNames = new Set([...node.oldClasses, ...node.classes]);
   if (selectorClasses(rest).some((name) => !classNames.has(name))) return false;
   rest = rest.replace(/\.((?:\\.|[_a-zA-Z])(?:\\.|[\w-])*)/g, "");

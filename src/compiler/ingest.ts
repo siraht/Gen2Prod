@@ -25,9 +25,14 @@ function classifyClass(name: string, selectors: string[]): { role: ClassRole; ev
 }
 
 function specificity(selector: string): [number, number, number] {
-  const ids = selector.match(/#[a-zA-Z0-9_-]+/g)?.length ?? 0;
-  const classes = selector.match(/\.[a-zA-Z0-9_-]+|\[[^\]]+\]|(?<!:):(?!:)[a-zA-Z0-9_-]+/g)?.length ?? 0;
-  const elements = selector.match(/(^|[\s>+~])([a-zA-Z][a-zA-Z0-9-]*)/g)?.length ?? 0;
+  const classPattern = /\.((?:\\.|[_a-zA-Z])(?:\\.|[\w-])*)/g;
+  const classCount = selector.match(classPattern)?.length ?? 0;
+  const withoutClasses = selector.replace(classPattern, "");
+  const ids = withoutClasses.match(/(?<!\\)#[a-zA-Z0-9_-]+/g)?.length ?? 0;
+  const attributes = withoutClasses.match(/(?<!\\)\[((?:\\.|[^\]\\])*)\]/g)?.length ?? 0;
+  const pseudos = withoutClasses.match(/(?<![:\\]):(?!:)[a-zA-Z0-9_-]+/g)?.length ?? 0;
+  const classes = classCount + attributes + pseudos;
+  const elements = withoutClasses.match(/(^|[\s>+~])([a-zA-Z][a-zA-Z0-9-]*)/g)?.length ?? 0;
   return [ids, classes, elements];
 }
 

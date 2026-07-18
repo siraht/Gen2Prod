@@ -223,6 +223,18 @@ describe("static compilation", () => {
     expect(rerun.scss).toBe(output.scss);
   });
 
+  test("matches escaped responsive arbitrary-value classes as class names", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-responsive-arbitrary-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Arbitrary responsive</title><meta name="description" content="Arbitrary responsive fixture"><style>.text-6xl{font-size:3.75rem}@media (min-width:1024px){.lg\\:text-\\[7rem\\]{font-size:7rem}}</style></head><body><main><h1 class="text-6xl lg:text-[7rem]">Responsive type</h1></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    const heading = output.plan.styles.find((style) => style.styleRole === "primary-heading");
+    expect(heading?.declarations.filter((item) => item.property === "font-size")).toHaveLength(2);
+    expect(heading?.declarations.some((item) => item.value === "7rem" && item.condition?.media.includes("(min-width: 1024px)"))).toBeTrue();
+    expect(output.scss).toContain("@media (min-width: 1024px)");
+    expect(output.scss).toContain("font-size: 7rem;");
+  });
+
   test("creates exact project aliases only for repeated governed values", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-project-tokens-"));
     const htmlPath = join(directory, "page.html");
