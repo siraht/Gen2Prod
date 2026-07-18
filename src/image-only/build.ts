@@ -45,7 +45,7 @@ type AcssImageBinding = {
 type AcssImageBindings = {
   schemaVersion: "0.1.0";
   provider: "automaticcss";
-  release: { version: string; sourceHash: string; registryHash: string } | null;
+  release: { version: string; moduleMode: string; sourceHash: string; registryHash: string } | null;
   authority: "image-derived-project-override-proposal";
   bindings: AcssImageBinding[];
 };
@@ -61,12 +61,15 @@ const ACSS_COLOR_ROLES = ["--base", "--primary", "--secondary", "--accent", "--n
 
 function normalizedColor(color: string): string { return color.toLowerCase(); }
 
-function imageAcssBindings(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, policy: ImageOnlyPolicy, acss?: AutomaticCssBundle): { artifact: AcssImageBindings; colors: Map<string, string>; declarations: string[] } {
+function imageAcssBindings(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, policy: ImageOnlyPolicy, acss?: AutomaticCssBundle): { artifact: AcssImageBindings; colors: Map<string, string>; declarations: string[]; regionTypography: Map<string, string> } {
   const available = new Set(acss?.registry.tokens.map((token) => token.runtimeVariable) ?? [...Object.keys(FALLBACK_ACSS_VALUES), "--black", "--white", ...ACSS_COLOR_ROLES]);
   const observed = [...new Set([...analysis.palette.map((item) => normalizedColor(item.hex)), ...analysis.regions.flatMap((region) => [normalizedColor(region.background), normalizedColor(region.foreground)])])];
   const colors = new Map<string, string>();
   const used = new Set<string>();
-  const preferred = ACSS_COLOR_ROLES.filter((name) => available.has(name));
+  const releasePalette = (acss?.registry.tokens ?? [])
+    .filter((token) => token.allowedProperties.includes("color") && /^--(?:primary|secondary|tertiary|accent|base|neutral)(?:-|$)/.test(token.runtimeVariable))
+    .map((token) => token.runtimeVariable);
+  const preferred = [...new Set([...ACSS_COLOR_ROLES, ...releasePalette])].filter((name) => available.has(name));
   for (const color of observed) {
     const exact = color === "#fff" || color === "#ffffff" ? "--white" : color === "#000" || color === "#000000" ? "--black" : undefined;
     const runtimeVariable = exact && available.has(exact) && !used.has(exact) ? exact : preferred.find((name) => !used.has(name));
@@ -75,18 +78,31 @@ function imageAcssBindings(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan
     used.add(runtimeVariable);
   }
   const bindings: AcssImageBinding[] = [...colors].map(([observedValue, runtimeVariable], index) => ({ runtimeVariable, observedValue, proposedRole: runtimeVariable.slice(2), evidence: `image palette/region observation ${index + 1}; semantic role requires review`, status: "image-derived-unreviewed" }));
-  const headingSizes = plan.regions.map((region) => layoutForRegion(analysis, region.regionId).headingSize * policy.typographyScale).sort((left, right) => right - left);
-  if (headingSizes[0]) bindings.push({ runtimeVariable: "--h1", observedValue: `${Math.round(headingSizes[0])}px`, proposedRole: "primary-page-heading", evidence: "largest observed text geometry", status: "image-derived-unreviewed" });
-  if (headingSizes[1]) bindings.push({ runtimeVariable: "--h2", observedValue: `${Math.round(headingSizes[Math.min(1, headingSizes.length - 1)]!)}px`, proposedRole: "section-heading", evidence: "secondary observed text geometry", status: "image-derived-unreviewed" });
-  const artifact: AcssImageBindings = { schemaVersion: "0.1.0", provider: "automaticcss", release: acss ? { version: acss.provenance.version, sourceHash: acss.provenance.sourceHash, registryHash: acss.provenance.registryHash } : null, authority: "image-derived-project-override-proposal", bindings };
+  for (const [runtimeVariable, observedValue] of Object.entries(FALLBACK_ACSS_VALUES).filter(([name]) => !["--h1", "--h2"].includes(name) && available.has(name))) {
+    bindings.push({ runtimeVariable, observedValue, proposedRole: runtimeVariable.slice(2), evidence: "image-diff-calibrated reconstruction baseline expressed as a project ACSS override", status: "image-derived-unreviewed" });
+  }
+  const releaseTypographyRoles = (acss?.registry.tokens.map((token) => token.runtimeVariable) ?? ["--h1", "--h2"])
+    .filter((name) => /^--h[1-6](?:-to-h[1-6])?$|^--text-(?:xxl|xl|l)(?:-to-(?:xxl|xl|l|m|s|xs))?$/.test(name));
+  const typographyRoles = [...new Set(["--h1", "--h2", "--h3", "--h4", "--h5", "--h6", "--text-xxl", "--text-xl", "--text-l", ...releaseTypographyRoles])].filter((name) => available.has(name));
+  const regionTypography = new Map<string, string>();
+  const headingRegions = plan.regions.filter((region) => region.heading);
+  for (const [index, region] of headingRegions.entries()) {
+    const runtimeVariable = typographyRoles[index];
+    if (!runtimeVariable) throw new Error(`Automatic.css does not expose enough typography roles for image region ${region.regionId}`);
+    const observedValue = `${Math.round(layoutForRegion(analysis, region.regionId).headingSize * policy.typographyScale)}px`;
+    regionTypography.set(region.regionId, runtimeVariable);
+    bindings.push({ runtimeVariable, observedValue, proposedRole: index === 0 ? "primary-page-heading" : `section-heading-${index}`, evidence: `observed heading geometry in ${region.regionId}`, status: "image-derived-unreviewed" });
+  }
+  const artifact: AcssImageBindings = { schemaVersion: "0.1.0", provider: "automaticcss", release: acss ? { version: acss.provenance.version, moduleMode: acss.provenance.moduleMode, sourceHash: acss.provenance.sourceHash, registryHash: acss.provenance.registryHash } : null, authority: "image-derived-project-override-proposal", bindings };
   const overrides = new Map(bindings.map((binding) => [binding.runtimeVariable, binding.observedValue]));
-  const values = new Map<string, string>(Object.entries(FALLBACK_ACSS_VALUES));
+  const values = new Map<string, string>();
   for (const token of acss?.registry.tokens ?? []) {
     const sample = Object.values(token.sampledValues)[0];
     if (sample) values.set(token.runtimeVariable, sample);
     else if (typeof token.value === "string" || typeof token.value === "number") values.set(token.runtimeVariable, String(token.value));
     else if (token.value && !Array.isArray(token.value) && typeof token.value === "object" && "value" in token.value && "unit" in token.value) values.set(token.runtimeVariable, `${String(token.value.value)}${String(token.value.unit)}`);
   }
+  for (const [variable, value] of Object.entries(FALLBACK_ACSS_VALUES)) if (!values.has(variable)) values.set(variable, value);
   const required = new Set([...Object.keys(FALLBACK_ACSS_VALUES), ...overrides.keys()]);
   const visit = (variable: string) => {
     const value = overrides.get(variable) ?? values.get(variable);
@@ -101,7 +117,7 @@ function imageAcssBindings(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan
     const value = overrides.get(variable) ?? values.get(variable);
     return value ? [`  ${variable}: ${value};`] : [];
   });
-  return { artifact, colors, declarations };
+  return { artifact, colors, declarations, regionTypography };
 }
 
 function textForRegion(analysis: ImageOnlyAnalysis, regionId: string) {
@@ -218,10 +234,7 @@ function renderScss(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, polic
   &__title {
     max-width: 18ch;
     margin: 0 0 var(--space-m);
-    font-family: var(--heading-font-family);
-    font-size: var(--g2p-region-heading-size, var(--h2));
-    font-weight: 700;
-    line-height: 0.98;
+    font: 700 clamp(2rem, 5vw, var(--g2p-region-heading-size, var(--h2)))/0.98 var(--heading-font-family);
     letter-spacing: -0.035em;
   }
 
@@ -243,10 +256,11 @@ function renderScss(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, polic
   ${regionSize}
   color: var(${acssBindings.colors.get(normalizedColor(evidence.foreground))});
   background: var(${acssBindings.colors.get(normalizedColor(evidence.background))});
+  --g2p-region-heading-size: var(${acssBindings.regionTypography.get(region.regionId) ?? "--h2"});
 
   > .${region.block}__inner {
     max-width: ${Math.round(layout.width + 64)}px;
-    padding-top: ${topPadding <= 48 ? "var(--space-xl)" : "var(--section-space-m)"};
+    padding-top: ${topPadding}px;
     ${contentPosition}
   }
 }`;
@@ -285,8 +299,6 @@ ${baseRules}
 .card-grid__inner { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: var(--space-l); }
 .card-grid__title { grid-column: 1 / -1; }
 .card-grid__item { padding: var(--space-l); border: 1px solid currentColor; border-radius: var(--radius-m); }
-.image-page h1 { --g2p-region-heading-size: var(--h1); }
-.image-page h2, .image-page h3 { --g2p-region-heading-size: var(--h2); }
 .card-grid__item-title { margin-top: 0; }
 .media-panel { margin: 0; }
 .media-panel__image { width: 100%; height: 100%; object-fit: cover; }
