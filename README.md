@@ -240,7 +240,7 @@ gen2prod synth import canonical-spec.json model-page.html \
   --split holdout --fixture-id stable-family-case
 ```
 
-Optional `--dirty-image`, `--clean-image`, `--clean-html`, `--clean-css`, `--strategy`, and `--change-manifest` inputs preserve observed project evidence. `--alignment exact` makes compatible clean screenshots a hard image-diff target; `partial` and `non-1-to-1` keep the example as scoped or preference supervision instead of incorrectly demanding global pixel identity.
+Optional `--dirty-image`, `--clean-image`, `--clean-html`, `--clean-css`, `--strategy`, and `--change-manifest` inputs preserve observed project evidence. `--alignment exact` makes compatible clean screenshots a hard image-diff target. A `partial` pair becomes region-scoped image-diff fitness when its change manifest contains reviewed pixel or fractional `regionMasks`; named-only partial pairs and `non-1-to-1` pairs remain preference/planner supervision instead of incorrectly demanding global pixel identity.
 
 ## How Gen2Prod compares
 

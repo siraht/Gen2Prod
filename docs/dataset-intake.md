@@ -21,7 +21,7 @@ Record the browser/OS, viewport width, theme, state, device scale, fonts, and an
 | Alignment | Use | Evaluator treatment |
 | --- | --- | --- |
 | `exact` | Refactor or cleanup intended to preserve the approved render | Clean screenshot is a hard pixel target; dirty and candidate images are scored against it |
-| `partial` | Some regions changed intentionally | Region-scoped supervision; locked and ignored regions must be declared before it becomes a hard target |
+| `partial` | Some regions changed intentionally | Reviewed coordinate masks activate region-scoped image-diff fitness; locked pixels are scored and ignored pixels are excluded |
 | `non-1-to-1` | Redesign, copy revision, changed sections, or an evolved implementation | Preference/planner supervision; no false exact-pixel failure is assigned |
 
 Non-one-to-one examples still teach content-to-section planning, semantic choices, component boundaries, token usage, acceptable edits, and which output a reviewer preferred. If the source and result share only part of the page, name the shared or locked regions.
@@ -37,11 +37,31 @@ Non-one-to-one examples still teach content-to-section planning, semantic choice
   ],
   "lockedRegions": ["site-header", "hero-media"],
   "ignoredRegions": ["dynamic-customer-count"],
+  "regionMasks": [
+    {
+      "id": "site-header",
+      "x": 0,
+      "y": 0,
+      "width": 1,
+      "height": 0.12,
+      "unit": "fraction",
+      "mode": "locked"
+    },
+    {
+      "id": "dynamic-customer-count",
+      "x": 910,
+      "y": 640,
+      "width": 220,
+      "height": 80,
+      "unit": "px",
+      "mode": "ignore"
+    }
+  ],
   "notes": "Screenshots captured in Chrome at 1280px with project fonts loaded."
 }
 ```
 
-Region names are initially annotations. Partial pairs remain non-hard supervision until their masks or bounding boxes have been reviewed.
+`fraction` coordinates are relative to the compared image and must stay in the `0..1` range; `px` coordinates are absolute screenshot pixels. Named `lockedRegions` and `ignoredRegions` remain useful annotations, but a partial pair is preference-only until at least one reviewed `regionMasks` bounding box is supplied. Once supplied, the frozen evaluator measures both dirty and candidate renders against the clean image inside the declared mask and uses that recovery in fitness and Gate J without treating intentionally changed page regions as defects.
 
 ## Import
 
@@ -60,6 +80,6 @@ gen2prod synth import canonical-spec.json dirty.html \
   --split holdout
 ```
 
-The importer preserves the supplied material under `observed/`, writes `fixture.observed-pair.json`, creates an unmarked dirty input with lineage IDs removed, and adds the pair to the frozen corpus fingerprint. Exact observed screenshots participate directly in browser image-diff fitness. Partial and non-one-to-one pairs are retained for region and preference learning.
+The importer preserves the supplied material under `observed/`, writes `fixture.observed-pair.json`, creates an unmarked dirty input with lineage IDs removed, and adds the pair to the frozen corpus fingerprint. Exact observed screenshots participate directly in browser image-diff fitness. Partial pairs with reviewed coordinate masks participate in masked fitness; named-only partial pairs and non-one-to-one pairs remain preference/planner evidence.
 
 Do not include secrets, private customer data, licensed fonts/assets that cannot be used for evaluation, or credentials embedded in HTML. Replace sensitive content while preserving structure and annotate the substitution.
