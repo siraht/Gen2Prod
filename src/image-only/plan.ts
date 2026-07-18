@@ -1,4 +1,4 @@
-import { ImageOnlyBuildPlanSchema, type ImageOnlyAnalysis, type ImageOnlyBuildPlan, type InteractionHypothesis } from "../schemas/image-only.ts";
+import { ImageOnlyBuildPlanSchema, type ImageOnlyAnalysis, type ImageOnlyBuildPlan, type ImageOnlyTargetManifest, type ImageStateSequenceAnalysis, type InteractionHypothesis } from "../schemas/image-only.ts";
 
 function normalizedText(value: string): string {
   return value.replace(/\s+/g, " ").replace(/[|]{2,}/g, " ").trim();
@@ -56,7 +56,43 @@ function interactionForRegion(region: ImageOnlyAnalysis["regions"][number], text
   return hypotheses;
 }
 
-export function planImageOnlyBuild(analysis: ImageOnlyAnalysis): ImageOnlyBuildPlan {
+function overlap(left: { x: number; y: number; width: number; height: number }, right: { x: number; y: number; width: number; height: number }): number {
+  const width = Math.max(0, Math.min(left.x + left.width, right.x + right.width) - Math.max(left.x, right.x));
+  const height = Math.max(0, Math.min(left.y + left.height, right.y + right.height) - Math.max(left.y, right.y));
+  return width * height;
+}
+
+function stateEvidence(analysis: ImageOnlyAnalysis, states: ImageStateSequenceAnalysis | undefined, manifest: ImageOnlyTargetManifest | undefined): ImageOnlyBuildPlan["stateEvidence"] {
+  if (!states || !manifest || states.targetId !== analysis.targetId) return undefined;
+  const declaredPaths = new Set([...manifest.builderInputs.images, ...manifest.builderInputs.stateImages]);
+  const frames = new Map(manifest.frames.filter((frame) => declaredPaths.has(frame.path)).map((frame) => [frame.frameId, frame]));
+  const observations = states.observations.flatMap((observation) => {
+    const baseline = frames.get(observation.baselineFrameId);
+    const candidate = frames.get(observation.candidateFrameId);
+    if (!baseline || !candidate) return [];
+    const changedRegions = observation.changedRegions.map((box) => ({ ...box, y: box.y + candidate.scrollY }));
+    const affectedRegionIds = analysis.regions.filter((region) => changedRegions.some((box) => overlap(region.bbox, box) > 0)).map((region) => region.regionId);
+    return [{
+      observationId: observation.observationId,
+      action: observation.action,
+      interpretation: observation.interpretation,
+      changedPixelRatio: observation.changedPixelRatio,
+      affectedRegionIds,
+      confidence: observation.confidence,
+      prohibitedClaims: observation.prohibitedClaims,
+    }];
+  });
+  if (!observations.length) return undefined;
+  const observationIds = new Set(observations.map((observation) => observation.observationId));
+  const hypotheses = states.hypotheses.flatMap((hypothesis) => {
+    const evidenceObservationIds = hypothesis.evidenceObservationIds.filter((id) => observationIds.has(id));
+    return evidenceObservationIds.length ? [{ ...hypothesis, evidenceObservationIds }] : [];
+  });
+  const sourceFrameHashes = [...new Set(states.observations.flatMap((observation) => [frames.get(observation.baselineFrameId)?.sha256, frames.get(observation.candidateFrameId)?.sha256]).filter((hash): hash is string => Boolean(hash)))];
+  return { authority: "observed-pixel-delta-only", sourceFrameHashes, observations, hypotheses };
+}
+
+export function planImageOnlyBuild(analysis: ImageOnlyAnalysis, states?: ImageStateSequenceAnalysis, manifest?: ImageOnlyTargetManifest): ImageOnlyBuildPlan {
   const plannedRegions = analysis.regions.map((region) => {
     const contract = roleContract(region.visualRole);
     const text = regionText(analysis, region);
@@ -66,7 +102,19 @@ export function planImageOnlyBuild(analysis: ImageOnlyAnalysis): ImageOnlyBuildP
     const copy = text.filter((item) => item !== headingCandidate).map((item) => normalizedText(item.text)).filter(Boolean).slice(0, 48);
     return { regionId: region.regionId, tag: contract.tag, block: contract.block, ...(heading ? { heading } : {}), copy, bbox: region.bbox, confidence: Math.min(region.confidence, headingCandidate?.confidence ?? region.confidence) };
   });
-  const interactions = analysis.regions.flatMap((region) => interactionForRegion(region, regionText(analysis, region)));
+  const evidence = stateEvidence(analysis, states, manifest);
+  const interactions = analysis.regions.flatMap((region) => interactionForRegion(region, regionText(analysis, region))).map((interaction) => {
+    const observations = evidence?.observations.filter((observation) => observation.affectedRegionIds.includes(interaction.regionId) && ["hover", "focus"].includes(observation.action)) ?? [];
+    if (!observations.length) return interaction;
+    const observedStates = observations.flatMap((observation): InteractionHypothesis["safeStates"] => observation.action === "hover" ? ["hover"] : observation.action === "focus" ? ["focus-visible"] : []);
+    return {
+      ...interaction,
+      evidenceTier: "observed-static-cue" as const,
+      confidence: Math.max(interaction.confidence, ...observations.map((observation) => observation.confidence)),
+      cues: [...interaction.cues, ...observations.map((observation) => `observed-state:${observation.action}:${observation.observationId}`)],
+      safeStates: [...new Set([...interaction.safeStates, ...observedStates])],
+    };
+  });
   return ImageOnlyBuildPlanSchema.parse({
     schemaVersion: "0.1.0",
     targetId: analysis.targetId,
@@ -80,14 +128,15 @@ export function planImageOnlyBuild(analysis: ImageOnlyAnalysis): ImageOnlyBuildP
     },
     regions: plannedRegions,
     interactions,
+    ...(evidence ? { stateEvidence: evidence } : {}),
     unresolved: [
       { concern: "visible-text-authority", reason: "OCR or vision transcription from pixels is advisory until reviewed", requiredEvidence: ["reviewed content strategy or approved transcription"] },
       { concern: "destinations-and-side-effects", reason: "a still image does not encode URLs, form endpoints, or click side effects", requiredEvidence: ["source behavior contract or active interaction trace"] },
-      { concern: "dynamic-states", reason: "hover, focus, open, loading, error, autoplay, and animation timing are not proven by one still", requiredEvidence: ["state image sequence or active visual probes"] },
+      { concern: "dynamic-states", reason: evidence ? "Observed pixel deltas narrow hover, focus, scroll, or timed visual-state hypotheses but do not prove semantic role, side effects, focus management, animation mechanism, timing, or purpose" : "hover, focus, open, loading, error, autoplay, and animation timing are not proven by one still", requiredEvidence: evidence ? ["typed interaction contract tied to the observed state evidence", "keyboard and reduced-motion verification"] : ["state image sequence or active visual probes"] },
       { concern: "responsive-rules", reason: "one viewport does not determine breakpoints, reflow, or mobile interaction patterns", requiredEvidence: ["approved images at additional viewports"] },
       { concern: "asset-meaning", reason: "pixels do not prove informative image alt text or decorative intent", requiredEvidence: ["content/asset inventory review"] },
       ...(analysis.quality.targetQualityReviewRequired ? [{ concern: "capture-completeness", reason: analysis.quality.reason, requiredEvidence: ["scroll-materialized recapture, alternate browser capture, or reviewer confirmation that the negative space is intentional"] }] : []),
     ],
-    provenance: { allowedInputHashes: [analysis.sourceFrameHash], usedQuarantinedArtifacts: false },
+    provenance: { allowedInputHashes: [...new Set([analysis.sourceFrameHash, ...(evidence?.sourceFrameHashes ?? [])])], usedQuarantinedArtifacts: false },
   });
 }

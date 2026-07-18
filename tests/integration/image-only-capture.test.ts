@@ -25,9 +25,12 @@ describe("image-only capture", () => {
   test("records image-coordinate hover evidence without activating a control", async () => {
     const directory = await mkdtemp(join(tmpdir(), "g2p-image-probe-"));
     const pagePath = join(directory, "page.html");
-    await Bun.write(pagePath, `<!doctype html><style>html,body{margin:0;width:240px;height:200px;background:white}button{margin:20px;width:160px;height:80px;border:0;background:#ddd}button:hover{background:#111;color:white}</style><button>Visible action</button>`);
+    await Bun.write(pagePath, `<!doctype html><style>html,body{margin:0;width:240px;height:200px;background:white}button{margin:10px;width:220px;height:80px;border:0;background:#ddd}button:hover{background:#111;color:white}</style><button>Visible action</button>`);
     const output = join(directory, "capture");
-    await captureImageTarget({ url: pathToFileURL(pagePath).href, outputDirectory: output, targetId: "hover-page", split: "train", viewport: { width: 240, height: 200 }, capturePolicy: "visual-probe-sequence", checkpointFractions: [], probePoints: [{ x: 80, y: 60, action: "hover" }], temporalProbeDelayMs: 20 });
+    const manifest = await captureImageTarget({ url: pathToFileURL(pagePath).href, outputDirectory: output, targetId: "hover-page", split: "train", viewport: { width: 240, height: 200 }, capturePolicy: "visual-probe-sequence", checkpointFractions: [], temporalProbeDelayMs: 20 });
+    expect(manifest.frames.filter((frame) => frame.kind === "hover-probe")).toHaveLength(3);
+    expect(manifest.frames.filter((frame) => frame.kind === "focus-probe")).toHaveLength(3);
+    expect(manifest.builderInputs.stateImages).toHaveLength(manifest.frames.length - 1);
     const states = await analyzeImageStateSequence(join(output, "image-target.json"));
     const hover = states.observations.find((item) => item.action === "hover");
     expect(hover?.interpretation).toBe("hover-response-observed");

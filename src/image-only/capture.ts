@@ -43,6 +43,17 @@ function imageDimensions(bytes: Uint8Array): { width: number; height: number } {
   return { width: image.width, height: image.height };
 }
 
+function defaultVisualProbes(viewport: { width: number; height: number }): NonNullable<CaptureImageTargetOptions["probePoints"]> {
+  return [
+    { x: Math.round(viewport.width * 0.5), y: Math.round(viewport.height * 0.1), action: "hover" },
+    { x: Math.round(viewport.width * 0.5), y: Math.round(viewport.height * 0.5), action: "hover" },
+    { x: Math.round(viewport.width * 0.5), y: Math.round(viewport.height * 0.85), action: "hover" },
+    { x: 0, y: 0, action: "focus" },
+    { x: 0, y: 0, action: "focus" },
+    { x: 0, y: 0, action: "focus" },
+  ];
+}
+
 async function frame(path: string, outputDirectory: string, values: Omit<ImageOnlyFrame, "path" | "sha256" | "width" | "height">): Promise<ImageOnlyFrame> {
   const bytes = new Uint8Array(await Bun.file(path).arrayBuffer());
   return { ...values, path: relative(outputDirectory, path), sha256: sha256(bytes), ...imageDimensions(bytes) };
@@ -149,7 +160,8 @@ export async function captureImageTarget(options: CaptureImageTargetOptions): Pr
         frames.push(await frame(checkpointPath, options.outputDirectory, { frameId: `checkpoint-${index + 1}`, kind: "scroll-checkpoint", viewport, scrollY, probe: { x: 0, y: scrollY, action: "scroll" } }));
       }
 
-      for (const [index, probe] of (options.probePoints ?? []).entries()) {
+      const probes = options.probePoints ?? (capturePolicy === "visual-probe-sequence" ? defaultVisualProbes(viewport) : []);
+      for (const [index, probe] of probes.entries()) {
         await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }));
         if (probe.action === "hover") await page.mouse.move(probe.x, probe.y);
         else {
@@ -170,6 +182,7 @@ export async function captureImageTarget(options: CaptureImageTargetOptions): Pr
   }
 
   const builderImages = frames.filter((item) => item.kind === (capturePolicy === "still" ? "initial" : "scroll-materialized")).map((item) => item.path);
+  const stateImages = frames.filter((item) => !builderImages.includes(item.path)).map((item) => item.path);
   const manifest = ImageOnlyTargetManifestSchema.parse({
     schemaVersion: "0.1.0",
     targetId: options.targetId,
@@ -186,7 +199,7 @@ export async function captureImageTarget(options: CaptureImageTargetOptions): Pr
       animations: capturePolicy === "still" ? "preserved" : "reduced",
     },
     frames,
-    builderInputs: { images: builderImages },
+    builderInputs: { images: builderImages, stateImages },
     quarantinedArtifacts: options.quarantinedArtifacts ?? [],
     authority: {
       pixels: "authoritative-for-captured-frame",

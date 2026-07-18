@@ -32,6 +32,7 @@ export const ImageOnlyTargetManifestSchema = z.object({
   frames: z.array(ImageOnlyFrameSchema).min(1),
   builderInputs: z.object({
     images: z.array(z.string().min(1)).min(1),
+    stateImages: z.array(z.string().min(1)).default([]),
     imageDerivedStrategy: z.string().min(1).optional(),
   }),
   quarantinedArtifacts: z.array(z.object({
@@ -136,6 +137,27 @@ export const ImageOnlyBuildPlanSchema = z.object({
     confidence: z.number().min(0).max(1),
   })),
   interactions: z.array(InteractionHypothesisSchema),
+  stateEvidence: z.object({
+    authority: z.literal("observed-pixel-delta-only"),
+    sourceFrameHashes: z.array(z.string().regex(/^[a-f0-9]{64}$/)),
+    observations: z.array(z.object({
+      observationId: z.string().min(1),
+      action: z.enum(["materialize-scroll", "scroll", "hover", "focus", "wait"]),
+      interpretation: z.enum(["no-material-change", "lazy-or-scroll-materialization", "scroll-dependent-visual-state", "hover-response-observed", "focus-response-observed", "ambient-or-timed-change-observed"]),
+      changedPixelRatio: z.number().min(0).max(1),
+      affectedRegionIds: z.array(z.string()),
+      confidence: z.number().min(0).max(1),
+      prohibitedClaims: z.array(z.string()),
+    })),
+    hypotheses: z.array(z.object({
+      hypothesisId: z.string().min(1),
+      kind: z.enum(["lazy-materialization", "scroll-linked-motion", "sticky-or-fixed-layer", "hover-response", "focus-response", "ambient-animation", "carousel-or-rotator", "unknown-dynamic-state"]),
+      evidenceObservationIds: z.array(z.string()),
+      confidence: z.number().min(0).max(1),
+      safeImplementation: z.string(),
+      verificationActions: z.array(z.string()),
+    })),
+  }).optional(),
   unresolved: z.array(z.object({ concern: z.string(), reason: z.string(), requiredEvidence: z.array(z.string()) })),
   provenance: z.object({
     allowedInputHashes: z.array(z.string().regex(/^[a-f0-9]{64}$/)).min(1),

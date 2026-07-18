@@ -1,9 +1,9 @@
 import { basename, dirname, join, resolve } from "node:path";
 import { compileString } from "sass";
 import { PNG } from "pngjs";
-import { ensureDirectory, readJson, writeJsonAtomic, writeTextAtomic } from "../core/fs.ts";
+import { ensureDirectory, pathExists, readJson, writeJsonAtomic, writeTextAtomic } from "../core/fs.ts";
 import { hashFile } from "../core/hash.ts";
-import { ImageOnlyAnalysisSchema, ImageOnlyBuildPlanSchema, ImageOnlyPolicySchema, ImageOnlyTargetManifestSchema, type ImageOnlyAnalysis, type ImageOnlyBuildPlan, type ImageOnlyPolicy } from "../schemas/image-only.ts";
+import { ImageOnlyAnalysisSchema, ImageOnlyBuildPlanSchema, ImageOnlyPolicySchema, ImageOnlyTargetManifestSchema, ImageStateSequenceAnalysisSchema, type ImageOnlyAnalysis, type ImageOnlyBuildPlan, type ImageOnlyPolicy } from "../schemas/image-only.ts";
 import { planImageOnlyBuild } from "./plan.ts";
 import { defaultImageOnlyPolicy } from "./policy.ts";
 import type { AutomaticCssBundle } from "../acss/schema.ts";
@@ -12,6 +12,7 @@ import { analyzeCssSelectorContract, analyzeScssNestingContract, analyzeTokenRef
 export type BuildImageTargetOptions = {
   manifestPath: string;
   analysisPath?: string | undefined;
+  stateAnalysisPath?: string | undefined;
   planPath?: string | undefined;
   outputDirectory: string;
   maxRasterCoverage?: number | undefined;
@@ -463,10 +464,13 @@ export async function buildImageTarget(options: BuildImageTargetOptions): Promis
   const manifest = ImageOnlyTargetManifestSchema.parse(await readJson(manifestPath));
   const analysisPath = resolve(options.analysisPath ?? join(dirname(manifestPath), "image-analysis.json"));
   const analysis = ImageOnlyAnalysisSchema.parse(await readJson(analysisPath));
-  const plan = options.planPath ? ImageOnlyBuildPlanSchema.parse(await readJson(resolve(options.planPath))) : planImageOnlyBuild(analysis);
+  const stateAnalysisPath = resolve(options.stateAnalysisPath ?? join(dirname(analysisPath), "image-state-analysis.json"));
+  const states = !options.planPath && await pathExists(stateAnalysisPath) ? ImageStateSequenceAnalysisSchema.parse(await readJson(stateAnalysisPath)) : undefined;
+  const plan = options.planPath ? ImageOnlyBuildPlanSchema.parse(await readJson(resolve(options.planPath))) : planImageOnlyBuild(analysis, states, manifest);
   const policy = ImageOnlyPolicySchema.parse(options.policy ?? defaultImageOnlyPolicy);
   const builderFrame = manifest.frames.find((item) => manifest.builderInputs.images.includes(item.path) && item.sha256 === analysis.sourceFrameHash);
-  if (!builderFrame || plan.sourceFrameHash !== builderFrame.sha256 || !plan.provenance.allowedInputHashes.every((hash) => hash === builderFrame.sha256)) throw new Error("Image-only provenance violation: analysis or plan does not match the declared builder image");
+  const declaredInputHashes = new Set(manifest.frames.filter((frame) => manifest.builderInputs.images.includes(frame.path) || manifest.builderInputs.stateImages.includes(frame.path)).map((frame) => frame.sha256));
+  if (!builderFrame || plan.sourceFrameHash !== builderFrame.sha256 || !plan.provenance.allowedInputHashes.includes(builderFrame.sha256) || !plan.provenance.allowedInputHashes.every((hash) => declaredInputHashes.has(hash))) throw new Error("Image-only provenance violation: analysis or plan does not match the declared image inputs");
   if (plan.provenance.usedQuarantinedArtifacts) throw new Error("Image-only provenance violation: quarantined artifacts reached the builder");
   const outputDirectory = resolve(options.outputDirectory);
   await ensureDirectory(outputDirectory);
@@ -507,7 +511,11 @@ export async function buildImageTarget(options: BuildImageTargetOptions): Promis
   ]);
   await writeJsonAtomic(provenancePath, {
     schemaVersion: "0.1.0", targetId: plan.targetId, builderMode: "strict-image-only", sourceFrameHash: plan.sourceFrameHash,
-    allowedInputs: [{ kind: "image", hash: builderFrame.sha256, basename: basename(builderFrame.path) }, { kind: "image-analysis", hash: await hashFile(analysisPath), basename: basename(analysisPath) }],
+    allowedInputs: [
+      { kind: "image", hash: builderFrame.sha256, basename: basename(builderFrame.path) },
+      { kind: "image-analysis", hash: await hashFile(analysisPath), basename: basename(analysisPath) },
+      ...(states && plan.stateEvidence ? [{ kind: "image-state-analysis", hash: await hashFile(stateAnalysisPath), basename: basename(stateAnalysisPath), sourceFrameHashes: plan.stateEvidence.sourceFrameHashes }] : []),
+    ],
     quarantinedInputsUsed: [], sourceUrlUsedByBuilder: false,
     designSystem: { provider: "automaticcss", release: bindings.artifact.release, bindings: basename(acssBindingsPath), authority: bindings.artifact.authority },
     outputHashes: { html: await hashFile(htmlPath), scss: await hashFile(scssPath), css: await hashFile(cssPath) },
