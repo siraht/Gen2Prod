@@ -112,10 +112,7 @@ export async function captureImageTarget(options: CaptureImageTargetOptions): Pr
   let pageHeight = viewport.height;
   try {
     await boundedStage(page, "navigation", 60_000, () => page.goto(options.url, { waitUntil: "load", timeout: 45_000 }));
-    await page.evaluate(() => Promise.race([
-      new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
-      new Promise<void>((resolve) => setTimeout(resolve, 1_000)),
-    ]));
+    await page.waitForTimeout(250);
     await boundedStage(page, "visual asset wait", 20_000, () => waitForVisualAssets(page));
 
     if (capturePolicy === "visual-probe-sequence") {
