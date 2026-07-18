@@ -19,6 +19,11 @@ test("exposes naturalistic import and modality ablation controls", async () => {
   const synth = Bun.spawn(["bun", "src/cli.ts", "synth", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
   expect(await new Response(synth.stdout).text()).toContain("import");
   expect(await synth.exited).toBe(0);
+  const importHelp = Bun.spawn(["bun", "src/cli.ts", "synth", "import", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
+  const importOutput = await new Response(importHelp.stdout).text();
+  expect(importOutput).toContain("--alignment");
+  expect(importOutput).toContain("--clean-image");
+  expect(await importHelp.exited).toBe(0);
   const evaluate = Bun.spawn(["bun", "src/cli.ts", "evaluate", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
   expect(await new Response(evaluate.stdout).text()).toContain("--ablation");
   expect(await evaluate.exited).toBe(0);

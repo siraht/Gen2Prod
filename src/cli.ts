@@ -87,11 +87,12 @@ synth
   .option("--root <path>", "fixture output directory", "fixtures/generated")
   .option("--seed <number>", "deterministic seed", "1337")
   .option("--count <number>", "variants per archetype", "1")
+  .option("--no-render-visuals", "defer gold and dirty browser mockups until evaluation")
   .option("--force", "allow regeneration over an existing manifest")
-  .action(async (options: { root: string; seed: string; count: string; force?: boolean }) => {
+  .action(async (options: { root: string; seed: string; count: string; renderVisuals: boolean; force?: boolean }) => {
     const root = resolve(options.root);
     if (await pathExists(join(root, "manifest.json")) && !options.force) throw new UsageError(`${root}/manifest.json exists; pass --force to regenerate`);
-    const manifest = await prepareBenchmark({ root, seed: Number.parseInt(options.seed, 10), countPerArchetype: Number.parseInt(options.count, 10) });
+    const manifest = await prepareBenchmark({ root, seed: Number.parseInt(options.seed, 10), countPerArchetype: Number.parseInt(options.count, 10), renderVisuals: options.renderVisuals });
     emit(result("synth prepare", { root, fixtureCount: manifest.fixtures.length, splits: manifest.fixtures.reduce<Record<string, number>>((counts, fixture) => { counts[fixture.split] = (counts[fixture.split] ?? 0) + 1; return counts; }, {}) }), `Prepared ${manifest.fixtures.length} frozen fixtures in ${root}.`);
   });
 synth
@@ -101,10 +102,18 @@ synth
   .requiredOption("--family <name>", "generator model or tool family")
   .option("--root <path>", "fixture output directory", "fixtures/generated")
   .option("--fixture-id <id>", "stable fixture identifier")
+  .addOption(new Option("--alignment <kind>", "dirty/clean alignment policy").choices(["exact", "partial", "non-1-to-1"]).default("exact"))
+  .option("--viewport <pixels>", "viewport for supplied screenshots", "1280")
+  .option("--dirty-image <path>", "optional screenshot of the dirty implementation")
+  .option("--clean-image <path>", "optional screenshot or approved mockup of the clean implementation")
+  .option("--clean-html <path>", "optional observed clean HTML")
+  .option("--clean-css <path>", "optional observed clean CSS")
+  .option("--strategy <path>", "optional source content strategy or page brief")
+  .option("--change-manifest <path>", "JSON declaring intentional changes and locked/ignored regions")
   .addOption(new Option("--split <split>", "benchmark split").choices(["train", "validation", "holdout"]).default("validation"))
-  .action(async (canonical: string, html: string, options: { css: string; family: string; root: string; fixtureId?: string; split: "train" | "validation" | "holdout" }) => {
-    const imported = await importNaturalisticFixture({ root: resolve(options.root), canonicalPath: resolve(canonical), htmlPath: resolve(html), cssPath: resolve(options.css), generatorFamily: options.family, split: options.split, fixtureId: options.fixtureId });
-    emit(result("synth import", { fixtureId: imported.fixtureId, fixtureCount: imported.manifest.fixtures.length, generatorFamilies: imported.manifest.splitPolicy.generatorFamilies }), `Imported ${imported.fixtureId} from ${options.family}; the curriculum now contains ${imported.manifest.fixtures.length} fixtures.`);
+  .action(async (canonical: string, html: string, options: { css: string; family: string; root: string; fixtureId?: string; split: "train" | "validation" | "holdout"; alignment: "exact" | "partial" | "non-1-to-1"; viewport: string; dirtyImage?: string; cleanImage?: string; cleanHtml?: string; cleanCss?: string; strategy?: string; changeManifest?: string }) => {
+    const imported = await importNaturalisticFixture({ root: resolve(options.root), canonicalPath: resolve(canonical), htmlPath: resolve(html), cssPath: resolve(options.css), generatorFamily: options.family, split: options.split, fixtureId: options.fixtureId, alignment: options.alignment, viewport: Number.parseInt(options.viewport, 10), dirtyImagePath: options.dirtyImage, cleanImagePath: options.cleanImage, cleanHtmlPath: options.cleanHtml, cleanCssPath: options.cleanCss, strategyPath: options.strategy, changeManifestPath: options.changeManifest });
+    emit(result("synth import", { fixtureId: imported.fixtureId, fixtureCount: imported.manifest.fixtures.length, generatorFamilies: imported.manifest.splitPolicy.generatorFamilies, alignment: options.alignment }), `Imported ${imported.fixtureId} from ${options.family} as a ${options.alignment} pair; the curriculum now contains ${imported.manifest.fixtures.length} fixtures.`);
   });
 
 program
@@ -126,7 +135,7 @@ program
     const evaluation = await evaluatePolicy({ manifestPath: resolve(options.fixtures), policy, split: options.split, workDirectory: resolve(project.workspace, "evaluations", crypto.randomUUID()) });
     const envelope = result("evaluate", evaluation);
     if (evaluation.mutationControlRecall < 1) envelope.warnings.push("Frozen evaluator did not catch every mutation control.");
-    emit(envelope, `Evaluation ${evaluation.evaluationId}\nFixtures: ${evaluation.resourceAccounting.fixtureCount}\nHard failures: ${evaluation.fitness.criticalGateFailures.toFixed(2)}\nSemantic error: ${evaluation.fitness.semanticContractError.toFixed(4)}\nBEM error: ${evaluation.fitness.bemComponentError.toFixed(4)}\nMutation-control recall: ${(evaluation.mutationControlRecall * 100).toFixed(1)}%\nNormalized cost: ${evaluation.resourceAccounting.normalizedCost.toFixed(3)}`);
+    emit(envelope, `Evaluation ${evaluation.evaluationId}\nFixtures: ${evaluation.resourceAccounting.fixtureCount}\nHard failures: ${evaluation.fitness.criticalGateFailures.toFixed(2)}\nSemantic error: ${evaluation.fitness.semanticContractError.toFixed(4)}\nBEM error: ${evaluation.fitness.bemComponentError.toFixed(4)}\nGold visual loss: ${evaluation.fitness.visualLoss.toFixed(6)}\nMean visual recovery: ${(evaluation.fixtureResults.reduce((sum, fixture) => sum + (fixture.metrics.visualRecovery ?? 0), 0) / Math.max(evaluation.fixtureResults.length, 1) * 100).toFixed(1)}%\nBrowser captures: ${evaluation.resourceAccounting.browserCaptures}\nMutation-control recall: ${(evaluation.mutationControlRecall * 100).toFixed(1)}%\nNormalized cost: ${evaluation.resourceAccounting.normalizedCost.toFixed(3)}`);
   });
 
 program

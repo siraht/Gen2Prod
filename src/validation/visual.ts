@@ -1,6 +1,8 @@
 import { PNG } from "pngjs";
 import pixelmatch from "pixelmatch";
 import type { CaptureResult } from "../evidence/capture.ts";
+import { dirname } from "node:path";
+import { ensureDirectory } from "../core/fs.ts";
 
 export type VisualMetrics = {
   pixelDifferenceRatio: number;
@@ -26,7 +28,7 @@ function quantile(values: number[], fraction: number): number {
   return ordered[Math.min(ordered.length - 1, Math.floor(fraction * ordered.length))] ?? 0;
 }
 
-export async function imageDifference(baselinePath: string, candidatePath: string): Promise<{ ratio: number; widthMismatch: number; heightMismatch: number }> {
+export async function imageDifference(baselinePath: string, candidatePath: string, diffPath?: string): Promise<{ ratio: number; widthMismatch: number; heightMismatch: number }> {
   const [baselineBuffer, candidateBuffer] = await Promise.all([Bun.file(baselinePath).arrayBuffer(), Bun.file(candidatePath).arrayBuffer()]);
   const baseline = PNG.sync.read(Buffer.from(baselineBuffer));
   const candidate = PNG.sync.read(Buffer.from(candidateBuffer));
@@ -40,7 +42,12 @@ export async function imageDifference(baselinePath: string, candidatePath: strin
   };
   const baselineCrop = crop(baseline);
   const candidateCrop = crop(candidate);
-  const mismatched = pixelmatch(baselineCrop.data, candidateCrop.data, undefined, width, height, { threshold: 0.1, includeAA: false });
+  const diff = diffPath ? new PNG({ width, height }) : undefined;
+  const mismatched = pixelmatch(baselineCrop.data, candidateCrop.data, diff?.data, width, height, { threshold: 0.1, includeAA: false });
+  if (diffPath && diff) {
+    await ensureDirectory(dirname(diffPath));
+    await Bun.write(diffPath, PNG.sync.write(diff));
+  }
   const areaPenalty = Math.abs(baseline.width * baseline.height - candidate.width * candidate.height) / Math.max(baseline.width * baseline.height, 1);
   return { ratio: Math.min(1, mismatched / (width * height) + areaPenalty), widthMismatch: Math.abs(baseline.width - candidate.width) / Math.max(baseline.width, 1), heightMismatch: Math.abs(baseline.height - candidate.height) / Math.max(baseline.height, 1) };
 }
@@ -59,8 +66,8 @@ function byNode(capture: CaptureResult["captures"][number]): Map<string, Capture
   return new Map((capture.dom as CapturedNode[]).filter((node) => node.nodeId).map((node) => [node.nodeId, node]));
 }
 
-export async function compareCaptures(baseline: CaptureResult["captures"][number], candidate: CaptureResult["captures"][number]): Promise<VisualMetrics> {
-  const images = await imageDifference(baseline.screenshot, candidate.screenshot);
+export async function compareCaptures(baseline: CaptureResult["captures"][number], candidate: CaptureResult["captures"][number], diffPath?: string): Promise<VisualMetrics> {
+  const images = await imageDifference(baseline.screenshot, candidate.screenshot, diffPath);
   const baselineNodes = byNode(baseline);
   const candidateNodes = byNode(candidate);
   const usedCandidateIds = new Set<string>();

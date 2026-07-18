@@ -17,6 +17,16 @@ export type CaptureResult = {
   captures: { viewport: number; theme: string; state: string; screenshot: string; screenshotHash: string; dom: unknown[]; accessibilityTree: unknown[]; performance: Record<string, unknown>; seo: Record<string, unknown>; console: string[] }[];
 };
 
+export type CaptureSession = {
+  capture: (options: CaptureOptions) => Promise<CaptureResult>;
+  close: () => Promise<void>;
+};
+
+let pooledBrowser: Browser | undefined;
+let pooledBrowserLaunch: Promise<Browser> | undefined;
+let pooledBrowserReferences = 0;
+let pooledBrowserCloseTimer: ReturnType<typeof setTimeout> | undefined;
+
 export async function findBrowserExecutable(preferred?: string): Promise<string> {
   const candidates = [preferred, process.env.GEN2PROD_BROWSER, "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"].filter((value): value is string => Boolean(value && value !== "auto"));
   for (const candidate of candidates) if (await Bun.file(candidate).exists()) return candidate;
@@ -76,17 +86,59 @@ async function captureOne(browser: Browser, options: CaptureOptions, viewport: n
   return result;
 }
 
-export async function capturePage(options: CaptureOptions): Promise<CaptureResult> {
+async function captureWithBrowser(browser: Browser, options: CaptureOptions): Promise<CaptureResult> {
   await ensureDirectory(options.outputDirectory);
-  const executablePath = await findBrowserExecutable(options.browserExecutable);
-  const browser = await chromium.launch({ headless: true, executablePath, args: ["--disable-dev-shm-usage", "--no-sandbox"] });
-  try {
-    const captures: CaptureResult["captures"] = [];
-    for (const viewport of options.viewports) for (const theme of options.themes) for (const state of options.states) captures.push(await captureOne(browser, options, viewport, theme, state));
-    const result: CaptureResult = { environment: { browser: "chromium", browserVersion: browser.version(), os: `${process.platform}/${process.arch}`, deviceScaleFactor: 1, timezone: "UTC", locale: "en-US", fontSetHash: "system-fonts", colorScheme: options.themes.join(","), colorProfile: "sRGB" }, captures };
-    await writeJsonAtomic(join(options.outputDirectory, "capture.json"), result);
-    return result;
-  } finally {
-    await browser.close();
+  const captures: CaptureResult["captures"] = [];
+  for (const viewport of options.viewports) for (const theme of options.themes) for (const state of options.states) captures.push(await captureOne(browser, options, viewport, theme, state));
+  const result: CaptureResult = { environment: { browser: "chromium", browserVersion: browser.version(), os: `${process.platform}/${process.arch}`, deviceScaleFactor: 1, timezone: "UTC", locale: "en-US", fontSetHash: "system-fonts", colorScheme: options.themes.join(","), colorProfile: "sRGB" }, captures };
+  await writeJsonAtomic(join(options.outputDirectory, "capture.json"), result);
+  return result;
+}
+
+export async function openCaptureSession(preferred?: string): Promise<CaptureSession> {
+  if (pooledBrowserCloseTimer) {
+    clearTimeout(pooledBrowserCloseTimer);
+    pooledBrowserCloseTimer = undefined;
   }
+  if (!pooledBrowserLaunch) {
+    pooledBrowserLaunch = (async () => {
+      const executablePath = await findBrowserExecutable(preferred);
+      const browser = await chromium.launch({ headless: true, executablePath, timeout: 15_000, args: ["--disable-dev-shm-usage", "--no-sandbox"] });
+      pooledBrowser = browser;
+      return browser;
+    })().catch((error) => {
+      pooledBrowserLaunch = undefined;
+      pooledBrowser = undefined;
+      throw error;
+    });
+  }
+  const browser = await pooledBrowserLaunch;
+  pooledBrowserReferences += 1;
+  let closed = false;
+  return {
+    capture: (options) => {
+      if (closed) throw new Error("Capture session is closed");
+      return captureWithBrowser(browser, options);
+    },
+    close: async () => {
+      if (closed) return;
+      closed = true;
+      pooledBrowserReferences = Math.max(0, pooledBrowserReferences - 1);
+      if (pooledBrowserReferences > 0 || pooledBrowserCloseTimer) return;
+      pooledBrowserCloseTimer = setTimeout(() => {
+        if (pooledBrowserReferences > 0) return;
+        const closing = pooledBrowser;
+        pooledBrowser = undefined;
+        pooledBrowserLaunch = undefined;
+        pooledBrowserCloseTimer = undefined;
+        void closing?.close();
+      }, 750);
+    },
+  };
+}
+
+export async function capturePage(options: CaptureOptions): Promise<CaptureResult> {
+  const session = await openCaptureSession(options.browserExecutable);
+  try { return await session.capture(options); }
+  finally { await session.close(); }
 }
