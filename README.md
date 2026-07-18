@@ -12,6 +12,7 @@ Gen2Prod turns uncertain website artifacts into semantic, BEM-structured, token-
 | --- | --- |
 | Measured compiler | Source, rendered DOM, accessibility tree, computed styles, boxes, screenshots, intent, components, and tokens reconcile into G2P-NF |
 | Hard constraints | Build, BEM, token, inline-style, accessibility, SEO, security, and mode-specific visual failures cannot be outweighed by a soft score |
+| Styling contract | Clean output is nested SCSS with class-only BEM selectors, no utilities or element styling, and 100% direct registered-token coverage |
 | Reproducibility | Content hashes, manifests, source authority, versioned schemas, replay events, and idempotence checks make every decision attributable |
 | Synthetic curriculum | Seven archetypes plus imported model-generator families produce strategy, page briefs, varied content, rendered mockups, gold code, marked/unmarked dirty inputs, image diffs, lineage, controls, and held-out splits |
 | Strict image-only loop | Live captures or generated mockups become hash-bound visual targets; local OCR/segmentation proposes semantic BEM builds, dirty/target/candidate image diffs score them, and source leakage is forbidden |
@@ -72,6 +73,8 @@ Add `--json` to any result-producing command for the stable automation envelope.
 3. **Hard gates dominate utility.** A token-coverage gain cannot compensate for a broken link, inaccessible control, unsafe script, or visual regression in a locked refactor.
 4. **Acquire only decision-changing evidence.** Source and browser facts come first. Full screenshots, section crops, cross-page inventory, or extra model candidates are paid for only when uncertainty warrants them.
 5. **Repair locally and preserve authority.** A missing authoritative URL, asset, content decision, or design token becomes an exact review action—not an invented answer or a broad rewrite.
+
+The exact clean-output rules are documented in [the styling contract](docs/styling-contract.md). They are executable Gate B/C requirements, not formatting guidance.
 
 ## Operating modes
 

@@ -48,7 +48,7 @@ The importer copies and hashes the image and optional dirty render. A supplied s
 
 ## Automatic.css bindings
 
-Every configured image build uses the same versioned Automatic.css release as dirty-HTML compilation and research. The builder keeps semantic BEM classes, uses ACSS spacing, typography, focus, radius, content-width, and palette variables, and writes `acss-image-bindings.json`. Exact image-observed palette/geometry values are represented as project ACSS override proposals so image-diff optimization stays calibrated. They are labeled `image-derived-unreviewed`: pixels can support a value observation, but not the proposed `primary`, `base`, `accent`, heading, or spacing meaning.
+Every configured image build uses the same versioned Automatic.css release as dirty-HTML compilation and research. The builder emits nested, class-only BEM SCSS with no utility or element selectors, uses registered ACSS spacing, typography, focus, radius, content-width, and palette variables, and writes `acss-image-bindings.json`. Exact image-observed palette/geometry values are registered as project ACSS override proposals so image-diff optimization stays calibrated. They are labeled `image-derived-unreviewed`: pixels can support a value observation, but not the proposed `primary`, `base`, `accent`, heading, or spacing meaning.
 
 `build-provenance.json` records the ACSS version, source hash, registry hash, and binding artifact. Release defaults never outrank project settings. A reviewed project settings/token export should replace or approve the proposal before production sign-off.
 
@@ -56,13 +56,13 @@ Every configured image build uses the same versioned Automatic.css release as di
 
 The deterministic analyzer extracts palette proportions, horizontal bands, edge density, image dominance, OCR lines and coordinates, tentative region roles, page-type evidence, content hierarchy, conversion labels, and visual voice. The planner then proposes landmarks and sections, a BEM ownership graph, visible content placement, conservative interaction affordances, and exact unresolved concerns.
 
-Still images support priors, not claims. A navigation-like label may justify semantic `<nav>` and safe CSS focus/hover affordances, but it does not prove a URL, dropdown, animation, form submission, carousel, video control, or click side effect. One desktop image does not prove mobile reflow or breakpoints.
+Still images support priors, not claims. A navigation-like label may justify semantic `<nav>`, but unresolved destinations remain noninteractive text rather than fabricated links. Focus/hover rules are emitted only when the markup contains a corresponding semantic interactive BEM component. A still does not prove a URL, dropdown, animation, form submission, carousel, video control, or click side effect. One desktop image does not prove mobile reflow or breakpoints.
 
 ## Dynamic-state inference
 
 Dynamic evidence is tiered:
 
-1. A single still yields only semantic priors and safe defaults such as `:focus-visible`, `:hover`, an active visual state, and reduced-motion CSS.
+1. A single still yields only semantic priors, static semantic structure, and reduced-motion CSS. It may suggest possible focus, hover, or active states, but those selectors wait for an emitted interactive component and remain unresolved otherwise.
 2. Temporal and scroll frames can prove that pixels changed at a coordinate or after scrolling. They still cannot prove the implementation mechanism.
 3. Hover/focus probe pairs can associate a visual delta with a coordinate or focus step. Capture never activates the element, and the resulting hypothesis explicitly prohibits claims about URLs, side effects, timing, or JavaScript.
 4. Reviewed state images or an authoritative behavior contract can approve open/closed, loading/error, carousel, video, menu, form, and motion semantics.
