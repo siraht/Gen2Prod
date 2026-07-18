@@ -33,7 +33,7 @@ describe("static compilation", () => {
   test("recovers semantic BEM output and token bindings", async () => {
     const input = await fixtureInput();
     const output = await compileStaticPage({ htmlPath: input.htmlPath, cssPath: input.cssPath, tokenRegistry: input.spec.tokens });
-    expect(output.html).toContain("<main>");
+    expect(output.html).toContain('<main class="page__main">');
     expect(output.html).toContain('<section aria-labelledby="hero-title" class="hero hero--split">');
     expect(output.html).not.toContain("u-1");
     expect(output.scss).toContain(".hero");
@@ -80,6 +80,15 @@ describe("static compilation", () => {
     expect(untouched.value).toBe("clamp(1.5rem, 4vw, 4rem)");
     const replaced = bindValue("gap", "clamp(16px, 4vw, 4rem)", registry);
     expect(replaced.value).toBe("clamp(var(--space-m), 4vw, 4rem)");
+  });
+
+  test("canonicalizes nested calc serialization before the idempotence pass", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-calc-canonical-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Calc</title><meta name="description" content="Calc fixture"><style>.stack{--reverse:0;margin-top:calc(1rem * calc(1 - var(--reverse)))}</style></head><body><main><h1>Calc</h1><div class="stack">Stack</div></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    expect(output.scss).toContain("calc(1rem * (1 - var(--reverse)))");
+    expect(output.scss).not.toContain("calc(1rem * calc(");
   });
 
   test("does not flatten hover or pseudo-element declarations into default styles", async () => {
@@ -152,6 +161,24 @@ describe("static compilation", () => {
     expect(output.html).toContain("hero__content--row");
     expect(output.scss).toContain("&__content--grid");
     expect(output.scss).toContain("&__content--row");
+  });
+
+  test("resolves full selectors, sibling combinators, and cascade precedence", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-selector-cascade-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, `<!doctype html><html class="dark"><head><title>Cascade</title><meta name="description" content="Cascade fixture"><style>
+      *{box-sizing:border-box}.light .surface{background:#fff}.dark .surface{background:#000}
+      #second{color:#123456}.item{color:#abcdef}.item.featured{font-weight:700}
+      .stack > :not([hidden]) ~ :not([hidden]){margin-top:10px}
+    </style></head><body><main data-g2p-node="main"><section data-g2p-node="surface" class="surface"><h1>Cascade</h1><div class="stack"><p data-g2p-node="first" class="item">First</p><p data-g2p-node="second" id="second" class="item">Second</p></div></section></main></body></html>`);
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    const byNode = new Map(output.plan.styles.map((style) => [style.nodeId, Object.fromEntries(style.declarations.map((declaration) => [declaration.property, declaration.value]))]));
+    expect(byNode.get("surface")?.["background"]).toBe("#000");
+    expect(byNode.get("first")?.["font-weight"]).toBeUndefined();
+    expect(byNode.get("first")?.["margin-top"]).toBeUndefined();
+    expect(byNode.get("second")?.["margin-top"]).toBe("10px");
+    expect(byNode.get("second")?.color).toBe("#123456");
+    expect(byNode.get("main")?.["box-sizing"]).toBe("border-box");
   });
 });
 

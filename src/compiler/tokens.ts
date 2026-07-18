@@ -79,9 +79,28 @@ function normalizeComparableValue(property: string, value: string): string {
   return normalized.replace(/(["'])var\((--[^)]+)\)\1/g, "var($2)");
 }
 
+function flattenNestedCalc(value: string): string {
+  const stack: boolean[] = [];
+  let output = "";
+  for (let index = 0; index < value.length; index += 1) {
+    if (value.startsWith("calc(", index)) {
+      const nested = stack.includes(true);
+      output += nested ? "(" : "calc(";
+      stack.push(true);
+      index += 4;
+      continue;
+    }
+    const character = value[index]!;
+    output += character;
+    if (character === "(") stack.push(false);
+    else if (character === ")") stack.pop();
+  }
+  return output;
+}
+
 function normalizeCssValue(value: string, property: string): string {
   const quoted = normalizeComparableValue(property, value);
-  return normalizeModernRgb(quoted.trim().replace(/\s+/g, " ").replace(/\s*,\s*/g, ", ").replace(/\s*\/\s*/g, "/"))
+  return flattenNestedCalc(normalizeModernRgb(quoted.trim().replace(/\s+/g, " ").replace(/\s*,\s*/g, ", ").replace(/\s*\/\s*/g, "/")))
     .replace(/#0000\b/gi, "rgba(0, 0, 0, 0)");
 }
 
@@ -126,39 +145,214 @@ function selectorClasses(selector: string): string[] {
   return [...selector.matchAll(/\.((?:\\.|[_a-zA-Z])(?:\\.|[\w-])*)/g)].flatMap((match) => match[1] ? [match[1].replace(/\\(.)/g, "$1")] : []);
 }
 
-function defaultStateTarget(selector: string): string | undefined {
-  if (/::(?:before|after|marker|placeholder)|:(?:hover|focus|focus-visible|focus-within|active|visited|checked|disabled|open)\b/i.test(selector)) return undefined;
+type SelectorContext = {
+  parent: Map<string, PlannedNode>;
+  virtualRoot: PlannedNode;
+};
+
+function topLevelParts(value: string, separator: string): string[] {
+  const parts: string[] = [];
   let depth = 0;
   let start = 0;
-  for (let index = 0; index < selector.length; index += 1) {
-    const character = selector[index];
+  for (let index = 0; index < value.length; index += 1) {
+    const character = value[index];
     if (character === "(" || character === "[") depth += 1;
     else if (character === ")" || character === "]") depth = Math.max(0, depth - 1);
-    else if (depth === 0 && /[\s>+~]/.test(character ?? "")) {
-      while (index + 1 < selector.length && /[\s>+~]/.test(selector[index + 1] ?? "")) index += 1;
+    else if (depth === 0 && character === separator) {
+      parts.push(value.slice(start, index).trim());
       start = index + 1;
     }
   }
-  return selector.slice(start).trim() || undefined;
+  parts.push(value.slice(start).trim());
+  return parts.filter(Boolean);
 }
 
-function selectorTargetsNode(selector: string, node: PlannedNode): boolean {
-  const target = defaultStateTarget(selector);
-  if (!target || target === ":root") return false;
-  const classNames = [...node.oldClasses, ...node.classes];
-  const targetClasses = selectorClasses(target);
-  if (targetClasses.length > 0) return targetClasses.some((name) => classNames.includes(name));
-  const id = node.attributes.id;
-  if (id && target.includes(`#${id}`)) return true;
-  const tag = target.match(/^(?:\*|([a-z][a-z0-9-]*))/i)?.[1]?.toLowerCase();
-  if (tag) return tag === node.originalTag || tag === node.tag;
+function selectorTokens(selector: string): { simples: string[]; combinators: string[] } {
+  const simples: string[] = [];
+  const combinators: string[] = [];
+  let depth = 0;
+  let start = 0;
+  let pendingDescendant = false;
+  for (let index = 0; index < selector.length; index += 1) {
+    const character = selector[index]!;
+    if (character === "(" || character === "[") { depth += 1; continue; }
+    if (character === ")" || character === "]") { depth = Math.max(0, depth - 1); continue; }
+    if (depth > 0) continue;
+    if (/\s/.test(character)) {
+      const value = selector.slice(start, index).trim();
+      if (value) simples.push(value);
+      while (index + 1 < selector.length && /\s/.test(selector[index + 1]!)) index += 1;
+      start = index + 1;
+      pendingDescendant = simples.length > combinators.length;
+      continue;
+    }
+    if (/[>+~]/.test(character)) {
+      const value = selector.slice(start, index).trim();
+      if (value) simples.push(value);
+      if (pendingDescendant && combinators.length >= simples.length) combinators.pop();
+      combinators.push(character);
+      pendingDescendant = false;
+      while (index + 1 < selector.length && /\s/.test(selector[index + 1]!)) index += 1;
+      start = index + 1;
+      continue;
+    }
+    if (pendingDescendant) {
+      combinators.push(" ");
+      pendingDescendant = false;
+    }
+  }
+  const tail = selector.slice(start).trim();
+  if (tail) simples.push(tail);
+  while (combinators.length >= simples.length) combinators.pop();
+  return { simples, combinators };
+}
+
+function previousSiblings(node: PlannedNode, context: SelectorContext): PlannedNode[] {
+  const parent = context.parent.get(node.nodeId);
+  if (!parent) return [];
+  const index = parent.children.findIndex((child) => child.nodeId === node.nodeId);
+  return index > 0 ? parent.children.slice(0, index) : [];
+}
+
+function extractFunctional(simple: string): { rest: string; functions: { name: "is" | "where" | "not"; body: string }[] } {
+  let rest = simple;
+  const functions: { name: "is" | "where" | "not"; body: string }[] = [];
+  while (true) {
+    const match = rest.match(/:(is|where|not)\(/);
+    if (!match || match.index === undefined) break;
+    const open = match.index + match[0].length - 1;
+    let depth = 0;
+    let close = -1;
+    for (let index = open; index < rest.length; index += 1) {
+      if (rest[index] === "(") depth += 1;
+      else if (rest[index] === ")" && --depth === 0) { close = index; break; }
+    }
+    if (close < 0) break;
+    functions.push({ name: match[1] as "is" | "where" | "not", body: rest.slice(open + 1, close) });
+    rest = `${rest.slice(0, match.index)}${rest.slice(close + 1)}`;
+  }
+  return { rest, functions };
+}
+
+function attributeMatches(node: PlannedNode, expression: string): boolean {
+  const match = expression.match(/^\s*([^\s~|^$*!=]+)\s*(?:([~|^$*]?=)\s*["']?([^"']*)["']?)?\s*$/);
+  if (!match?.[1]) return false;
+  const actual = node.attributes[match[1]];
+  if (!match[2]) return actual !== undefined;
+  if (actual === undefined) return false;
+  const expected = match[3] ?? "";
+  if (match[2] === "=") return actual === expected;
+  if (match[2] === "~=") return actual.split(/\s+/).includes(expected);
+  if (match[2] === "^=") return actual.startsWith(expected);
+  if (match[2] === "$=") return actual.endsWith(expected);
+  if (match[2] === "*=") return actual.includes(expected);
+  if (match[2] === "|=") return actual === expected || actual.startsWith(`${expected}-`);
   return false;
+}
+
+function simpleMatches(simple: string, node: PlannedNode, context: SelectorContext): boolean {
+  const functional = extractFunctional(simple);
+  for (const item of functional.functions) {
+    const matches = topLevelParts(item.body, ",").some((selector) => selectorMatches(selector, node, context));
+    if (item.name === "not" ? matches : !matches) return false;
+  }
+  let rest = functional.rest;
+  if (/:root\b/.test(rest)) {
+    if (node !== context.virtualRoot) return false;
+    rest = rest.replace(/:root\b/g, "");
+  }
+  if (/:host\b/.test(rest)) {
+    if (node !== context.virtualRoot) return false;
+    rest = rest.replace(/:host\b/g, "");
+  }
+  const parent = context.parent.get(node.nodeId);
+  if (/:first-child\b/.test(rest) && parent?.children[0]?.nodeId !== node.nodeId) return false;
+  if (/:last-child\b/.test(rest) && parent?.children.at(-1)?.nodeId !== node.nodeId) return false;
+  rest = rest.replace(/:(?:first|last)-child\b/g, "");
+  const nth = rest.match(/:nth-child\(\s*(\d+)\s*\)/);
+  if (nth?.[1]) {
+    const index = parent?.children.findIndex((child) => child.nodeId === node.nodeId) ?? -1;
+    if (index + 1 !== Number(nth[1])) return false;
+    rest = rest.replace(nth[0], "");
+  }
+  if (/:checked\b/.test(rest) && !("checked" in node.attributes)) return false;
+  if (/:disabled\b/.test(rest) && !("disabled" in node.attributes)) return false;
+  rest = rest.replace(/:(?:checked|disabled)\b/g, "");
+  if (/:(?:hover|focus|focus-visible|focus-within|active|visited|open|indeterminate)\b|::/.test(rest)) return false;
+  for (const attribute of rest.matchAll(/\[([^\]]+)\]/g)) if (!attribute[1] || !attributeMatches(node, attribute[1])) return false;
+  rest = rest.replace(/\[[^\]]+\]/g, "");
+  const classNames = new Set([...node.oldClasses, ...node.classes]);
+  if (selectorClasses(rest).some((name) => !classNames.has(name))) return false;
+  rest = rest.replace(/\.((?:\\.|[_a-zA-Z])(?:\\.|[\w-])*)/g, "");
+  for (const id of rest.matchAll(/#([a-zA-Z0-9_-]+)/g)) if (node.attributes.id !== id[1]) return false;
+  rest = rest.replace(/#[a-zA-Z0-9_-]+/g, "");
+  const tag = rest.trim().match(/^(\*|[a-z][a-z0-9-]*)/i)?.[1]?.toLowerCase();
+  if (tag && tag !== "*" && tag !== node.originalTag && tag !== node.tag) return false;
+  rest = rest.trim().replace(/^(?:\*|[a-z][a-z0-9-]*)/i, "").trim();
+  return rest.length === 0;
+}
+
+function selectorMatches(selector: string, node: PlannedNode, context: SelectorContext): boolean {
+  const { simples, combinators } = selectorTokens(selector.trim());
+  if (!simples.length || !simpleMatches(simples.at(-1)!, node, context)) return false;
+  let candidates = [node];
+  for (let index = simples.length - 2; index >= 0; index -= 1) {
+    const simple = simples[index]!;
+    const combinator = combinators[index] ?? " ";
+    const next: PlannedNode[] = [];
+    for (const candidate of candidates) {
+      if (combinator === ">") {
+        const parent = context.parent.get(candidate.nodeId);
+        if (parent && simpleMatches(simple, parent, context)) next.push(parent);
+      } else if (combinator === "+") {
+        const previous = previousSiblings(candidate, context).at(-1);
+        if (previous && simpleMatches(simple, previous, context)) next.push(previous);
+      } else if (combinator === "~") {
+        next.push(...previousSiblings(candidate, context).filter((sibling) => simpleMatches(simple, sibling, context)));
+      } else {
+        let parent = context.parent.get(candidate.nodeId);
+        while (parent) {
+          if (simpleMatches(simple, parent, context)) next.push(parent);
+          parent = context.parent.get(parent.nodeId);
+        }
+      }
+    }
+    if (!next.length) return false;
+    candidates = next;
+  }
+  return true;
+}
+
+function selectorContext(source: SourceDocument, root: PlannedNode): SelectorContext {
+  const virtualRoot: PlannedNode = { nodeId: "g2p-document-root", originalTag: "html", tag: "html", role: "document", block: null, classes: [], oldClasses: (source.documentAttributes.class ?? "").split(/\s+/).filter(Boolean), attributes: source.documentAttributes, text: "", children: [root] };
+  const parent = new Map<string, PlannedNode>();
+  const visit = (node: PlannedNode) => {
+    for (const child of node.children) { parent.set(child.nodeId, node); visit(child); }
+  };
+  parent.set(root.nodeId, virtualRoot);
+  visit(root);
+  return { parent, virtualRoot };
+}
+
+function cascadeWins(candidate: CssDeclaration, candidateOrder: number, current: CssDeclaration, currentOrder: number): boolean {
+  if (candidate.important !== current.important) return candidate.important;
+  const candidateInline = candidate.origin === "inline" ? 1 : 0;
+  const currentInline = current.origin === "inline" ? 1 : 0;
+  if (candidateInline !== currentInline) return candidateInline > currentInline;
+  for (let index = 0; index < 3; index += 1) if (candidate.specificity[index] !== current.specificity[index]) return candidate.specificity[index]! > current.specificity[index]!;
+  return candidateOrder > currentOrder;
+}
+
+function aliasFallbackEligible(selector: string): boolean {
+  return !/::|:(?:hover|focus|focus-visible|focus-within|active|visited|checked|disabled|open|indeterminate)\b/i.test(selector);
 }
 
 export function resolveStyles(source: SourceDocument, root: PlannedNode, registry: TokenRegistry, relativeThreshold = 0.08): { styles: StyleIntent[]; exceptions: TokenException[] } {
   const styles: StyleIntent[] = [];
   const exceptions: TokenException[] = [];
   const nodes = allNodes(root);
+  const matching = selectorContext(source, root);
+  const declarationOrders = new Map(source.declarations.map((declaration, index) => [declaration, index]));
   const blockSourceClasses = new Map<string, string[]>();
   for (const node of nodes) for (const className of node.classes) {
     if (className.includes("__") || className.includes("--")) continue;
@@ -174,9 +368,9 @@ export function resolveStyles(source: SourceDocument, root: PlannedNode, registr
   for (const node of nodes) {
     const sourceDeclarations = source.declarations.filter((declaration) => {
       if (declaration.sourceNodeId === node.nodeId) return true;
-      if (selectorTargetsNode(declaration.selector, node)) return true;
-      const classes = selectorClasses(defaultStateTarget(declaration.selector) ?? "");
-      if (classes.some((className) => node.oldClasses.includes(className) || node.classes.includes(className))) return true;
+      if (selectorMatches(declaration.selector, node, matching)) return true;
+      if (!aliasFallbackEligible(declaration.selector)) return false;
+      const classes = selectorClasses(declaration.selector);
       if (node.block && node.classes.includes(node.block) && (blockSourceClasses.get(node.block) ?? []).some((sourceBlock) => classes.includes(sourceBlock))) return true;
       return node.classes.some((plannedClass) => {
         const match = plannedClass.match(/^([^_]+)((?:__|--).+)$/);
@@ -184,10 +378,14 @@ export function resolveStyles(source: SourceDocument, root: PlannedNode, registr
         return (blockSourceClasses.get(match[1]) ?? []).some((sourceBlock) => classes.includes(`${sourceBlock}${match[2]}`));
       });
     });
-    const deduplicated = new Map<string, typeof sourceDeclarations[number]>();
-    for (const declaration of sourceDeclarations) deduplicated.set(declaration.property, declaration);
+    const deduplicated = new Map<string, { declaration: typeof sourceDeclarations[number]; order: number }>();
+    for (const declaration of sourceDeclarations) {
+      const order = declarationOrders.get(declaration) ?? 0;
+      const current = deduplicated.get(declaration.property);
+      if (!current || cascadeWins(declaration, order, current.declaration, current.order)) deduplicated.set(declaration.property, { declaration, order });
+    }
     if (deduplicated.size === 0) continue;
-    const declarations = [...deduplicated.values()].map((declaration) => {
+    const declarations = [...deduplicated.values()].map(({ declaration }) => {
       const classification = classifyDeclaration(declaration.property, declaration.value);
       const binding = classification === "governed-design-value" ? bindValue(declaration.property, declaration.value, registry, relativeThreshold) : { value: declaration.value };
       if (classification === "governed-design-value" && !binding.token) {
