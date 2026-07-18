@@ -192,6 +192,21 @@ export const ImageStateSequenceAnalysisSchema = z.object({
   stillImageCeilings: z.array(z.string()),
 });
 
+export const ImageDerivedContentStrategySchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  targetId: z.string().min(1),
+  sourceFrameHash: z.string().regex(/^[a-f0-9]{64}$/),
+  provenance: z.literal("image-derived-unreviewed"),
+  pageTypeHypothesis: z.string().min(1),
+  audienceHypothesis: z.string().min(1),
+  conversionHypothesis: z.object({ labels: z.array(z.string()), interpretation: z.string(), confidence: z.number().min(0).max(1) }),
+  visualVoice: z.array(z.string()).min(1),
+  contentHierarchy: z.array(z.object({ regionId: z.string(), visualRole: z.string(), goalHypothesis: z.string(), visibleMessages: z.array(z.string()), confidence: z.number().min(0).max(1) })),
+  mockupSummary: z.object({ dimensions: z.object({ width: z.number(), height: z.number() }), palette: z.array(z.string()), regionCount: z.number().int().nonnegative(), imageDominantRegions: z.number().int().nonnegative() }),
+  motionAndStateExpectations: z.array(z.object({ hypothesis: z.string(), evidence: z.string(), safeDefault: z.string(), confidence: z.number().min(0).max(1) })),
+  requiredReview: z.array(z.string()),
+});
+
 export type ImageOnlyFrame = z.infer<typeof ImageOnlyFrameSchema>;
 export type ImageOnlyTargetManifest = z.infer<typeof ImageOnlyTargetManifestSchema>;
 export type ImageOnlyAnalysis = z.infer<typeof ImageOnlyAnalysisSchema>;
@@ -200,3 +215,4 @@ export type InteractionHypothesis = z.infer<typeof InteractionHypothesisSchema>;
 export type ImageOnlyEvaluation = z.infer<typeof ImageOnlyEvaluationSchema>;
 export type ImageOnlyPolicy = z.infer<typeof ImageOnlyPolicySchema>;
 export type ImageStateSequenceAnalysis = z.infer<typeof ImageStateSequenceAnalysisSchema>;
+export type ImageDerivedContentStrategy = z.infer<typeof ImageDerivedContentStrategySchema>;
