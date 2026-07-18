@@ -240,7 +240,7 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
     oldClasses: oldClasses(node),
     attributes: attrs,
     text: node.text,
-    children: node.children.map((child) => planNode(child, node, block, counts, review, useStableNodeHints, preserveExplicitSemantics, classRoles)),
+    children: node.children.filter((child) => child.tag !== "script").map((child) => planNode(child, node, block, counts, review, useStableNodeHints, preserveExplicitSemantics, classRoles)),
   };
 }
 

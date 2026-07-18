@@ -106,6 +106,13 @@ function inlineDeclarations(root: DomNode): CssDeclaration[] {
   return [...here, ...root.children.flatMap(inlineDeclarations)];
 }
 
+function executableScripts(root: DomNode): SourceDocument["executableScripts"] {
+  const here = root.tag === "script" && !root.attributes.some((attribute) => attribute.name === "type" && attribute.value === "application/ld+json")
+    ? [{ ...(root.attributes.find((attribute) => attribute.name === "src")?.value ? { src: root.attributes.find((attribute) => attribute.name === "src")!.value } : {}), inline: !root.attributes.some((attribute) => attribute.name === "src"), bytes: new TextEncoder().encode(root.text).byteLength }]
+    : [];
+  return [...here, ...root.children.flatMap(executableScripts)];
+}
+
 export async function ingestStaticHtml(htmlPath: string, cssPath?: string): Promise<SourceDocument> {
   const html = await Bun.file(htmlPath).text();
   const sourceCss = await loadSourceCss(htmlPath, cssPath);
@@ -138,6 +145,7 @@ export async function ingestStaticHtml(htmlPath: string, cssPath?: string): Prom
       ...(sourceCss.embeddedCss ? [{ origin: "embedded" as const, label: `${basename(htmlPath)}:<style>`, bytes: new TextEncoder().encode(sourceCss.embeddedCss).byteLength }] : []),
       ...(declarations.some((declaration) => declaration.origin === "inline") ? [{ origin: "inline" as const, label: `${basename(htmlPath)}:style-attributes`, bytes: declarations.filter((declaration) => declaration.origin === "inline").reduce((sum, declaration) => sum + declaration.property.length + declaration.value.length, 0) }] : []),
     ],
+    executableScripts: executableScripts(dom),
     authorities: ["content", "links", "forms", "behavior-hooks", "semantics-partial", "conditional-branches"],
   };
 }
@@ -154,6 +162,7 @@ export function sourceSummary(source: SourceDocument): Record<string, unknown> {
     classRoles,
     declarations: source.declarations.length,
     styleSources: source.styleSources,
+    executableScripts: source.executableScripts,
   };
 }
 

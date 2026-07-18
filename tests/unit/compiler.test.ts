@@ -74,6 +74,15 @@ describe("static compilation", () => {
     expect(output.scss).toContain("margin-top: 8px");
   });
 
+  test("does not copy executable source scripts into deterministic output", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-script-boundary-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Script</title><meta name="description" content="Script boundary"></head><body><main><h1>Script boundary</h1></main><script>document.body.dataset.compromised="true"</script></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    expect(output.html).not.toContain("<script");
+    expect(output.html).not.toContain("compromised");
+  });
+
   test("snaps only complete CSS atoms inside compound values", () => {
     const registry = inputTokens();
     const untouched = bindValue("gap", "clamp(1.5rem, 4vw, 4rem)", registry);

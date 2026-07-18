@@ -31,6 +31,7 @@ export type SourceDocument = {
   classInventory: ClassInventoryItem[];
   declarations: CssDeclaration[];
   styleSources: { origin: "external" | "embedded" | "inline" | "rendered"; label: string; bytes: number }[];
+  executableScripts: { src?: string; inline: boolean; bytes: number }[];
   authorities: AuthorityConcern[];
 };
 
