@@ -7,7 +7,7 @@ import { corruptFixture } from "../../src/synthetic/corrupt.ts";
 import { renderGold } from "../../src/synthetic/render.ts";
 import { ingestStaticHtml } from "../../src/compiler/ingest.ts";
 import { compileStaticPage } from "../../src/compiler/pipeline.ts";
-import { bindValue } from "../../src/compiler/tokens.ts";
+import { bindValue, extractTokenRegistry } from "../../src/compiler/tokens.ts";
 
 async function fixtureInput() {
   const spec = createArchetypes()[0]!;
@@ -473,6 +473,23 @@ describe("static compilation", () => {
     expect(output.html).toContain(">30+</span>");
     expect(output.html).toContain(">Years of craft</span>");
     expect(output.html).not.toMatch(/<li[^>]*>\s*<li/);
+  });
+
+  test("recognizes ACSS utilities while preserving project and approved token authority", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-acss-authority-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>ACSS</title><meta name="description" content="ACSS authority fixture"><style>:root{--space-m:3rem}.grid--3{padding:var(--space-m)}</style></head><body><main><h1>ACSS</h1><section class="grid--3">Recognized utility</section></main></body></html>');
+    const fallback = extractTokenRegistry(":root{--space-m:1rem;--unused:#fff}", "automaticcss@4:compiled-release-default");
+    const approved = extractTokenRegistry(":root{--space-m:4rem}", "approved-project-registry");
+    const projectOutput = await compileStaticPage({ htmlPath, tokenRegistry: fallback, frameworkClassCatalog: ["grid--3"] });
+    const projectToken = projectOutput.plan.tokens.tokens.find((token) => token.runtimeVariable === "--space-m");
+    expect(projectToken?.sampledValues["default@1280"]).toBe("3rem");
+    expect(projectToken?.source).toBe("source-css-custom-property");
+    expect(projectOutput.plan.source.classInventory.find((item) => item.name === "grid--3")?.role).toBe("framework");
+    expect(projectOutput.html).not.toContain("grid--3");
+    expect(projectOutput.scss).not.toContain("--unused");
+    const approvedOutput = await compileStaticPage({ htmlPath, tokenRegistry: fallback, authoritativeTokenRegistry: approved, frameworkClassCatalog: ["grid--3"] });
+    expect(approvedOutput.plan.tokens.tokens.find((token) => token.runtimeVariable === "--space-m")?.sampledValues["default@1280"]).toBe("4rem");
   });
 });
 

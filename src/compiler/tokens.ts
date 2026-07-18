@@ -1,5 +1,5 @@
 import { addDays } from "./util.ts";
-import type { StyleIntent, Token, TokenRegistry } from "../schemas/normal-form.ts";
+import { TokenRegistrySchema, type StyleIntent, type Token, type TokenRegistry } from "../schemas/normal-form.ts";
 import type { CssDeclaration, PlannedNode, SourceDocument, TokenException } from "./types.ts";
 import { sha256 } from "../core/hash.ts";
 import postcss from "postcss";
@@ -449,12 +449,16 @@ function inferredTokenType(name: string, value: string): Token["type"] {
 }
 
 function allowedProperties(name: string): string[] {
-  if (/space|gutter/i.test(name)) return ["gap", "padding", "margin"];
+  if (/space|gutter|padding|gap/i.test(name)) return ["gap", "row-gap", "column-gap", "padding", "margin"];
   if (/radius/i.test(name)) return ["border-radius"];
   if (/shadow/i.test(name)) return ["box-shadow", "text-shadow"];
-  if (/font-size|^--h\d|^--text-/i.test(name)) return ["font-size"];
+  if (/font-size|^--h\d|^--text-(?:xs|s|m|l|xl|xxl)(?:-|$)/i.test(name)) return ["font-size"];
+  if (/font-family/i.test(name)) return ["font-family"];
   if (/line-height/i.test(name)) return ["line-height"];
   if (/weight/i.test(name)) return ["font-weight"];
+  if (/letter-spacing/i.test(name)) return ["letter-spacing"];
+  if (/focus-(?:color|width|offset)/i.test(name)) return ["outline", "outline-color", "outline-width", "outline-offset", "border-color"];
+  if (/transition|duration|delay|ease/i.test(name)) return ["transition", "transition-duration", "transition-delay", "transition-timing-function", "animation", "animation-duration", "animation-delay", "animation-timing-function"];
   if (/width|size|breakpoint/i.test(name)) return ["width", "max-inline-size", "inline-size"];
   if (/color|primary|accent|surface|base|text/i.test(name)) return ["color", "background-color", "border-color", "outline-color"];
   return [];
@@ -462,16 +466,25 @@ function allowedProperties(name: string): string[] {
 
 export function extractTokenRegistry(css: string, source = "compiled-project-css"): TokenRegistry {
   const root = postcss.parse(css);
-  const tokens: Token[] = [];
+  const tokens = new Map<string, Token>();
   root.walkDecls((declaration) => {
-    if (!declaration.prop.startsWith("--") || tokens.some((token) => token.runtimeVariable === declaration.prop)) return;
+    if (!declaration.prop.startsWith("--")) return;
     const name = declaration.prop.slice(2).replaceAll("-", ".");
     const type = inferredTokenType(declaration.prop, declaration.value);
     const parsed = numeric(declaration.value);
     const value: Token["value"] = parsed ? { value: parsed.number, unit: parsed.unit } : declaration.value;
-    tokens.push({ id: name, name, type, category: type === "dimension" ? "dimension" : type, value, runtimeVariable: declaration.prop, runtimeExpression: `var(${declaration.prop})`, semanticRole: declaration.prop.slice(2), allowedProperties: allowedProperties(declaration.prop), source, status: "active", sampledValues: { "default@1280": declaration.value } });
+    tokens.set(declaration.prop, { id: name, name, type, category: type === "dimension" ? "dimension" : type, value, runtimeVariable: declaration.prop, runtimeExpression: `var(${declaration.prop})`, semanticRole: declaration.prop.slice(2), allowedProperties: allowedProperties(declaration.prop), source, status: "active", sampledValues: { "default@1280": declaration.value } });
   });
-  return { schemaVersion: "dtcg-2025-10+gen2prod-0.1.0", conformsTo: ["DTCG Format Module 2025.10"], adapterSchema: "gen2prod-token-adapter-0.1.0", tokens };
+  return { schemaVersion: "dtcg-2025-10+gen2prod-0.1.0", conformsTo: ["DTCG Format Module 2025.10"], adapterSchema: "gen2prod-token-adapter-0.1.0", tokens: [...tokens.values()] };
+}
+
+export function mergeTokenRegistries(fallback: TokenRegistry, project: TokenRegistry): TokenRegistry {
+  const tokens = new Map(fallback.tokens.map((token) => [token.runtimeVariable, token]));
+  for (const token of project.tokens) {
+    const base = tokens.get(token.runtimeVariable);
+    tokens.set(token.runtimeVariable, base ? { ...base, value: token.value, sampledValues: { ...base.sampledValues, ...token.sampledValues }, source: token.source, status: token.status } : token);
+  }
+  return TokenRegistrySchema.parse({ ...fallback, tokens: [...tokens.values()] });
 }
 
 function tokenFamily(property: string, value: string): string {

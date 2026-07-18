@@ -132,7 +132,17 @@ export function emitScss(plan: CompilationPlan): string {
     }).join("\n\n");
     return `.${block} {\n${contents}\n}`;
   }).join("\n\n");
-  const tokenDefinitions = plan.tokens.tokens.flatMap((token) => {
+  const referenced = new Set(plan.styles.flatMap((style) => style.declarations.flatMap((declaration) => [...declaration.value.matchAll(/var\((--[a-z0-9-]+)\)/gi)].flatMap((match) => match[1] ? [match[1]] : []))));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const token of plan.tokens.tokens) {
+      if (!referenced.has(token.runtimeVariable)) continue;
+      const sample = token.sampledValues["default@1280"] ?? Object.values(token.sampledValues)[0] ?? "";
+      for (const match of sample.matchAll(/var\((--[a-z0-9-]+)\)/gi)) if (match[1] && !referenced.has(match[1])) { referenced.add(match[1]); changed = true; }
+    }
+  }
+  const tokenDefinitions = plan.tokens.tokens.filter((token) => referenced.has(token.runtimeVariable)).flatMap((token) => {
     const sample = token.sampledValues["default@1280"] ?? Object.values(token.sampledValues)[0];
     return sample ? [`  ${token.runtimeVariable}: ${sample};`] : [];
   }).join("\n");

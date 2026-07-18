@@ -236,7 +236,7 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
   if (node.tag === "body") classes = ["page"];
   else if (block && isNewBlock) classes = semantic.tag === "li" && parentBlock ? [`${parentBlock}__item`, block] : [block];
   else if (block && semantic.tag !== "html") classes = [`${block}__${elementName(node, semantic.role, block, classRoles)}`];
-  const existingBem = oldClasses(node).filter((className) => className.includes("__") || className.includes("--"));
+  const existingBem = oldClasses(node).filter((className) => meaningfulClass(className, classRoles) && (className.includes("__") || className.includes("--")));
   if (existingBem.length > 0) {
     const bases = oldClasses(node).filter((className) => existingBem.some((candidate) => candidate.startsWith(`${className}--`)) || descendantClasses(node).some((candidate) => candidate.startsWith(`${className}__`)));
     const preserved = oldClasses(node).filter((className) => existingBem.includes(className) || bases.includes(className));

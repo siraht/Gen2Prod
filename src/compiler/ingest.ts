@@ -14,9 +14,10 @@ function isElement(node: P5Node): node is P5Element {
   return "tagName" in node && "attrs" in node;
 }
 
-function classifyClass(name: string, selectors: string[]): { role: ClassRole; evidence: string[] } {
+function classifyClass(name: string, selectors: string[], knownFrameworkClasses: ReadonlySet<string>): { role: ClassRole; evidence: string[] } {
   if (/^(js-|is-|has-|qa-|e2e-)/.test(name)) return { role: "behavior", evidence: ["behavior-hook prefix"] };
   if (/^(ng-|v-|svelte-|astro-|wp-|brx-)/.test(name)) return { role: "framework", evidence: ["framework/generated prefix"] };
+  if (knownFrameworkClasses.has(name)) return { role: "framework", evidence: ["Automatic.css release class catalog"] };
   if (/^[a-z][a-z0-9-]*(?:__(?:[a-z0-9-]+)|--(?:[a-z0-9-]+))?$/.test(name) && (name.includes("__") || name.includes("--"))) return { role: "bem", evidence: ["BEM grammar"] };
   if (isUtilityClass(name)) return { role: "tailwind", evidence: ["utility syntax"] };
   if (selectors.length > 0) return { role: "style", evidence: ["matched compiled CSS selector"] };
@@ -174,7 +175,7 @@ function executableEvents(root: DomNode): SourceDocument["executableEvents"] {
   return [...here, ...root.children.flatMap(executableEvents)];
 }
 
-export async function ingestStaticHtml(htmlPath: string, cssPath?: string): Promise<SourceDocument> {
+export async function ingestStaticHtml(htmlPath: string, cssPath?: string, knownFrameworkClasses: ReadonlySet<string> = new Set()): Promise<SourceDocument> {
   const html = await Bun.file(htmlPath).text();
   const sourceCss = await loadSourceCss(htmlPath, cssPath);
   const document = parse(html, { sourceCodeLocationInfo: true });
@@ -189,7 +190,7 @@ export async function ingestStaticHtml(htmlPath: string, cssPath?: string): Prom
   for (const name of classesFromDom(dom)) classCounts.set(name, (classCounts.get(name) ?? 0) + 1);
   const classInventory: ClassInventoryItem[] = [...classCounts.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([name, occurrences]) => {
     const selectors = [...new Set(declarations.filter((declaration) => declaration.selector.includes(`.${name}`)).map((declaration) => declaration.selector))];
-    const classified = classifyClass(name, selectors);
+    const classified = classifyClass(name, selectors, knownFrameworkClasses);
     return { name, occurrences, cssSelectors: selectors, ...classified };
   });
   return {
