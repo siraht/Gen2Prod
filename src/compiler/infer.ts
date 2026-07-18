@@ -246,6 +246,13 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
     classes = [...new Set([...classes, ...attrs["data-g2p-variants"].split(/\s+/).filter(Boolean)])];
     delete attrs["data-g2p-variants"];
   }
+  // External presentation contracts are mixes rather than owned BEM classes.
+  // Keep them last so the canonical class order is stable on recompilation,
+  // including when modifiers arrived through data-g2p-variants on pass one.
+  classes = [
+    ...classes.filter((className) => !externalPresentationClass(className)),
+    ...classes.filter((className) => externalPresentationClass(className)),
+  ];
   if (semantic.tag === "a" && attrs["data-g2p-destination"] && !attrs.href) {
     attrs.href = attrs["data-g2p-destination"];
     delete attrs["data-g2p-destination"];

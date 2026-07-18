@@ -146,6 +146,12 @@ describe("static compilation", () => {
     expect(output.html).toMatch(/class="[^"]*__[^"]* material-icons-outlined"/);
     expect(output.plan.bem.blocks.flatMap((block) => block.nodes).some((node) => node.className === "material-icons-outlined" && node.kind === "mix")).toBeTrue();
     expect(output.plan.components.some((component) => component.name === "material-icons-outlined")).toBeFalse();
+    const canonicalHtml = join(directory, "canonical.html");
+    const canonicalCss = join(directory, "canonical.css");
+    await Bun.write(canonicalHtml, output.html);
+    await Bun.write(canonicalCss, output.css);
+    const rerun = await compileStaticPage({ htmlPath: canonicalHtml, cssPath: canonicalCss, tokenRegistry: output.plan.tokens });
+    expect(rerun.html).toBe(output.html);
   });
 
   test("lowers literal inline navigation into a native link without copying code", async () => {
@@ -248,6 +254,12 @@ describe("static compilation", () => {
     const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
     expect(output.scss).toContain("&:where(:checked:hover)");
     expect(output.css).toContain(":where(:checked:hover)");
+    const canonicalHtml = join(directory, "canonical.html");
+    const canonicalCss = join(directory, "canonical.css");
+    await Bun.write(canonicalHtml, output.html);
+    await Bun.write(canonicalCss, output.css);
+    const rerun = await compileStaticPage({ htmlPath: canonicalHtml, cssPath: canonicalCss, tokenRegistry: output.plan.tokens });
+    expect(rerun.scss).toBe(output.scss);
   });
 
   test("matches escaped responsive arbitrary-value classes as class names", async () => {

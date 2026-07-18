@@ -374,6 +374,10 @@ function conditionedSelector(declaration: CssDeclaration): { selector: string; c
   const states: string[] = [];
   const statePattern = /(?<!:not\():(hover|focus|focus-visible|focus-within|active|visited|checked|disabled|open|indeterminate)\b/g;
   let selector = declaration.selector.replace(statePattern, (_, state: string) => { states.push(state); return ""; });
+  // Canonical output lowers compound states with :where() to cap specificity.
+  // Once the state pseudos are extracted, the empty wrapper is not part of the
+  // structural selector and must not prevent a second-pass match.
+  selector = selector.replace(/:(?:is|where)\(\s*\)/g, "");
   const pseudoMatch = selector.match(/::[-a-z0-9]+/i);
   const pseudo = pseudoMatch?.[0];
   if (pseudo) selector = selector.replace(pseudo, "");
