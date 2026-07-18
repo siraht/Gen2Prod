@@ -99,6 +99,12 @@ export const StyleDeclarationSchema = z.object({
   ]),
   tokenRole: z.string().optional(),
   bindingStatus: z.enum(["bound", "unresolved", "exception", "not-applicable"]),
+  condition: z.object({
+    states: z.array(z.string()).default([]),
+    pseudo: z.string().optional(),
+    media: z.array(z.string()).default([]),
+    supports: z.array(z.string()).default([]),
+  }).optional(),
 });
 
 export const StyleIntentSchema = z.object({

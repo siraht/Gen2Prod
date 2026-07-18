@@ -25,9 +25,13 @@ function classifyClass(name: string, selectors: string[]): { role: ClassRole; ev
 
 function specificity(selector: string): [number, number, number] {
   const ids = selector.match(/#[a-zA-Z0-9_-]+/g)?.length ?? 0;
-  const classes = selector.match(/\.[a-zA-Z0-9_-]+|\[[^\]]+\]|:(?!:)[a-zA-Z0-9_-]+/g)?.length ?? 0;
+  const classes = selector.match(/\.[a-zA-Z0-9_-]+|\[[^\]]+\]|(?<!:):(?!:)[a-zA-Z0-9_-]+/g)?.length ?? 0;
   const elements = selector.match(/(^|[\s>+~])([a-zA-Z][a-zA-Z0-9-]*)/g)?.length ?? 0;
   return [ids, classes, elements];
+}
+
+function normalizeConditionalParams(value: string): string {
+  return value.trim().replace(/\s*:\s*/g, ": ").replace(/\s+/g, " ");
 }
 
 export function parseCss(css: string, origin: CssDeclaration["origin"] = "external"): CssDeclaration[] {
@@ -37,7 +41,15 @@ export function parseCss(css: string, origin: CssDeclaration["origin"] = "extern
   root.walkRules((rule) => {
     for (const selector of rule.selectors) {
       rule.walkDecls((declaration) => {
-        declarations.push({ selector, property: declaration.prop, value: declaration.value, important: declaration.important, specificity: specificity(selector), origin });
+        const media: string[] = [];
+        const supports: string[] = [];
+        let parent = rule.parent as { type: string; name?: string; params?: string; parent?: unknown } | undefined;
+        while (parent) {
+          if (parent.type === "atrule" && parent.name?.toLowerCase() === "media" && parent.params) media.unshift(normalizeConditionalParams(parent.params));
+          if (parent.type === "atrule" && parent.name?.toLowerCase() === "supports" && parent.params) supports.unshift(normalizeConditionalParams(parent.params));
+          parent = parent.parent as typeof parent;
+        }
+        declarations.push({ selector, property: declaration.prop, value: declaration.value, important: declaration.important, specificity: specificity(selector), origin, ...(media.length ? { media } : {}), ...(supports.length ? { supports } : {}) });
       });
     }
   });

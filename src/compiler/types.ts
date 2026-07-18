@@ -19,6 +19,8 @@ export type CssDeclaration = {
   specificity: [number, number, number];
   sourceNodeId?: string | undefined;
   origin?: "external" | "embedded" | "inline" | "rendered" | undefined;
+  media?: string[] | undefined;
+  supports?: string[] | undefined;
 };
 
 export type SourceDocument = {

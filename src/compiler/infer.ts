@@ -383,7 +383,7 @@ function variantHint(style: StyleIntent): string {
 }
 
 function styleSignature(style: StyleIntent): string {
-  return style.declarations.map((declaration) => `${declaration.property}:${declaration.value}:${declaration.important ? 1 : 0}`).sort().join(";");
+  return style.declarations.map((declaration) => `${JSON.stringify(declaration.condition ?? {})}:${declaration.property}:${declaration.value}:${declaration.important ? 1 : 0}`).sort().join(";");
 }
 
 function suffix(index: number): string {

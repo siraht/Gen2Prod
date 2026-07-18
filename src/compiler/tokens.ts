@@ -73,6 +73,7 @@ function normalizeModernRgb(value: string): string {
 }
 
 function normalizeComparableValue(property: string, value: string): string {
+  if (property === "content" && /^'(?:[^'\\]|\\.)*'$/.test(value.trim())) return `"${value.trim().slice(1, -1).replaceAll('"', '\\"')}"`;
   if (property !== "font-family" && property !== "font-variation-settings") return value;
   let normalized = value.replace(/'([^']*)'/g, '"$1"');
   if (property === "font-family" && !/[",]|var\(/.test(normalized) && /\s/.test(normalized.trim())) normalized = `"${normalized.trim()}"`;
@@ -347,6 +348,26 @@ function aliasFallbackEligible(selector: string): boolean {
   return !/::|:(?:hover|focus|focus-visible|focus-within|active|visited|checked|disabled|open|indeterminate)\b/i.test(selector);
 }
 
+type StyleCondition = NonNullable<StyleIntent["declarations"][number]["condition"]>;
+
+function conditionedSelector(declaration: CssDeclaration): { selector: string; condition?: StyleCondition } {
+  const states: string[] = [];
+  const statePattern = /(?<!:not\():(hover|focus|focus-visible|focus-within|active|visited|checked|disabled|open|indeterminate)\b/g;
+  let selector = declaration.selector.replace(statePattern, (_, state: string) => { states.push(state); return ""; });
+  const pseudoMatch = selector.match(/::[-a-z0-9]+/i);
+  const pseudo = pseudoMatch?.[0];
+  if (pseudo) selector = selector.replace(pseudo, "");
+  selector = selector.trim() || "*";
+  const media = declaration.media ?? [];
+  const supports = declaration.supports ?? [];
+  if (!states.length && !pseudo && !media.length && !supports.length) return { selector };
+  return { selector, condition: { states: [...new Set(states)], ...(pseudo ? { pseudo } : {}), media, supports } };
+}
+
+function conditionKey(condition?: StyleCondition): string {
+  return condition ? JSON.stringify({ states: condition.states, pseudo: condition.pseudo ?? "", media: condition.media, supports: condition.supports }) : "default";
+}
+
 export function resolveStyles(source: SourceDocument, root: PlannedNode, registry: TokenRegistry, relativeThreshold = 0.08): { styles: StyleIntent[]; exceptions: TokenException[] } {
   const styles: StyleIntent[] = [];
   const exceptions: TokenException[] = [];
@@ -368,9 +389,10 @@ export function resolveStyles(source: SourceDocument, root: PlannedNode, registr
   for (const node of nodes) {
     const sourceDeclarations = source.declarations.filter((declaration) => {
       if (declaration.sourceNodeId === node.nodeId) return true;
-      if (selectorMatches(declaration.selector, node, matching)) return true;
-      if (!aliasFallbackEligible(declaration.selector)) return false;
-      const classes = selectorClasses(declaration.selector);
+      const conditioned = conditionedSelector(declaration);
+      if (selectorMatches(conditioned.selector, node, matching)) return true;
+      if (!aliasFallbackEligible(conditioned.selector)) return false;
+      const classes = selectorClasses(conditioned.selector);
       if (node.block && node.classes.includes(node.block) && (blockSourceClasses.get(node.block) ?? []).some((sourceBlock) => classes.includes(sourceBlock))) return true;
       return node.classes.some((plannedClass) => {
         const match = plannedClass.match(/^([^_]+)((?:__|--).+)$/);
@@ -378,20 +400,22 @@ export function resolveStyles(source: SourceDocument, root: PlannedNode, registr
         return (blockSourceClasses.get(match[1]) ?? []).some((sourceBlock) => classes.includes(`${sourceBlock}${match[2]}`));
       });
     });
-    const deduplicated = new Map<string, { declaration: typeof sourceDeclarations[number]; order: number }>();
+    const deduplicated = new Map<string, { declaration: typeof sourceDeclarations[number]; order: number; condition?: StyleCondition }>();
     for (const declaration of sourceDeclarations) {
       const order = declarationOrders.get(declaration) ?? 0;
-      const current = deduplicated.get(declaration.property);
-      if (!current || cascadeWins(declaration, order, current.declaration, current.order)) deduplicated.set(declaration.property, { declaration, order });
+      const condition = conditionedSelector(declaration).condition;
+      const key = `${conditionKey(condition)}\0${declaration.property}`;
+      const current = deduplicated.get(key);
+      if (!current || cascadeWins(declaration, order, current.declaration, current.order)) deduplicated.set(key, { declaration, order, ...(condition ? { condition } : {}) });
     }
     if (deduplicated.size === 0) continue;
-    const declarations = [...deduplicated.values()].map(({ declaration }) => {
+    const declarations = [...deduplicated.values()].map(({ declaration, condition }) => {
       const classification = classifyDeclaration(declaration.property, declaration.value);
       const binding = classification === "governed-design-value" ? bindValue(declaration.property, declaration.value, registry, relativeThreshold) : { value: declaration.value };
       if (classification === "governed-design-value" && !binding.token) {
         exceptions.push({ id: `token-exception-${sha256(`${node.nodeId}:${declaration.property}:${declaration.value}`).slice(0, 10)}`, property: declaration.property, value: normalizeCssValue(binding.value, declaration.property), selector: node.classes[0] ? `.${node.classes[0]}` : node.tag, reason: "No compatible registered token within policy tolerance", risk: "medium", owner: "unassigned", expires: addDays(new Date(), 90).toISOString().slice(0, 10), reviewAction: "bind an existing token, approve a project token, or explicitly reapprove" });
       }
-      return { property: declaration.property, value: normalizeCssValue(binding.value, declaration.property), important: declaration.important, source: declaration.selector, classification, ...(binding.token ? { tokenRole: binding.token.semanticRole } : {}), bindingStatus: classification !== "governed-design-value" ? "not-applicable" as const : binding.token ? "bound" as const : "exception" as const };
+      return { property: declaration.property, value: normalizeCssValue(binding.value, declaration.property), important: declaration.important, source: declaration.selector, classification, ...(binding.token ? { tokenRole: binding.token.semanticRole } : {}), bindingStatus: classification !== "governed-design-value" ? "not-applicable" as const : binding.token ? "bound" as const : "exception" as const, ...(condition ? { condition } : {}) };
     });
     styles.push({ nodeId: node.nodeId, styleRole: node.role, layoutRole: node.role.includes("layout") || node.role.includes("list") ? node.role : "content-owned", contentRole: node.role, confidence: { value: 0.85, kind: "ordinal-uncalibrated", evidence: [{ source: "compiled-css", nodeId: node.nodeId, signal: `${declarations.length} matched declarations`, authority: "computed-visual-truth", weight: 0.9 }], risk: "low" }, declarations });
   }

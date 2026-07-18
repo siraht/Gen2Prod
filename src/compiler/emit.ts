@@ -48,8 +48,39 @@ function allNodes(root: PlannedNode): PlannedNode[] {
   return [root, ...root.children.flatMap(allNodes)];
 }
 
+function declarationLines(declarations: StyleIntent["declarations"], indent: string): string {
+  return declarations.map((declaration) => `${indent}${declaration.property}: ${declaration.value}${declaration.important ? " !important" : ""};`).join("\n");
+}
+
+function indentBlock(value: string, indent: string): string {
+  return value.split("\n").map((line) => `${indent}${line}`).join("\n");
+}
+
 function renderDeclarations(style: StyleIntent, indent: string): string {
-  return style.declarations.map((declaration) => `${indent}${declaration.property}: ${declaration.value}${declaration.important ? " !important" : ""};`).join("\n");
+  const groups = new Map<string, StyleIntent["declarations"]>();
+  for (const declaration of style.declarations) {
+    const condition = declaration.condition;
+    const key = condition ? JSON.stringify(condition) : "default";
+    const values = groups.get(key) ?? [];
+    values.push(declaration);
+    groups.set(key, values);
+  }
+  const rendered: string[] = [];
+  for (const [key, declarations] of groups) {
+    if (key === "default") {
+      rendered.push(declarationLines(declarations, indent));
+      continue;
+    }
+    const condition = declarations[0]!.condition!;
+    const suffix = `${condition.states.map((state) => `:${state}`).join("")}${condition.pseudo ?? ""}`;
+    let content = suffix
+      ? `${indent}&${suffix} {\n${declarationLines(declarations, `${indent}  `)}\n${indent}}`
+      : declarationLines(declarations, indent);
+    for (const supports of [...condition.supports].reverse()) content = `${indent}@supports ${supports} {\n${indentBlock(content.slice(indent.length), "  ")}\n${indent}}`;
+    for (const media of [...condition.media].reverse()) content = `${indent}@media ${media} {\n${indentBlock(content.slice(indent.length), "  ")}\n${indent}}`;
+    rendered.push(content);
+  }
+  return rendered.filter(Boolean).join("\n\n");
 }
 
 export function emitScss(plan: CompilationPlan): string {

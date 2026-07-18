@@ -17,6 +17,7 @@ test("captures stabilized browser, DOM, AX, style, SEO and screenshot evidence",
   expect(capture.captures[0]!.renderedSource?.scriptsRemoved).toBe(0);
   expect(capture.captures[0]!.renderedSource?.canvasSnapshots).toBe(0);
   expect(capture.captures[0]!.renderedSource?.css).toContain("color: red");
-  expect(capture.captures[0]!.renderedSource?.css).not.toContain("color: blue");
+  expect(capture.captures[0]!.renderedSource?.css).toContain("@media (min-width: 500px)");
+  expect(capture.captures[0]!.renderedSource?.css).toContain("color: blue");
   expect(await Bun.file(capture.captures[0]!.screenshot).exists()).toBeTrue();
 });
