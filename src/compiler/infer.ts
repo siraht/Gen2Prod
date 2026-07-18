@@ -49,7 +49,8 @@ function interactiveGroup(node: DomNode): boolean {
   if (/actions?|cta|buttons?/i.test(`${node.nodeId} ${oldClasses(node).join(" ")}`)) return true;
   return node.children.some((child) => {
     const attrs = attributes(child);
-    return /(?:^|[-_])(?:btn|button|cta)(?:$|[-_])|button--|primary/i.test(`${oldClasses(child).join(" ")} ${attrs["data-g2p-variants"] ?? ""} ${attrs["data-hook"] ?? ""}`);
+    return /(?:^|[-_])(?:btn|button|cta)(?:$|[-_])|button--/i.test(oldClasses(child).join(" "))
+      || /button--|primary|cta/i.test(`${attrs["data-g2p-variants"] ?? ""} ${attrs["data-hook"] ?? ""}`);
   });
 }
 
