@@ -112,7 +112,7 @@ describe("static compilation", () => {
     await Bun.write(cssPath, '.items{color:rgb(229 231 235/var(--tw-opacity));box-shadow:0 0 #0000}.row{display:flex}');
     const first = await compileStaticPage({ htmlPath: sourcePath, cssPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
     expect(first.html).not.toMatch(/<li[^>]*>\s*<li/);
-    expect(first.scss).toContain("rgb(229, 231, 235, var(--tw-opacity))");
+    expect(first.scss).toContain("rgba(229, 231, 235, var(--tw-opacity))");
     expect(first.scss).toContain("rgba(0, 0, 0, 0)");
     const emittedHtml = join(directory, "page.html");
     const emittedCss = join(directory, "page.css");

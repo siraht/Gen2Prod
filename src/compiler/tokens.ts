@@ -61,7 +61,10 @@ function normalizeModernRgb(value: string): string {
     const channels = (slash >= 0 ? body.slice(0, slash) : body).trim().split(/\s+/);
     if (channels.length !== 3 || channels.some((channel) => channel.includes(","))) { searchFrom = end + 1; continue; }
     const alpha = slash >= 0 ? body.slice(slash + 1).trim() : undefined;
-    const name = alpha && /^[-+]?\d*\.?\d+%?$/.test(alpha) ? "rgba" : "rgb";
+    // The slash form always carries an alpha channel. `rgb(r, g, b, a)` is
+    // invalid legacy comma syntax when alpha is a custom property, so emit
+    // `rgba` for both literal and variable alpha values.
+    const name = slash >= 0 ? "rgba" : "rgb";
     const replacement = `${name}(${channels.join(", ")}${alpha ? `, ${alpha}` : ""})`;
     output = `${output.slice(0, start)}${replacement}${output.slice(end + 1)}`;
     searchFrom = start + replacement.length;
