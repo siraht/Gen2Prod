@@ -12,6 +12,8 @@ import { validate } from "../validation/gates.ts";
 import { compareCaptures, imageDifference, imageDifferenceWidthNormalized, type NormalizedImageDifference } from "../validation/visual.ts";
 import { NaturalisticCorpusManifestSchema, type NaturalisticArtifact, type NaturalisticCorpusManifest, type NaturalisticProject } from "./types.ts";
 import { writeNaturalisticTrajectories } from "./trajectories.ts";
+import { parseFragment, type DefaultTreeAdapterMap } from "parse5";
+import { nativeDestinationFromHandler } from "../compiler/behavior.ts";
 
 export type NaturalisticEvaluationOptions = {
   manifestPath: string;
@@ -115,9 +117,27 @@ function tokens(html: string): string[] {
   return visible.toLowerCase().match(/[a-z0-9][a-z0-9'’-]*/g) ?? [];
 }
 
+type ParsedElement = DefaultTreeAdapterMap["element"];
+
+function parsedElements(html: string): ParsedElement[] {
+  const fragment = parseFragment(html);
+  const visit = (node: DefaultTreeAdapterMap["node"]): ParsedElement[] => {
+    const self = "tagName" in node && "attrs" in node ? [node as ParsedElement] : [];
+    return [...self, ...("childNodes" in node ? node.childNodes.flatMap(visit) : [])];
+  };
+  return fragment.childNodes.flatMap(visit);
+}
+
 function attributeValues(html: string, attribute: string): string[] {
-  const expression = new RegExp(`\\b${attribute}\\s*=\\s*["']([^"']+)["']`, "gi");
-  return [...html.matchAll(expression)].flatMap((match) => match[1] ? [match[1]] : []).filter((value) => !value.startsWith("#") && !/^javascript:/i.test(value));
+  return parsedElements(html).flatMap((element) => element.attrs.find((item) => item.name === attribute)?.value ?? []).filter((value) => !value.startsWith("#") && !/^javascript:/i.test(value));
+}
+
+function nativeBehaviorDestinations(html: string): string[] {
+  return parsedElements(html).flatMap((element) => {
+    const handler = element.attrs.find((attribute) => attribute.name === "onclick")?.value;
+    const destination = handler ? nativeDestinationFromHandler(handler) : undefined;
+    return destination && !destination.startsWith("#") ? [destination] : [];
+  });
 }
 
 function bodyOnly(html: string): string {
@@ -125,11 +145,11 @@ function bodyOnly(html: string): string {
 }
 
 function formControls(html: string): string[] {
-  return [...html.matchAll(/<(input|select|textarea|button)\b([^>]*)>/gi)].map((match) => {
-    const tag = match[1]?.toLowerCase() ?? "control";
-    const attributes = match[2] ?? "";
-    const name = attributes.match(/\b(?:name|id)\s*=\s*["']([^"']+)["']/i)?.[1]
-      ?? (tag === "input" ? attributes.match(/\btype\s*=\s*["']([^"']+)["']/i)?.[1] : undefined)
+  return parsedElements(html).filter((element) => ["input", "select", "textarea", "button"].includes(element.tagName)).map((element) => {
+    const tag = element.tagName;
+    const attributes = Object.fromEntries(element.attrs.map(({ name, value }) => [name, value]));
+    const name = attributes.name ?? attributes.id
+      ?? (tag === "input" ? attributes.type : undefined)
       ?? "anonymous";
     return `${tag}:${name}`;
   });
@@ -151,8 +171,8 @@ export function contentPreservation(sourceHtml: string, candidateHtml: string): 
   sourceHtml = bodyOnly(sourceHtml);
   candidateHtml = bodyOnly(candidateHtml);
   const sourceTokens = tokens(sourceHtml);
-  const sourceUrls = [...attributeValues(sourceHtml, "href"), ...attributeValues(sourceHtml, "action")];
-  const candidateUrls = [...attributeValues(candidateHtml, "href"), ...attributeValues(candidateHtml, "action")];
+  const sourceUrls = [...attributeValues(sourceHtml, "href"), ...attributeValues(sourceHtml, "action"), ...nativeBehaviorDestinations(sourceHtml)];
+  const candidateUrls = [...attributeValues(candidateHtml, "href"), ...attributeValues(candidateHtml, "action"), ...nativeBehaviorDestinations(candidateHtml)];
   const sourceForms = formControls(sourceHtml);
   return {
     textRecall: multisetRecall(sourceTokens, tokens(candidateHtml)),
@@ -244,7 +264,8 @@ async function evaluateArtifact(input: {
     const registry = extractTokenRegistry(compilerCss);
     const compiled = await compileStaticPage({ htmlPath: materializedHtmlPath, cssPath: materializedCssPath, tokenRegistry: registry });
     if (compiled.plan.source.executableScripts.length) result.requiredActions.push(`${compiled.plan.source.executableScripts.length} executable script(s) were excluded; reimplement approved behavior from typed interaction contracts.`);
-    if (compiled.plan.source.executableEvents.length) result.requiredActions.push(`${compiled.plan.source.executableEvents.length} inline event handler(s) were excluded; reimplement approved behavior from typed interaction contracts.`);
+    const unresolvedEvents = compiled.plan.source.executableEvents.filter((event) => !event.nativeDestination);
+    if (unresolvedEvents.length) result.requiredActions.push(`${unresolvedEvents.length} inline event handler(s) were excluded; reimplement approved behavior from typed interaction contracts.`);
     const candidateDirectory = join(fixtureDirectory, "candidate");
     const candidateHtmlPath = join(candidateDirectory, "page.html");
     const candidateCssPath = join(candidateDirectory, "page.css");

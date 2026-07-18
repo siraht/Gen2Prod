@@ -1,5 +1,6 @@
 import type { BemGraph, ComponentContract, DomNode, InteractionContract, StyleIntent } from "../schemas/normal-form.ts";
 import type { ClassRole, PlannedNode, SemanticPlan, SourceDocument } from "./types.ts";
+import { nativeDestinationFromHandler } from "./behavior.ts";
 
 const BLOCK_ALIASES: Record<string, string> = {
   features: "feature-grid",
@@ -198,6 +199,12 @@ function elementName(node: DomNode, role: string, block: string, classRoles: Map
 
 function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: string | null, counts: SemanticPlan["confidenceSummary"], review: SemanticPlan["review"], useStableNodeHints: boolean, preserveExplicitSemantics: boolean, classRoles: Map<string, ClassRole>): PlannedNode {
   const semantic = semanticTag(node, parent, useStableNodeHints, preserveExplicitSemantics);
+  const nativeDestination = node.attributes.find((attribute) => attribute.name.toLowerCase() === "onclick")?.value;
+  const loweredDestination = nativeDestination ? nativeDestinationFromHandler(nativeDestination) : undefined;
+  if (loweredDestination && ["a", "button"].includes(semantic.tag)) {
+    semantic.tag = "a";
+    semantic.role = "link";
+  }
   if (node.tag !== "div" && node.tag !== "span") semantic.role = explicitRole(node, parent);
   counts[semantic.confidence] += 1;
   if (semantic.confidence === "low" && (node.tag === "div" || node.tag === "span")) review.push({ nodeId: node.nodeId, concern: "ambiguous semantic container", evidenceNeeded: ["accessibility tree", "section crop if visually separated"] });
@@ -217,6 +224,7 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
   if ((semantic.tag === "a" || semantic.tag === "button") && (semantic.role === "submit" || node.nodeId.includes("cta") || node.nodeId.includes("submit") || node.text.toLowerCase().includes("choose") || (parent && interactiveGroup(parent)))) classes = ["button", "button--primary"];
   if (block === "hero" && isNewBlock && plannedSourceHasId(node, "media")) classes = ["hero", "hero--split"];
   const attrs = attributes(node);
+  if (loweredDestination) attrs.href = loweredDestination;
   if (attrs["data-g2p-variants"]) {
     classes = [...new Set([...classes, ...attrs["data-g2p-variants"].split(/\s+/).filter(Boolean)])];
     delete attrs["data-g2p-variants"];
@@ -235,6 +243,7 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
     if (/^(js-|qa-|e2e-)/.test(className)) attrs["data-hook"] = className;
   }
   if (semantic.tag === "button" && !attrs.type) attrs.type = "button";
+  if (semantic.tag === "a") delete attrs.type;
   return {
     nodeId: node.nodeId,
     originalTag: node.tag,

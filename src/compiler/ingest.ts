@@ -5,6 +5,7 @@ import type { DomNode } from "../schemas/normal-form.ts";
 import { sha256 } from "../core/hash.ts";
 import { isUtilityClass } from "../core/classes.ts";
 import type { ClassInventoryItem, ClassRole, CssDeclaration, SourceDocument } from "./types.ts";
+import { nativeDestinationFromHandler } from "./behavior.ts";
 
 type P5Node = DefaultTreeAdapterMap["node"];
 type P5Element = DefaultTreeAdapterMap["element"];
@@ -152,7 +153,10 @@ function executableScripts(root: DomNode): SourceDocument["executableScripts"] {
 }
 
 function executableEvents(root: DomNode): SourceDocument["executableEvents"] {
-  const here = root.attributes.filter((attribute) => /^on[a-z]+$/i.test(attribute.name)).map((attribute) => ({ nodeId: root.nodeId, event: attribute.name.toLowerCase().slice(2), bytes: new TextEncoder().encode(attribute.value).byteLength }));
+  const here = root.attributes.filter((attribute) => /^on[a-z]+$/i.test(attribute.name)).map((attribute) => {
+    const nativeDestination = attribute.name.toLowerCase() === "onclick" ? nativeDestinationFromHandler(attribute.value) : undefined;
+    return { nodeId: root.nodeId, event: attribute.name.toLowerCase().slice(2), bytes: new TextEncoder().encode(attribute.value).byteLength, ...(nativeDestination ? { nativeDestination } : {}) };
+  });
   return [...here, ...root.children.flatMap(executableEvents)];
 }
 

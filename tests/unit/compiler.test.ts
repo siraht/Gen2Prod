@@ -95,6 +95,16 @@ describe("static compilation", () => {
     expect(output.plan.source.executableEvents).toEqual([{ nodeId: expect.any(String), event: "click", bytes: 15 }]);
   });
 
+  test("lowers literal inline navigation into a native link without copying code", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-native-behavior-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Native behavior</title><meta name="description" content="Native behavior fixture"></head><body><main><h1>Native behavior</h1><button onclick="window.location.href=\'mailto:hello@example.com\'">Email us</button></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    expect(output.html).toContain('<a href="mailto:hello@example.com"');
+    expect(output.html).not.toContain("onclick");
+    expect(output.plan.source.executableEvents[0]?.nativeDestination).toBe("mailto:hello@example.com");
+  });
+
   test("derives stable SEO metadata only from source-authoritative visible copy", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-metadata-"));
     const htmlPath = join(directory, "page.html");

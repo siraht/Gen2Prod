@@ -36,7 +36,7 @@ export type SourceDocument = {
   declarations: CssDeclaration[];
   styleSources: { origin: "external" | "embedded" | "inline" | "rendered"; label: string; bytes: number }[];
   executableScripts: { src?: string; inline: boolean; bytes: number }[];
-  executableEvents: { nodeId: string; event: string; bytes: number }[];
+  executableEvents: { nodeId: string; event: string; bytes: number; nativeDestination?: string | undefined }[];
   authorities: AuthorityConcern[];
 };
 
