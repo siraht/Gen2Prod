@@ -83,6 +83,15 @@ describe("static compilation", () => {
     expect(output.html).not.toContain("compromised");
   });
 
+  test("derives stable SEO metadata only from source-authoritative visible copy", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-metadata-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><body><main><h1>Source title</h1><p>This approved source sentence explains the page clearly enough to become its deterministic metadata summary.</p></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    expect(output.html).toContain("<title>Source title</title>");
+    expect(output.html).toContain('content="This approved source sentence explains the page clearly enough to become its deterministic metadata summary."');
+  });
+
   test("snaps only complete CSS atoms inside compound values", () => {
     const registry = inputTokens();
     const untouched = bindValue("gap", "clamp(1.5rem, 4vw, 4rem)", registry);

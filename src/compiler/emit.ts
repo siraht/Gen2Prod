@@ -16,6 +16,16 @@ function decodeHtmlText(value: string): string {
     .replaceAll("&quot;", '"').replaceAll("&apos;", "'").replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
 }
 
+function metadataSummary(plan: CompilationPlan): string {
+  const nodes = allNodes(plan.semantics.root);
+  const candidate = nodes.find((node) => ["supporting-copy", "body-copy"].includes(node.role) && node.text.trim().length >= 30)
+    ?? nodes.find((node) => node.tag === "p" && node.text.trim().length >= 30);
+  const text = candidate?.text.replace(/\s+/g, " ").trim() ?? "";
+  if (text.length <= 160) return text;
+  const shortened = text.slice(0, 157).replace(/\s+\S*$/, "").trim();
+  return `${shortened}…`;
+}
+
 function renderNode(node: PlannedNode, depth = 0, includeNodeIds = false): string {
   const indent = "  ".repeat(depth);
   const attributes = { ...node.attributes, ...(node.classes.length ? { class: node.classes.join(" ") } : {}), ...(includeNodeIds ? { "data-g2p-node": node.nodeId } : {}) };
@@ -73,10 +83,11 @@ export function emitScss(plan: CompilationPlan): string {
 
 export function emitHtml(plan: CompilationPlan, cssHref = "page.css", includeNodeIds = false): string {
   const body = renderNode(plan.semantics.root, 0, includeNodeIds);
-  const sourceTitle = decodeHtmlText(plan.source.html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() || "Production page");
+  const inferredTitle = allNodes(plan.semantics.root).find((node) => node.tag === "h1")?.text.trim() || "Production page";
+  const sourceTitle = decodeHtmlText(plan.source.html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() || inferredTitle);
   const sourceDescription = plan.source.html.match(/<meta\s+[^>]*name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i)?.[1]
     ?? plan.source.html.match(/<meta\s+[^>]*content=["']([^"']*)["'][^>]*name=["']description["'][^>]*>/i)?.[1]
-    ?? "";
+    ?? metadataSummary(plan);
   if (plan.semantics.root.tag === "body") {
     const sourceDocumentAttributes = plan.source.documentAttributes;
     const stateClasses = (sourceDocumentAttributes.class ?? "").split(/\s+/).filter((name) => /^(?:dark|light|no-js|js|theme-[a-z0-9-]+)$/.test(name));

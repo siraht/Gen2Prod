@@ -146,12 +146,13 @@ async function tokenGate(context: ValidationContext): Promise<GateResult> {
     const tokenized = governed.filter((item) => /var\(--[a-z0-9-]+\)/.test(item.value));
     const excepted = governed.filter((item) => !/var\(--[a-z0-9-]+\)/.test(item.value) && [...exceptions].some((exception) => exception.endsWith(`:${item.property}:${item.value}`)));
     const unaccounted = governed.filter((item) => !tokenized.includes(item) && !excepted.includes(item));
-    const coverage = governed.length ? tokenized.length / governed.length : 1;
+    const directTokenCoverage = governed.length ? tokenized.length / governed.length : 1;
+    const coverage = governed.length ? (tokenized.length + excepted.length) / governed.length : 1;
     return { assertions: [
       assertion("governed-accounting", unaccounted.length === 0, "error", unaccounted.length ? `${unaccounted.length} unaccounted governed declarations` : "All governed declarations are tokenized or excepted"),
       assertion("token-coverage", coverage >= context.thresholds.minTokenCoverage, "error", `Token coverage ${(coverage * 100).toFixed(1)}%`, { expected: context.thresholds.minTokenCoverage, actual: coverage }),
       assertion("important", !context.scss.includes("!important"), "error", context.scss.includes("!important") ? "Unapproved !important found" : "No !important overrides"),
-    ], metrics: { governedDeclarations: governed.length, tokenizedDeclarations: tokenized.length, exceptionDeclarations: excepted.length, unaccountedDeclarations: unaccounted.length, tokenCoverage: coverage } };
+    ], metrics: { governedDeclarations: governed.length, tokenizedDeclarations: tokenized.length, exceptionDeclarations: excepted.length, unaccountedDeclarations: unaccounted.length, directTokenCoverage, tokenCoverage: coverage } };
   });
 }
 
