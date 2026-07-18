@@ -96,7 +96,9 @@ function formControls(html: string): string[] {
   return [...html.matchAll(/<(input|select|textarea|button)\b([^>]*)>/gi)].map((match) => {
     const tag = match[1]?.toLowerCase() ?? "control";
     const attributes = match[2] ?? "";
-    const name = attributes.match(/\b(?:name|id|type)\s*=\s*["']([^"']+)["']/i)?.[1] ?? "anonymous";
+    const name = attributes.match(/\b(?:name|id)\s*=\s*["']([^"']+)["']/i)?.[1]
+      ?? (tag === "input" ? attributes.match(/\btype\s*=\s*["']([^"']+)["']/i)?.[1] : undefined)
+      ?? "anonymous";
     return `${tag}:${name}`;
   });
 }
@@ -186,7 +188,7 @@ async function evaluateArtifact(input: {
     const pairedImageArtifact = artifact.pairArtifactIds.map((id) => input.manifest.artifacts.find((item) => item.artifactId === id)).find((item) => item?.kind === "mockup-image");
     const pairedImagePath = pairedImageArtifact ? resolve(pairedImageArtifact.path) : undefined;
     const targetWidth = pairedImagePath ? await imageWidth(pairedImagePath) : undefined;
-    const viewport = options.viewport ?? (targetWidth && targetWidth >= 320 && targetWidth <= 1920 ? targetWidth : 1280);
+    const viewport = options.viewport ?? (targetWidth && targetWidth >= 768 && targetWidth <= 1920 ? targetWidth : 1280);
     const fixtureDirectory = join(directory, "fixtures", project.projectId, artifact.artifactId);
     await ensureDirectory(fixtureDirectory);
     let baseline: CaptureResult | undefined;

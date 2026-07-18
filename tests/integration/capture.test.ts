@@ -8,7 +8,7 @@ import { capturePage } from "../../src/evidence/capture.ts";
 test("captures stabilized browser, DOM, AX, style, SEO and screenshot evidence", async () => {
   const directory = await mkdtemp(join(tmpdir(), "gen2prod-capture-"));
   const page = join(directory, "index.html");
-  await Bun.write(page, '<!doctype html><html><head><title>Fixture</title><meta name="description" content="test"></head><body><main data-g2p-node="main"><h1 data-g2p-node="title">Hello</h1><a data-g2p-node="cta" href="/start">Start</a></main></body></html>');
+  await Bun.write(page, '<!doctype html><html><head><title>Fixture</title><meta name="description" content="test"><style>.box{color:red}@media(min-width:500px){.box{color:blue}}</style></head><body><main class="box" data-g2p-node="main"><h1 data-g2p-node="title">Hello</h1><a data-g2p-node="cta" href="/start">Start</a></main></body></html>');
   const capture = await capturePage({ url: pathToFileURL(page).href, outputDirectory: join(directory, "capture"), viewports: [360], states: ["default"], themes: ["light"], collectRenderedSource: true });
   expect(capture.captures).toHaveLength(1);
   expect(capture.captures[0]!.dom.length).toBeGreaterThanOrEqual(3);
@@ -16,5 +16,7 @@ test("captures stabilized browser, DOM, AX, style, SEO and screenshot evidence",
   expect(capture.captures[0]!.renderedSource?.html).toContain("<h1");
   expect(capture.captures[0]!.renderedSource?.scriptsRemoved).toBe(0);
   expect(capture.captures[0]!.renderedSource?.canvasSnapshots).toBe(0);
+  expect(capture.captures[0]!.renderedSource?.css).toContain("color: red");
+  expect(capture.captures[0]!.renderedSource?.css).not.toContain("color: blue");
   expect(await Bun.file(capture.captures[0]!.screenshot).exists()).toBeTrue();
 });

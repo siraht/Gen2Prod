@@ -82,9 +82,14 @@ function domFromParse5(node: P5Element, path: string, index = 0): DomNode {
   };
 }
 
-function rootElement(document: DefaultTreeAdapterMap["document"]): P5Element {
+function documentElement(document: DefaultTreeAdapterMap["document"]): P5Element {
   const html = document.childNodes.find((node) => isElement(node) && node.tagName === "html");
   if (!html || !isElement(html)) throw new Error("Input has no HTML document element");
+  return html;
+}
+
+function rootElement(document: DefaultTreeAdapterMap["document"]): P5Element {
+  const html = documentElement(document);
   const body = html.childNodes.find((node) => isElement(node) && node.tagName === "body");
   return body && isElement(body) ? body : html;
 }
@@ -105,6 +110,7 @@ export async function ingestStaticHtml(htmlPath: string, cssPath?: string): Prom
   const sourceCss = await loadSourceCss(htmlPath, cssPath);
   const document = parse(html, { sourceCodeLocationInfo: true });
   const dom = domFromParse5(rootElement(document), htmlPath);
+  const documentAttributes = Object.fromEntries(documentElement(document).attrs.map(({ name, value }) => [name, value]));
   const declarations = [
     ...parseCss(sourceCss.externalCss, "external"),
     ...parseCss(sourceCss.embeddedCss, "embedded"),
@@ -123,6 +129,7 @@ export async function ingestStaticHtml(htmlPath: string, cssPath?: string): Prom
     ...(cssPath ? { cssPath } : {}),
     css: sourceCss.css,
     dom,
+    documentAttributes,
     classInventory,
     declarations,
     styleSources: [

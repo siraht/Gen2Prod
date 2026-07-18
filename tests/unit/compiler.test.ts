@@ -103,6 +103,34 @@ describe("static compilation", () => {
     expect(output.scss).toContain(`var(${projectToken?.runtimeVariable})`);
     expect(output.plan.tokens.tokens.some((token) => token.sampledValues["default@1280"] === "13px")).toBeFalse();
   });
+
+  test("emits parser-stable list structure and Tailwind color syntax", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-canonical-tailwind-"));
+    const sourcePath = join(directory, "source.html");
+    const cssPath = join(directory, "source.css");
+    await Bun.write(sourcePath, '<!doctype html><html><head><title>Stable</title><meta name="description" content="Stable fixture"></head><body><main data-g2p-node="main"><div data-g2p-node="items" class="items"><div data-g2p-node="row-1" class="row"><span>A</span><span>B</span></div><div data-g2p-node="row-2" class="row"><span>C</span><span>D</span></div></div></main></body></html>');
+    await Bun.write(cssPath, '.items{color:rgb(229 231 235/var(--tw-opacity));box-shadow:0 0 #0000}.row{display:flex}');
+    const first = await compileStaticPage({ htmlPath: sourcePath, cssPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    expect(first.html).not.toMatch(/<li[^>]*>\s*<li/);
+    expect(first.scss).toContain("rgb(229, 231, 235, var(--tw-opacity))");
+    expect(first.scss).toContain("rgba(0, 0, 0, 0)");
+    const emittedHtml = join(directory, "page.html");
+    const emittedCss = join(directory, "page.css");
+    await Bun.write(emittedHtml, first.html);
+    await Bun.write(emittedCss, first.css);
+    const second = await compileStaticPage({ htmlPath: emittedHtml, cssPath: emittedCss, tokenRegistry: first.plan.tokens });
+    expect(second.html).toBe(first.html);
+    expect(second.scss).toBe(first.scss);
+  });
+
+  test("preserves declared document theme state across canonical recompiles", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-document-state-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html lang="en" class="dark scroll-smooth"><head><title>Theme</title><meta name="description" content="Theme fixture"><style>.surface{background:#fff}.dark .surface{background:#000}</style></head><body><main data-g2p-node="main"><section data-g2p-node="surface" class="surface"><h1>Theme</h1></section></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    expect(output.html).toContain('<html lang="en" class="dark">');
+    expect(output.html).not.toContain("scroll-smooth");
+  });
 });
 
 function inputTokens() {

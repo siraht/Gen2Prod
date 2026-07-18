@@ -15,7 +15,7 @@ export async function buildCompilationPlan(options: CompileOptions): Promise<Com
   const alreadyCanonical = /<meta\s+[^>]*name=["']generator["'][^>]*content=["']Gen2Prod["']/i.test(source.html)
     || /<meta\s+[^>]*content=["']Gen2Prod["'][^>]*name=["']generator["']/i.test(source.html);
   const tokens = alreadyCanonical ? importedTokens : augmentTokenRegistry(importedTokens, source.declarations);
-  const semantics = inferSemantics(source, { useStableNodeHints: options.policy?.compiler.useStableNodeHints ?? true });
+  const semantics = inferSemantics(source, { useStableNodeHints: options.policy?.compiler.useStableNodeHints ?? true, preserveExplicitSemantics: alreadyCanonical });
   const components = inferComponents(semantics);
   const bem = buildBemGraph(semantics);
   const resolved = resolveStyles(source, semantics.root, tokens, options.policy?.thresholds.tokenSnapRelative ?? 0.08);

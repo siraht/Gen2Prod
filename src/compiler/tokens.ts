@@ -34,28 +34,74 @@ function replaceCssAtom(value: string, sample: string, replacement: string): str
   return value.replace(pattern, replacement);
 }
 
-function normalizeCssValue(value: string): string {
-  return value.trim().replace(/\s+/g, " ").replace(/\s*,\s*/g, ", ").replace(/\s*\/\s*/g, "/");
+function normalizeModernRgb(value: string): string {
+  let output = value;
+  let searchFrom = 0;
+  while (true) {
+    const start = output.indexOf("rgb(", searchFrom);
+    if (start < 0) break;
+    let depth = 0;
+    let end = -1;
+    for (let index = start + 3; index < output.length; index += 1) {
+      if (output[index] === "(") depth += 1;
+      else if (output[index] === ")") {
+        depth -= 1;
+        if (depth === 0) { end = index; break; }
+      }
+    }
+    if (end < 0) break;
+    const body = output.slice(start + 4, end);
+    let slash = -1;
+    depth = 0;
+    for (let index = 0; index < body.length; index += 1) {
+      if (body[index] === "(") depth += 1;
+      else if (body[index] === ")") depth -= 1;
+      else if (body[index] === "/" && depth === 0) { slash = index; break; }
+    }
+    const channels = (slash >= 0 ? body.slice(0, slash) : body).trim().split(/\s+/);
+    if (channels.length !== 3 || channels.some((channel) => channel.includes(","))) { searchFrom = end + 1; continue; }
+    const alpha = slash >= 0 ? body.slice(slash + 1).trim() : undefined;
+    const name = alpha && /^[-+]?\d*\.?\d+%?$/.test(alpha) ? "rgba" : "rgb";
+    const replacement = `${name}(${channels.join(", ")}${alpha ? `, ${alpha}` : ""})`;
+    output = `${output.slice(0, start)}${replacement}${output.slice(end + 1)}`;
+    searchFrom = start + replacement.length;
+  }
+  return output;
+}
+
+function normalizeComparableValue(property: string, value: string): string {
+  if (property !== "font-family" && property !== "font-variation-settings") return value;
+  let normalized = value.replace(/'([^']*)'/g, '"$1"');
+  if (property === "font-family" && !/[",]|var\(/.test(normalized) && /\s/.test(normalized.trim())) normalized = `"${normalized.trim()}"`;
+  return normalized.replace(/(["'])var\((--[^)]+)\)\1/g, "var($2)");
+}
+
+function normalizeCssValue(value: string, property: string): string {
+  const quoted = normalizeComparableValue(property, value);
+  return normalizeModernRgb(quoted.trim().replace(/\s+/g, " ").replace(/\s*,\s*/g, ", ").replace(/\s*\/\s*/g, "/"))
+    .replace(/#0000\b/gi, "rgba(0, 0, 0, 0)");
 }
 
 export function bindValue(property: string, rawValue: string, registry: TokenRegistry, relativeThreshold = 0.08): { value: string; token?: Token | undefined; error?: number | undefined } {
-  const existing = registry.tokens.find((token) => rawValue.includes(token.runtimeExpression));
-  if (existing) return { value: rawValue, token: existing, error: 0 };
-  let value = rawValue;
+  const comparableRaw = normalizeComparableValue(property, rawValue);
+  const existing = registry.tokens.find((token) => comparableRaw.includes(token.runtimeExpression));
+  if (existing) return { value: comparableRaw, token: existing, error: 0 };
+  let value = comparableRaw;
   let selected: Token | undefined;
   let selectedError = Number.POSITIVE_INFINITY;
   for (const token of eligibleTokens(registry, property)) {
     const samples = Object.values(token.sampledValues);
     for (const sample of samples) {
-      const replaced = replaceCssAtom(value, sample, token.runtimeExpression);
+      const comparableSample = normalizeComparableValue(property, sample);
+      const replaced = replaceCssAtom(value, comparableSample, token.runtimeExpression);
       if (replaced !== undefined) {
         value = replaced;
         selected = token;
         selectedError = 0;
         continue;
       }
-      const rawNumber = numeric(rawValue);
-      const tokenNumber = numeric(sample);
+      const rawNumber = numeric(comparableRaw);
+      const tokenNumber = numeric(comparableSample);
       if (rawNumber && tokenNumber && rawNumber.unit === tokenNumber.unit) {
         const error = Math.abs(rawNumber.number - tokenNumber.number) / Math.max(Math.abs(rawNumber.number), 1);
         if (error <= relativeThreshold && error < selectedError) {
@@ -66,7 +112,7 @@ export function bindValue(property: string, rawValue: string, registry: TokenReg
       }
     }
   }
-  return selected ? { value, token: selected, error: selectedError } : { value: rawValue };
+  return selected ? { value, token: selected, error: selectedError } : { value: comparableRaw };
 }
 
 function allNodes(root: PlannedNode): PlannedNode[] {
@@ -74,25 +120,31 @@ function allNodes(root: PlannedNode): PlannedNode[] {
 }
 
 function selectorClasses(selector: string): string[] {
-  return [...selector.matchAll(/\.([_a-zA-Z]+[\w-]*)/g)].flatMap((match) => match[1] ? [match[1]] : []);
-}
-
-function cssEscapedClass(name: string): string {
-  return name.replace(/([^a-zA-Z0-9_-])/g, "\\$1");
+  return [...selector.matchAll(/\.((?:\\.|[_a-zA-Z])(?:\\.|[\w-])*)/g)].flatMap((match) => match[1] ? [match[1].replace(/\\(.)/g, "$1")] : []);
 }
 
 function defaultStateTarget(selector: string): string | undefined {
   if (/::(?:before|after|marker|placeholder)|:(?:hover|focus|focus-visible|focus-within|active|visited|checked|disabled|open)\b/i.test(selector)) return undefined;
-  return selector.trim().split(/[\s>+~]+/).filter(Boolean).at(-1);
+  let depth = 0;
+  let start = 0;
+  for (let index = 0; index < selector.length; index += 1) {
+    const character = selector[index];
+    if (character === "(" || character === "[") depth += 1;
+    else if (character === ")" || character === "]") depth = Math.max(0, depth - 1);
+    else if (depth === 0 && /[\s>+~]/.test(character ?? "")) {
+      while (index + 1 < selector.length && /[\s>+~]/.test(selector[index + 1] ?? "")) index += 1;
+      start = index + 1;
+    }
+  }
+  return selector.slice(start).trim() || undefined;
 }
 
 function selectorTargetsNode(selector: string, node: PlannedNode): boolean {
   const target = defaultStateTarget(selector);
   if (!target || target === ":root") return false;
   const classNames = [...node.oldClasses, ...node.classes];
-  const targetHasKnownClass = classNames.some((name) => target.includes(`.${cssEscapedClass(name)}`) || target.includes(`.${name}`));
   const targetClasses = selectorClasses(target);
-  if (targetClasses.length > 0) return targetHasKnownClass;
+  if (targetClasses.length > 0) return targetClasses.some((name) => classNames.includes(name));
   const id = node.attributes.id;
   if (id && target.includes(`#${id}`)) return true;
   const tag = target.match(/^(?:\*|([a-z][a-z0-9-]*))/i)?.[1]?.toLowerCase();
@@ -119,7 +171,7 @@ export function resolveStyles(source: SourceDocument, root: PlannedNode, registr
   for (const node of nodes) {
     const sourceDeclarations = source.declarations.filter((declaration) => {
       if (declaration.sourceNodeId === node.nodeId) return true;
-      if (!selectorTargetsNode(declaration.selector, node)) return false;
+      if (selectorTargetsNode(declaration.selector, node)) return true;
       const classes = selectorClasses(defaultStateTarget(declaration.selector) ?? "");
       if (classes.some((className) => node.oldClasses.includes(className) || node.classes.includes(className))) return true;
       if (node.block && node.classes.includes(node.block) && (blockSourceClasses.get(node.block) ?? []).some((sourceBlock) => classes.includes(sourceBlock))) return true;
@@ -138,7 +190,7 @@ export function resolveStyles(source: SourceDocument, root: PlannedNode, registr
       if (classification === "governed-design-value" && !binding.token) {
         exceptions.push({ id: `token-exception-${sha256(`${node.nodeId}:${declaration.property}:${declaration.value}`).slice(0, 10)}`, property: declaration.property, value: declaration.value, selector: node.classes[0] ? `.${node.classes[0]}` : node.tag, reason: "No compatible registered token within policy tolerance", risk: "medium", owner: "unassigned", expires: addDays(new Date(), 90).toISOString().slice(0, 10), reviewAction: "bind an existing token, approve a project token, or explicitly reapprove" });
       }
-      return { property: declaration.property, value: normalizeCssValue(binding.value), important: declaration.important, source: declaration.selector, classification, ...(binding.token ? { tokenRole: binding.token.semanticRole } : {}), bindingStatus: classification !== "governed-design-value" ? "not-applicable" as const : binding.token ? "bound" as const : "exception" as const };
+      return { property: declaration.property, value: normalizeCssValue(binding.value, declaration.property), important: declaration.important, source: declaration.selector, classification, ...(binding.token ? { tokenRole: binding.token.semanticRole } : {}), bindingStatus: classification !== "governed-design-value" ? "not-applicable" as const : binding.token ? "bound" as const : "exception" as const };
     });
     styles.push({ nodeId: node.nodeId, styleRole: node.role, layoutRole: node.role.includes("layout") || node.role.includes("list") ? node.role : "content-owned", contentRole: node.role, confidence: { value: 0.85, kind: "ordinal-uncalibrated", evidence: [{ source: "compiled-css", nodeId: node.nodeId, signal: `${declarations.length} matched declarations`, authority: "computed-visual-truth", weight: 0.9 }], risk: "low" }, declarations });
   }
@@ -199,9 +251,10 @@ export function augmentTokenRegistry(registry: TokenRegistry, declarations: CssD
   for (const declaration of declarations) {
     if (classifyDeclaration(declaration.property, declaration.value) !== "governed-design-value") continue;
     if (/var\(--/.test(declaration.value) || /^(?:inherit|initial|unset|revert|none|normal)$/i.test(declaration.value.trim())) continue;
-    const family = tokenFamily(declaration.property, declaration.value);
-    const key = `${family}\0${declaration.value.trim()}`;
-    const group = groups.get(key) ?? { family, value: declaration.value.trim(), properties: new Set<string>(), selectors: new Set<string>() };
+    const normalizedValue = normalizeComparableValue(declaration.property, declaration.value).trim();
+    const family = tokenFamily(declaration.property, normalizedValue);
+    const key = `${family}\0${normalizedValue}`;
+    const group = groups.get(key) ?? { family, value: normalizedValue, properties: new Set<string>(), selectors: new Set<string>() };
     group.properties.add(declaration.property);
     group.selectors.add(declaration.selector);
     groups.set(key, group);

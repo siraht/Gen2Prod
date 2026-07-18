@@ -52,9 +52,10 @@ function testimonialPair(node: DomNode | undefined): boolean {
   return Boolean(quote && attribution && ["div", "span"].includes(quote.tag) && ["div", "span"].includes(attribution.tag) && quote.text.trim() && /[,—–-]/.test(attribution.text));
 }
 
-function semanticTag(node: DomNode, parent: DomNode | undefined, useStableNodeHints: boolean): { tag: string; confidence: "high" | "medium" | "low"; role: string } {
+function semanticTag(node: DomNode, parent: DomNode | undefined, useStableNodeHints: boolean, preserveExplicitSemantics = false): { tag: string; confidence: "high" | "medium" | "low"; role: string } {
   const id = node.nodeId.toLowerCase();
   const attrs = attributes(node);
+  if (preserveExplicitSemantics) return { tag: node.tag, confidence: "high", role: explicitRole(node, parent) };
   if (node.tag !== "div" && node.tag !== "span") return { tag: node.tag, confidence: "high", role: explicitRole(node) };
   if (!useStableNodeHints) {
     if (parent?.tag === "body" && node.children.length > 0) return { tag: "main", confidence: "medium", role: "main" };
@@ -171,8 +172,8 @@ function elementName(node: DomNode, role: string, block: string): string {
   return canonicalName(result || "item");
 }
 
-function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: string | null, counts: SemanticPlan["confidenceSummary"], review: SemanticPlan["review"], useStableNodeHints: boolean): PlannedNode {
-  const semantic = semanticTag(node, parent, useStableNodeHints);
+function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: string | null, counts: SemanticPlan["confidenceSummary"], review: SemanticPlan["review"], useStableNodeHints: boolean, preserveExplicitSemantics: boolean): PlannedNode {
+  const semantic = semanticTag(node, parent, useStableNodeHints, preserveExplicitSemantics);
   if (node.tag !== "div" && node.tag !== "span") semantic.role = explicitRole(node, parent);
   counts[semantic.confidence] += 1;
   if (semantic.confidence === "low" && (node.tag === "div" || node.tag === "span")) review.push({ nodeId: node.nodeId, concern: "ambiguous semantic container", evidenceNeeded: ["accessibility tree", "section crop if visually separated"] });
@@ -215,7 +216,7 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
     oldClasses: oldClasses(node),
     attributes: attrs,
     text: node.text,
-    children: node.children.map((child) => planNode(child, node, block, counts, review, useStableNodeHints)),
+    children: node.children.map((child) => planNode(child, node, block, counts, review, useStableNodeHints, preserveExplicitSemantics)),
   };
 }
 
@@ -223,12 +224,25 @@ function plannedSourceHasId(node: DomNode, fragment: string): boolean {
   return node.nodeId.includes(fragment) || node.children.some((child) => plannedSourceHasId(child, fragment));
 }
 
-export function inferSemantics(source: SourceDocument, options: { useStableNodeHints?: boolean } = {}): SemanticPlan {
+export function inferSemantics(source: SourceDocument, options: { useStableNodeHints?: boolean; preserveExplicitSemantics?: boolean } = {}): SemanticPlan {
   const counts = { high: 0, medium: 0, low: 0 };
   const review: SemanticPlan["review"] = [];
-  const root = planNode(source.dom, undefined, null, counts, review, options.useStableNodeHints ?? true);
+  const root = planNode(source.dom, undefined, null, counts, review, options.useStableNodeHints ?? true, options.preserveExplicitSemantics ?? false);
+  normalizeListValidity(root);
   addMissingFormLabels(root, review);
   return { root, confidenceSummary: counts, review };
+}
+
+function normalizeListValidity(node: PlannedNode, parentTag?: string): void {
+  if (node.tag === "li" && parentTag !== "ul" && parentTag !== "ol") {
+    node.tag = "div";
+    node.role = "list-item-group";
+  }
+  if ((node.tag === "ul" || node.tag === "ol") && (node.children.length === 0 || node.children.some((child) => child.tag !== "li"))) {
+    node.tag = "div";
+    node.role = "item-group";
+  }
+  for (const child of node.children) normalizeListValidity(child, node.tag);
 }
 
 function addMissingFormLabels(root: PlannedNode, review: SemanticPlan["review"]): void {

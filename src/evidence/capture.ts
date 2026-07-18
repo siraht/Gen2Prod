@@ -111,8 +111,13 @@ async function captureRenderedSource(page: Page): Promise<RenderedSource> {
     scripts.forEach((script) => script.remove());
     const css: string[] = [];
     const inaccessibleStyleSheets: string[] = [];
+    const activeCss = (rules: CSSRuleList): string => [...rules].map((rule) => {
+      if (rule instanceof CSSMediaRule) return matchMedia(rule.conditionText).matches ? activeCss(rule.cssRules) : "";
+      if (rule instanceof CSSSupportsRule) return CSS.supports(rule.conditionText) ? activeCss(rule.cssRules) : "";
+      return rule.cssText;
+    }).filter(Boolean).join("\n");
     for (const sheet of [...document.styleSheets]) {
-      try { css.push([...sheet.cssRules].map((rule) => rule.cssText).join("\n")); }
+      try { css.push(activeCss(sheet.cssRules)); }
       catch { inaccessibleStyleSheets.push(sheet.href ?? "inline-style-sheet"); }
     }
     return {

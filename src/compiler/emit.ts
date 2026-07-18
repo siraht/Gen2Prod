@@ -74,7 +74,18 @@ export function emitHtml(plan: CompilationPlan, cssHref = "page.css", includeNod
   const sourceDescription = plan.source.html.match(/<meta\s+[^>]*name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i)?.[1]
     ?? plan.source.html.match(/<meta\s+[^>]*content=["']([^"']*)["'][^>]*name=["']description["'][^>]*>/i)?.[1]
     ?? "";
-  if (plan.semantics.root.tag === "body") return `<!doctype html>\n<html lang="en">\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <meta name="generator" content="Gen2Prod">\n  <title>${escapeHtml(sourceTitle)}</title>\n  <meta name="description" content="${escapeHtml(sourceDescription)}">\n  <link rel="stylesheet" href="${escapeHtml(cssHref)}">\n</head>\n${body}\n</html>\n`;
+  if (plan.semantics.root.tag === "body") {
+    const sourceDocumentAttributes = plan.source.documentAttributes;
+    const stateClasses = (sourceDocumentAttributes.class ?? "").split(/\s+/).filter((name) => /^(?:dark|light|no-js|js|theme-[a-z0-9-]+)$/.test(name));
+    const htmlAttributes = {
+      lang: sourceDocumentAttributes.lang || "en",
+      ...(sourceDocumentAttributes.dir ? { dir: sourceDocumentAttributes.dir } : {}),
+      ...(sourceDocumentAttributes["data-theme"] ? { "data-theme": sourceDocumentAttributes["data-theme"] } : {}),
+      ...(stateClasses.length ? { class: stateClasses.join(" ") } : {}),
+    };
+    const renderedHtmlAttributes = Object.entries(htmlAttributes).map(([name, value]) => `${name}="${escapeHtml(value)}"`).join(" ");
+    return `<!doctype html>\n<html ${renderedHtmlAttributes}>\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <meta name="generator" content="Gen2Prod">\n  <title>${escapeHtml(sourceTitle)}</title>\n  <meta name="description" content="${escapeHtml(sourceDescription)}">\n  <link rel="stylesheet" href="${escapeHtml(cssHref)}">\n</head>\n${body}\n</html>\n`;
+  }
   return body;
 }
 
