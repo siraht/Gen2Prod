@@ -191,7 +191,11 @@ export async function analyzeImageTarget(options: AnalyzeImageTargetOptions): Pr
   const text = options.ocr === false ? [] : await recognizeText(image, options.ocrChunkHeight ?? 2200);
   const bands = horizontalBands(image, downsample);
   const regions = bands.map((band, index) => classifyBand(band, index, bands, image, text));
-  const suspiciousBlankRegions = regions.filter((region) => region.bbox.height >= Math.max(600, image.height * 0.18) && region.imageDominance <= 0.035 && text.filter((item) => item.bbox.y + item.bbox.height / 2 >= region.bbox.y && item.bbox.y + item.bbox.height / 2 <= region.bbox.y + region.bbox.height).length <= 1);
+  const suspiciousBlankRegions = regions.filter((region) => {
+    const visibleLines = text.filter((item) => item.bbox.y + item.bbox.height / 2 >= region.bbox.y && item.bbox.y + item.bbox.height / 2 <= region.bbox.y + region.bbox.height).length;
+    const sparseLineLimit = Math.max(4, Math.ceil(region.bbox.height / 700));
+    return region.bbox.height >= Math.max(600, image.height * 0.18) && region.imageDominance <= 0.035 && visibleLines <= sparseLineLimit;
+  });
   const blankLikeCoverage = suspiciousBlankRegions.reduce((sum, region) => sum + region.bbox.height, 0) / image.height;
   const analysis = ImageOnlyAnalysisSchema.parse({
     schemaVersion: "0.1.0",
