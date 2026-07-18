@@ -23,6 +23,10 @@ import { findBrowserExecutable } from "./evidence/capture.ts";
 import { importNaturalisticFixture } from "./synthetic/import.ts";
 import { prepareNaturalisticCorpus } from "./corpus/prepare.ts";
 import { evaluateNaturalisticCorpus } from "./corpus/evaluate.ts";
+import { captureImageTarget } from "./image-only/capture.ts";
+import { analyzeImageTarget } from "./image-only/analyze.ts";
+import { buildImageTarget } from "./image-only/build.ts";
+import { evaluateImageBuild } from "./image-only/evaluate.ts";
 
 type GlobalOptions = { config: string; workspace: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -167,6 +171,80 @@ corpus
       `Idempotence: ${(evaluation.aggregate.idempotenceRate * 100).toFixed(1)}%`,
       `Natural trajectories: ${evaluation.trajectoryExport.total} (${evaluation.trajectoryExport.accepted} accepted / ${evaluation.trajectoryExport.rejected} rejected)`,
     ].join("\n"));
+  });
+
+const image = program.command("image").description("capture, reconstruct, and evaluate strict image-only targets");
+image
+  .command("capture <url>")
+  .description("capture a live page as still and scroll-materialized image evidence without DOM/source builder inputs")
+  .requiredOption("--target <id>", "stable target identifier")
+  .option("--project <id>", "project identity; defaults to target identifier")
+  .addOption(new Option("--split <split>", "project-isolated benchmark split").choices(["train", "validation", "holdout"]).default("train"))
+  .option("--output <path>", "capture output directory")
+  .option("--width <pixels>", "viewport width", "1440")
+  .option("--height <pixels>", "viewport height", "900")
+  .addOption(new Option("--capture-policy <policy>", "visual acquisition policy").choices(["still", "scroll-materialized", "visual-probe-sequence"]).default("scroll-materialized"))
+  .action(async (url: string, options: { target: string; project?: string; split: "train" | "validation" | "holdout"; output?: string; width: string; height: string; capturePolicy: "still" | "scroll-materialized" | "visual-probe-sequence" }) => {
+    const project = await config();
+    const output = resolve(options.output ?? join(project.workspace, "image-only", "live", options.target));
+    const manifest = await captureImageTarget({ url, outputDirectory: output, targetId: options.target, projectId: options.project, split: options.split, viewport: { width: Number.parseInt(options.width, 10), height: Number.parseInt(options.height, 10) }, capturePolicy: options.capturePolicy, checkpointFractions: options.capturePolicy === "visual-probe-sequence" ? [0, 0.25, 0.5, 0.75, 1] : [], browserExecutable: project.capture.browserExecutable });
+    emit(result("image capture", manifest), `Captured ${manifest.targetId} as ${manifest.frames.length} image-only frame(s).\nBuilder input: ${manifest.builderInputs.images.join(", ")}\nScroll positions visited: ${manifest.acquisition.scrollPositionsVisited}\nManifest: ${join(output, "image-target.json")}`);
+  });
+image
+  .command("analyze <manifest>")
+  .description("extract deterministic palette, section bands, image regions, and local OCR observations")
+  .option("--output <path>", "analysis JSON output")
+  .option("--downsample <pixels>", "visual sampling stride", "8")
+  .option("--no-ocr", "skip local image-text recognition")
+  .action(async (manifest: string, options: { output?: string; downsample: string; ocr: boolean }) => {
+    const analysis = await analyzeImageTarget({ manifestPath: resolve(manifest), outputPath: options.output ? resolve(options.output) : undefined, downsample: Number.parseInt(options.downsample, 10), ocr: options.ocr });
+    emit(result("image analyze", analysis), `Analyzed ${analysis.targetId}\nRegions: ${analysis.regions.length}; OCR lines: ${analysis.text.length}; palette colors: ${analysis.palette.length}\nInput hash: ${analysis.sourceFrameHash}`);
+  });
+image
+  .command("build <manifest>")
+  .description("emit clean semantic BEM HTML/SCSS using only declared image-derived artifacts")
+  .requiredOption("--output <path>", "build output directory")
+  .option("--analysis <path>", "image analysis JSON; defaults beside manifest")
+  .option("--plan <path>", "reviewed image-derived build plan")
+  .option("--max-raster-coverage <ratio>", "maximum target pixels reusable as image-region crops", "0.28")
+  .action(async (manifest: string, options: { output: string; analysis?: string; plan?: string; maxRasterCoverage: string }) => {
+    const built = await buildImageTarget({ manifestPath: resolve(manifest), outputDirectory: resolve(options.output), analysisPath: options.analysis ? resolve(options.analysis) : undefined, planPath: options.plan ? resolve(options.plan) : undefined, maxRasterCoverage: Number.parseFloat(options.maxRasterCoverage) });
+    const actions = await Bun.file(built.requiredActionsPath).json() as ResultEnvelope<unknown>["requiredActions"];
+    const envelope = result("image build", built); envelope.requiredActions.push(...actions);
+    emit(envelope, `Built strict image-only reconstruction\nHTML: ${built.htmlPath}\nSCSS: ${built.scssPath}\nRaster crop coverage: ${(built.rasterCoverage * 100).toFixed(1)}% across ${built.assetCount} asset(s)\nProvenance: ${built.provenancePath}`);
+  });
+image
+  .command("evaluate <manifest>")
+  .description("score candidate screenshot, macro layout, semantics, uncertainty, and image-source leakage")
+  .requiredOption("--build <path>", "image-only build directory")
+  .option("--output <path>", "evaluation output directory")
+  .option("--previous <path>", "previous candidate screenshot for non-regression/recovery")
+  .option("--acceptance-pixel-ratio <ratio>", "provisional full-pixel acceptance threshold", "0.72")
+  .action(async (manifest: string, options: { build: string; output?: string; previous?: string; acceptancePixelRatio: string }) => {
+    const project = await config();
+    const evaluation = await evaluateImageBuild({ manifestPath: resolve(manifest), buildDirectory: resolve(options.build), outputDirectory: options.output ? resolve(options.output) : undefined, previousScreenshot: options.previous ? resolve(options.previous) : undefined, acceptancePixelRatio: Number.parseFloat(options.acceptancePixelRatio), browserExecutable: project.capture.browserExecutable });
+    const envelope = result("image evaluate", evaluation); envelope.ok = evaluation.accepted;
+    emit(envelope, `Image evaluation ${evaluation.evaluationId}\nPixel loss: ${(evaluation.visual.pixelDifferenceRatio * 100).toFixed(2)}%; macro loss: ${(evaluation.visual.macroStructureLoss * 100).toFixed(2)}%\nText recall: ${(evaluation.semantics.visibleTextRecall * 100).toFixed(1)}%; BEM: ${(evaluation.semantics.bemCoverage * 100).toFixed(1)}%\nUncertainty coverage: ${(evaluation.interactions.unresolvedConcernCoverage * 100).toFixed(1)}%; leakage gate: ${evaluation.leakage.passed ? "PASS" : "FAIL"}\nFitness: ${evaluation.fitness.score.toFixed(4)}; accepted: ${evaluation.accepted}`);
+    if (!evaluation.accepted) process.exitCode = 3;
+  });
+image
+  .command("run <manifest>")
+  .description("run strict analysis → semantic BEM build → image evaluation end to end")
+  .requiredOption("--output <path>", "build and evaluation output directory")
+  .option("--no-ocr", "skip local image-text recognition")
+  .option("--acceptance-pixel-ratio <ratio>", "provisional full-pixel acceptance threshold", "0.72")
+  .action(async (manifest: string, options: { output: string; ocr: boolean; acceptancePixelRatio: string }) => {
+    const project = await config();
+    const manifestPath = resolve(manifest);
+    const output = resolve(options.output);
+    const analysisPath = join(output, "image-analysis.json");
+    const analysis = await analyzeImageTarget({ manifestPath, outputPath: analysisPath, ocr: options.ocr });
+    const built = await buildImageTarget({ manifestPath, analysisPath, outputDirectory: output });
+    const evaluation = await evaluateImageBuild({ manifestPath, buildDirectory: output, outputDirectory: join(output, "evaluation"), acceptancePixelRatio: Number.parseFloat(options.acceptancePixelRatio), browserExecutable: project.capture.browserExecutable });
+    const envelope = result("image run", { analysis: { regions: analysis.regions.length, text: analysis.text.length }, build: built, evaluation }); envelope.ok = evaluation.accepted;
+    envelope.requiredActions.push(...await Bun.file(built.requiredActionsPath).json() as ResultEnvelope<unknown>["requiredActions"]);
+    emit(envelope, `Image-only run ${evaluation.evaluationId}\nRegions: ${analysis.regions.length}; text observations: ${analysis.text.length}\nPixel loss: ${(evaluation.visual.pixelDifferenceRatio * 100).toFixed(2)}%; semantic loss: ${(evaluation.fitness.semanticLoss * 100).toFixed(2)}%\nFitness: ${evaluation.fitness.score.toFixed(4)}\nArtifacts: ${output}`);
+    if (!evaluation.accepted) process.exitCode = 3;
   });
 
 program
