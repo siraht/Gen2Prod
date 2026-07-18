@@ -85,12 +85,18 @@ function domFromParse5(node: P5Element, path: string, index = 0): DomNode {
   const location = node.sourceCodeLocation;
   const children = (node.childNodes ?? []).filter(isElement).map((child, childIndex) => domFromParse5(child, path, childIndex));
   const text = (node.childNodes ?? []).filter((child) => !isElement(child)).map(textOf).filter(Boolean).join(" ");
+  const content: NonNullable<DomNode["content"]> = (node.childNodes ?? []).flatMap<NonNullable<DomNode["content"]>[number]>((child) => {
+    if (isElement(child)) return [{ kind: "child" as const, nodeId: nodeIdFor(child, (node.childNodes ?? []).filter(isElement).indexOf(child)) }];
+    const value = "value" in child && typeof child.value === "string" ? child.value.replace(/\s+/g, " ") : "";
+    return value.trim() ? [{ kind: "text" as const, value }] : [];
+  });
   return {
     nodeId: nodeIdFor(node, index),
     tag: node.tagName,
     attributes: node.attrs.map(({ name, value }) => ({ name, value })),
     text,
     textFingerprint: sha256(text.replace(/\s+/g, " ").trim().toLowerCase()),
+    ...(content.length ? { content } : {}),
     children,
     ...(location ? { sourceLocation: { file: path, startLine: location.startLine, startColumn: location.startCol, endLine: location.endLine, endColumn: location.endCol } } : {}),
   };

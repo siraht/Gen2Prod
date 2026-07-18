@@ -50,6 +50,7 @@ export type PlannedNode = {
   oldClasses: string[];
   attributes: Record<string, string>;
   text: string;
+  content?: ({ kind: "text"; value: string } | { kind: "child"; nodeId: string })[] | undefined;
   children: PlannedNode[];
 };
 

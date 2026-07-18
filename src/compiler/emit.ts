@@ -41,6 +41,16 @@ function renderNode(node: PlannedNode, depth = 0, includeNodeIds = false): strin
   const attributeText = Object.entries(attributes).filter(([name]) => name !== "data-g2p-node" && name !== "data-gen2prod-id").map(([name, value]) => value === "" && BOOLEAN_ATTRIBUTES.has(name) ? name : `${name}="${escapeHtml(value)}"`).join(" ");
   const opening = `${indent}<${node.tag}${attributeText ? ` ${attributeText}` : ""}>`;
   if (VOID_TAGS.has(node.tag)) return opening;
+  const orderedText = node.content?.some((item) => item.kind === "text");
+  if (orderedText) {
+    const children = new Map(node.children.map((child) => [child.nodeId, child]));
+    const content = node.content!.map((item) => {
+      if (item.kind === "text") return escapeHtml(item.value);
+      const child = children.get(item.nodeId);
+      return child ? renderNode(child, 0, includeNodeIds).trim() : "";
+    }).join("");
+    return `${opening}${content}</${node.tag}>`;
+  }
   if (node.children.length === 0) return `${opening}${escapeHtml(node.text)}</${node.tag}>`;
   const text = node.text.trim() ? `${indent}  ${escapeHtml(node.text.trim())}\n` : "";
   const children = node.children.map((child) => renderNode(child, depth + 1, includeNodeIds)).join("\n");

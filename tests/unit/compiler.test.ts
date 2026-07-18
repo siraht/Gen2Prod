@@ -123,6 +123,16 @@ describe("static compilation", () => {
     expect(output.html).toContain('content="This approved source sentence explains the page clearly enough to become its deterministic metadata summary."');
   });
 
+  test("preserves ordered mixed text, inline emphasis, and line breaks", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-mixed-content-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Mixed content</title><meta name="description" content="Mixed content fixture"></head><body><main><h1>Mixed content</h1><h2>Presence &amp;<br>Recognition</h2><p>I work with <em>recognition</em>. Always.</p></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    expect(output.html).toMatch(/Presence &amp;<br[^>]*>Recognition/);
+    expect(output.html).toContain("I work with <em");
+    expect(output.html).toContain("recognition</em>. Always.");
+  });
+
   test("repairs heading, image, and standalone-control accessibility contracts without visual wrappers", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-static-a11y-repair-"));
     const htmlPath = join(directory, "page.html");

@@ -244,6 +244,9 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
   }
   if (semantic.tag === "button" && !attrs.type) attrs.type = "button";
   if (semantic.tag === "a") delete attrs.type;
+  const children = node.children.filter((child) => child.tag !== "script").map((child) => planNode(child, node, block, counts, review, useStableNodeHints, preserveExplicitSemantics, classRoles));
+  const childIds = new Set(children.map((child) => child.nodeId));
+  const content = node.content?.filter((item) => item.kind === "text" || childIds.has(item.nodeId));
   return {
     nodeId: node.nodeId,
     originalTag: node.tag,
@@ -254,7 +257,8 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
     oldClasses: oldClasses(node),
     attributes: attrs,
     text: node.text,
-    children: node.children.filter((child) => child.tag !== "script").map((child) => planNode(child, node, block, counts, review, useStableNodeHints, preserveExplicitSemantics, classRoles)),
+    ...(content?.length ? { content } : {}),
+    children,
   };
 }
 

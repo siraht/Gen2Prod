@@ -65,6 +65,7 @@ export type DomNode = {
   attributes: DomAttribute[];
   text: string;
   textFingerprint: string;
+  content?: ({ kind: "text"; value: string } | { kind: "child"; nodeId: string })[] | undefined;
   children: DomNode[];
   sourceLocation?: { file: string; startLine: number; startColumn: number; endLine: number; endColumn: number } | undefined;
 };
@@ -75,6 +76,10 @@ export const DomNodeSchema: z.ZodType<DomNode> = z.lazy(() => z.object({
   attributes: z.array(z.object({ name: z.string(), value: z.string() })),
   text: z.string(),
   textFingerprint: z.string(),
+  content: z.array(z.union([
+    z.object({ kind: z.literal("text"), value: z.string() }),
+    z.object({ kind: z.literal("child"), nodeId: z.string() }),
+  ])).optional(),
   children: z.array(DomNodeSchema),
   sourceLocation: z.object({
     file: z.string(),
