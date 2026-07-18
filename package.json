@@ -7,13 +7,14 @@
     "gen2prod": "./dist/cli.js"
   },
   "scripts": {
-    "build": "bun build src/cli.ts --outdir dist --target bun --minify",
+    "build": "bun build src/cli.ts --outdir dist --target bun --packages external --minify",
     "check": "tsc --noEmit",
     "test": "bun test",
     "test:unit": "bun test tests/unit",
     "test:integration": "bun test tests/integration",
     "cli": "bun src/cli.ts",
-    "verify": "bun run check && bun test && bun run build"
+    "acceptance": "bun scripts/acceptance.ts",
+    "verify": "bun run check && bun test && bun run acceptance && bun run build"
   },
   "dependencies": {
     "axe-core": "^4.10.3",
