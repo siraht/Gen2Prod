@@ -118,6 +118,8 @@ function explicitRole(node: DomNode, parent?: DomNode): string {
   if (["input", "select", "textarea"].includes(node.tag)) return "field-input";
   if (node.tag === "summary") return "disclosure-button";
   if (node.tag === "details") return "disclosure";
+  if (node.tag === "ul" || node.tag === "ol") return "list";
+  if (node.tag === "li") return "list-item";
   if (node.tag === "figcaption") return "attribution";
   if (node.tag === "blockquote") return "quote";
   if (node.tag === "p" && parent?.tag === "details") return "disclosure-answer";

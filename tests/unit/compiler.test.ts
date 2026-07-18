@@ -86,6 +86,15 @@ describe("static compilation", () => {
     expect(trigger?.keyboard[0]).toContain("opens the controlled dialog");
   });
 
+  test("names native list structure conceptually without class or lineage hints", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-native-list-role-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Plans</title><meta name="description" content="Compare the available plans for your team."></head><body><main><section class="pricing" aria-labelledby="plans-title"><h1 id="plans-title">Plans</h1><ul><li><h2>Starter</h2></li><li><h2>Team</h2></li></ul></section></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { schemaVersion: "dtcg-2025-10+gen2prod-0.1.0", conformsTo: ["DTCG Format Module 2025.10"], adapterSchema: "gen2prod-token-adapter-0.1.0", tokens: [] } });
+    expect(output.html).toMatch(/class="[a-z0-9-]+__list"/);
+    expect(output.html).not.toMatch(/class="[a-z0-9-]+__ul"/);
+  });
+
   test("lowers embedded and inline CSS into governed BEM output", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-inline-compile-"));
     const htmlPath = join(directory, "page.html");
