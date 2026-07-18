@@ -113,6 +113,7 @@ function explicitRole(node: DomNode, parent?: DomNode): string {
 
 function rootBlock(node: DomNode, semantic: { tag: string }, parentBlock: string | null, useStableNodeHints: boolean): string | null {
   const id = node.nodeId.toLowerCase();
+  const attrs = attributes(node);
   if (node.tag === "body") return "page";
   const existingBlock = oldClasses(node).find((className) => descendantClasses(node).some((candidate) => candidate.startsWith(`${className}__`)));
   if (existingBlock) return existingBlock;
@@ -121,6 +122,12 @@ function rootBlock(node: DomNode, semantic: { tag: string }, parentBlock: string
   if (useStableNodeHints && /^plan-\d+$/.test(id)) return "pricing-card";
   if (useStableNodeHints && id === "quote") return "testimonial-card";
   if (useStableNodeHints && id === "contact-form") return "contact-form";
+  if (["section", "header", "footer", "nav", "form"].includes(semantic.tag)) {
+    const explicitId = attrs.id && !/^(?:main|content|section|wrapper)$/i.test(attrs.id) ? canonicalName(attrs.id) : undefined;
+    if (explicitId) return explicitId;
+    const sourceBlock = oldClasses(node).find((className) => !/^(?:section|container|wrapper|inner|grid|flex|relative|absolute|hidden|block)$/i.test(className) && !/^(?:u-\d+|sm:|md:|lg:|xl:|2xl:|hover:|focus:|dark:|p-|px-|py-|m-|mx-|my-|gap-|grid|flex|text-|bg-|rounded|shadow|max-w-|w-|h-)/.test(className));
+    if (sourceBlock) return canonicalName(sourceBlock);
+  }
   if (semantic.tag === "form" && parentBlock) return `${parentBlock}-form`;
   if (semantic.tag === "figure" && parentBlock) return parentBlock === "testimonial" ? "testimonial-card" : `${parentBlock}-card`;
   if (semantic.tag === "li" && parentBlock && node.children.some((child) => /^h[1-6]$/.test(child.tag))) return parentBlock === "feature-grid" ? "feature-card" : `${parentBlock}-card`;
@@ -152,6 +159,11 @@ function elementName(node: DomNode, role: string, block: string): string {
   if (/^faq-summary-?\d*$/.test(nodeId)) return "question";
   if (/^faq-answer-?\d*$/.test(nodeId)) return "answer";
   if (nodeId === "quote-text") return "quote";
+  const sourceClass = oldClasses(node).find((className) => !/^(?:u-\d+|sm:|md:|lg:|xl:|2xl:|hover:|focus:|dark:|p-|px-|py-|m-|mx-|my-|gap-|grid|flex|text-|bg-|rounded|shadow|max-w-|w-|h-)/.test(className));
+  if (sourceClass) {
+    const candidate = canonicalName(sourceClass).replace(new RegExp(`^(?:${block}|${block.replace(/-(?:section|grid|list)$/, "")})-?`), "");
+    if (candidate && !["container", "wrapper", "inner"].includes(candidate)) return candidate;
+  }
   const prefixes = [block, block.replace("-grid", "s"), "hero", "faq", "feature", "plan", "quote", "contact", "pricing", "testimonial", "nav", "site-header"];
   let result = nodeId;
   for (const prefix of prefixes) result = result.replace(new RegExp(`^${prefix}-?\\d*-?`), "");

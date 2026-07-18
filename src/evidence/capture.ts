@@ -20,6 +20,8 @@ export type RenderedSource = {
   inaccessibleStyleSheets: string[];
   scriptsRemoved: number;
   inlineEventHandlers: number;
+  canvasSnapshots: number;
+  canvasSnapshotFailures: number;
 };
 
 export type CaptureResult = {
@@ -85,6 +87,25 @@ async function captureRenderedSource(page: Page): Promise<RenderedSource> {
         return url ? `${new URL(url, document.baseURI).href}${descriptor ? ` ${descriptor}` : ""}` : candidate;
       }).join(", "));
     }
+    let canvasSnapshots = 0;
+    let canvasSnapshotFailures = 0;
+    const originalCanvases = [...document.querySelectorAll("canvas")];
+    const clonedCanvases = [...clone.querySelectorAll("canvas")];
+    for (const [index, canvas] of originalCanvases.entries()) {
+      const cloned = clonedCanvases[index];
+      if (!cloned) continue;
+      try {
+        const image = document.createElement("img");
+        for (const attribute of [...cloned.attributes]) image.setAttribute(attribute.name, attribute.value);
+        image.setAttribute("src", canvas.toDataURL("image/png"));
+        image.setAttribute("width", String(canvas.width));
+        image.setAttribute("height", String(canvas.height));
+        image.setAttribute("alt", "");
+        image.setAttribute("data-g2p-rendered-canvas", "snapshot");
+        cloned.replaceWith(image);
+        canvasSnapshots += 1;
+      } catch { canvasSnapshotFailures += 1; }
+    }
     const scripts = [...clone.querySelectorAll("script")];
     const inlineEventHandlers = [...clone.querySelectorAll("*")].reduce((count, element) => count + [...element.attributes].filter((attribute) => /^on/i.test(attribute.name)).length, 0);
     scripts.forEach((script) => script.remove());
@@ -101,6 +122,8 @@ async function captureRenderedSource(page: Page): Promise<RenderedSource> {
       inaccessibleStyleSheets,
       scriptsRemoved: scripts.length,
       inlineEventHandlers,
+      canvasSnapshots,
+      canvasSnapshotFailures,
     };
   });
 }

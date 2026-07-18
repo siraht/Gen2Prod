@@ -10,4 +10,10 @@ describe("naturalistic evaluation invariants", () => {
     expect(result.urlRecall).toBe(0.5);
     expect(result.formRecall).toBe(0.5);
   });
+
+  test("does not count head stylesheet links as page URL authority", () => {
+    const source = '<html><head><link rel="stylesheet" href="https://cdn.example/styles.css"></head><body><a href="/work">Work</a></body></html>';
+    const candidate = '<html><head></head><body><a href="/work">Work</a></body></html>';
+    expect(contentPreservation(source, candidate).urlRecall).toBe(1);
+  });
 });

@@ -31,7 +31,7 @@ export type NaturalisticFixtureEvaluation = {
   split: string;
   inputPath: string;
   status: "evaluated" | "failed";
-  materialization?: { staticTextTokens: number; renderedTextTokens: number; scriptsRemoved: number; styleSheetCount: number; inaccessibleStyleSheets: string[]; sourceMode: "static" | "browser-materialized" };
+  materialization?: { staticTextTokens: number; renderedTextTokens: number; scriptsRemoved: number; styleSheetCount: number; inaccessibleStyleSheets: string[]; canvasSnapshots: number; canvasSnapshotFailures: number; sourceMode: "static" | "browser-materialized" };
   preservation?: Preservation;
   gates?: { passed: boolean; hardFailures: number; bemCoverage: number; tokenCoverage: number; inlineStyles: number; inlineScripts: number };
   idempotent?: boolean;
@@ -88,6 +88,10 @@ function attributeValues(html: string, attribute: string): string[] {
   return [...html.matchAll(expression)].flatMap((match) => match[1] ? [match[1]] : []).filter((value) => !value.startsWith("#") && !/^javascript:/i.test(value));
 }
 
+function bodyOnly(html: string): string {
+  return html.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i)?.[1] ?? html;
+}
+
 function formControls(html: string): string[] {
   return [...html.matchAll(/<(input|select|textarea|button)\b([^>]*)>/gi)].map((match) => {
     const tag = match[1]?.toLowerCase() ?? "control";
@@ -110,6 +114,8 @@ function multisetRecall(source: string[], candidate: string[]): number {
 }
 
 export function contentPreservation(sourceHtml: string, candidateHtml: string): Preservation {
+  sourceHtml = bodyOnly(sourceHtml);
+  candidateHtml = bodyOnly(candidateHtml);
   const sourceTokens = tokens(sourceHtml);
   const sourceUrls = [...attributeValues(sourceHtml, "href"), ...attributeValues(sourceHtml, "action")];
   const candidateUrls = [...attributeValues(candidateHtml, "href"), ...attributeValues(candidateHtml, "action")];
@@ -191,9 +197,10 @@ async function evaluateArtifact(input: {
     const sourceMode = rendered && (renderedTokenCount > staticTokenCount || rendered.scriptsRemoved > 0 || rendered.css.length > 0) ? "browser-materialized" as const : "static" as const;
     const compilerHtml = sourceMode === "browser-materialized" ? rendered!.html : staticHtml;
     const compilerCss = sourceMode === "browser-materialized" ? rendered!.css : "";
-    result.materialization = { staticTextTokens: staticTokenCount, renderedTextTokens: renderedTokenCount, scriptsRemoved: rendered?.scriptsRemoved ?? 0, styleSheetCount: rendered?.styleSheetCount ?? 0, inaccessibleStyleSheets: rendered?.inaccessibleStyleSheets ?? [], sourceMode };
+    result.materialization = { staticTextTokens: staticTokenCount, renderedTextTokens: renderedTokenCount, scriptsRemoved: rendered?.scriptsRemoved ?? 0, styleSheetCount: rendered?.styleSheetCount ?? 0, inaccessibleStyleSheets: rendered?.inaccessibleStyleSheets ?? [], canvasSnapshots: rendered?.canvasSnapshots ?? 0, canvasSnapshotFailures: rendered?.canvasSnapshotFailures ?? 0, sourceMode };
     if (rendered?.scriptsRemoved) result.requiredActions.push(`${rendered.scriptsRemoved} executable script(s) require explicit interaction contracts; browser materialization retained their rendered DOM but did not copy code.`);
     if (rendered?.inaccessibleStyleSheets.length) result.requiredActions.push(`Could not inspect ${rendered.inaccessibleStyleSheets.length} stylesheet(s): ${rendered.inaccessibleStyleSheets.join(", ")}`);
+    if (rendered?.canvasSnapshotFailures) result.requiredActions.push(`${rendered.canvasSnapshotFailures} canvas visual(s) could not be frozen, usually because cross-origin pixels tainted the canvas.`);
     const materializedHtmlPath = join(fixtureDirectory, "materialized", "page.html");
     const materializedCssPath = join(fixtureDirectory, "materialized", "page.css");
     await writeTextAtomic(materializedHtmlPath, compilerHtml);
@@ -215,6 +222,7 @@ async function evaluateArtifact(input: {
     const rerunDirectory = join(fixtureDirectory, "idempotence");
     await Promise.all([writeTextAtomic(join(rerunDirectory, "page.html"), compiled.html), writeTextAtomic(join(rerunDirectory, "page.css"), compiled.css)]);
     const rerun = await compileStaticPage({ htmlPath: join(rerunDirectory, "page.html"), cssPath: join(rerunDirectory, "page.css"), tokenRegistry: compiled.plan.tokens });
+    await Promise.all([writeTextAtomic(join(rerunDirectory, "rerun.html"), rerun.html), writeTextAtomic(join(rerunDirectory, "rerun.scss"), rerun.scss)]);
     result.idempotent = hashJson({ html: compiled.html, scss: compiled.scss }) === hashJson({ html: rerun.html, scss: rerun.scss });
     const dirtyCapture = captureForViewport(baseline, viewport);
     const candidateCapture = captureForViewport(candidate, viewport);

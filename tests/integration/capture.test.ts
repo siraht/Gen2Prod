@@ -15,5 +15,6 @@ test("captures stabilized browser, DOM, AX, style, SEO and screenshot evidence",
   expect(capture.captures[0]!.accessibilityTree.length).toBeGreaterThan(1);
   expect(capture.captures[0]!.renderedSource?.html).toContain("<h1");
   expect(capture.captures[0]!.renderedSource?.scriptsRemoved).toBe(0);
+  expect(capture.captures[0]!.renderedSource?.canvasSnapshots).toBe(0);
   expect(await Bun.file(capture.captures[0]!.screenshot).exists()).toBeTrue();
 });

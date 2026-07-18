@@ -9,6 +9,13 @@ function escapeHtml(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
+function decodeHtmlText(value: string): string {
+  return value
+    .replace(/&#(\d+);/g, (_, number: string) => String.fromCodePoint(Number(number)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, number: string) => String.fromCodePoint(Number.parseInt(number, 16)))
+    .replaceAll("&quot;", '"').replaceAll("&apos;", "'").replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
+}
+
 function renderNode(node: PlannedNode, depth = 0, includeNodeIds = false): string {
   const indent = "  ".repeat(depth);
   const attributes = { ...node.attributes, ...(node.classes.length ? { class: node.classes.join(" ") } : {}), ...(includeNodeIds ? { "data-g2p-node": node.nodeId } : {}) };
@@ -45,7 +52,7 @@ export function emitScss(plan: CompilationPlan): string {
     if (!rules.some((rule) => rule.className === primary)) rules.push({ node, className: primary, style });
     groups.set(block, rules);
   }
-  const rendered = [...groups.entries()].map(([block, rules]) => {
+  const rendered = [...groups.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([block, rules]) => {
     const ordered = rules.sort((left, right) => left.className === block ? -1 : right.className === block ? 1 : left.className.localeCompare(right.className));
     const contents = ordered.map((rule) => {
       if (rule.className === block) return renderDeclarations(rule.style, "  ");
@@ -63,11 +70,11 @@ export function emitScss(plan: CompilationPlan): string {
 
 export function emitHtml(plan: CompilationPlan, cssHref = "page.css", includeNodeIds = false): string {
   const body = renderNode(plan.semantics.root, 0, includeNodeIds);
-  const sourceTitle = plan.source.html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() || "Production page";
+  const sourceTitle = decodeHtmlText(plan.source.html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() || "Production page");
   const sourceDescription = plan.source.html.match(/<meta\s+[^>]*name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i)?.[1]
     ?? plan.source.html.match(/<meta\s+[^>]*content=["']([^"']*)["'][^>]*name=["']description["'][^>]*>/i)?.[1]
     ?? "";
-  if (plan.semantics.root.tag === "body") return `<!doctype html>\n<html lang="en">\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <title>${escapeHtml(sourceTitle)}</title>\n  <meta name="description" content="${escapeHtml(sourceDescription)}">\n  <link rel="stylesheet" href="${escapeHtml(cssHref)}">\n</head>\n${body}\n</html>\n`;
+  if (plan.semantics.root.tag === "body") return `<!doctype html>\n<html lang="en">\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <meta name="generator" content="Gen2Prod">\n  <title>${escapeHtml(sourceTitle)}</title>\n  <meta name="description" content="${escapeHtml(sourceDescription)}">\n  <link rel="stylesheet" href="${escapeHtml(cssHref)}">\n</head>\n${body}\n</html>\n`;
   return body;
 }
 

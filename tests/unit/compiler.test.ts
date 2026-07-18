@@ -81,6 +81,28 @@ describe("static compilation", () => {
     const replaced = bindValue("gap", "clamp(16px, 4vw, 4rem)", registry);
     expect(replaced.value).toBe("clamp(var(--space-m), 4vw, 4rem)");
   });
+
+  test("does not flatten hover or pseudo-element declarations into default styles", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-state-style-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>States</title><meta name="description" content="State fixture"><style>:root{--ink:#112233;--space-m:16px}.hero{padding:var(--space-m)}.hero:hover{padding:99px}.hero .title{color:var(--ink)}.hero .title::after{color:red;content:"x"}</style></head><body><main data-g2p-node="main"><section id="hero" class="hero" aria-labelledby="hero-title"><h1 data-g2p-node="hero-title" class="title">States</h1></section></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: inputTokens() });
+    expect(output.html).toContain('class="hero"');
+    expect(output.scss).toContain("padding: var(--space-m)");
+    expect(output.scss).not.toContain("99px");
+    expect(output.scss).not.toContain("content:");
+  });
+
+  test("creates exact project aliases only for repeated governed values", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-project-tokens-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Tokens</title><meta name="description" content="Token fixture"><style>.hero{color:#456789}.hero-title{color:#456789}.hero-copy{margin-top:13px}</style></head><body><main data-g2p-node="main"><section data-g2p-node="hero" class="hero" aria-labelledby="hero-title"><h1 data-g2p-node="hero-title" class="hero-title">Tokens</h1><p data-g2p-node="hero-copy" class="hero-copy">Exact legacy values</p></section></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    const projectToken = output.plan.tokens.tokens.find((token) => token.sampledValues["default@1280"] === "#456789");
+    expect(projectToken?.source).toContain("2-selectors");
+    expect(output.scss).toContain(`var(${projectToken?.runtimeVariable})`);
+    expect(output.plan.tokens.tokens.some((token) => token.sampledValues["default@1280"] === "13px")).toBeFalse();
+  });
 });
 
 function inputTokens() {

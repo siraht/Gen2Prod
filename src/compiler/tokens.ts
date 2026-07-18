@@ -1,6 +1,6 @@
 import { addDays } from "./util.ts";
 import type { StyleIntent, Token, TokenRegistry } from "../schemas/normal-form.ts";
-import type { PlannedNode, SourceDocument, TokenException } from "./types.ts";
+import type { CssDeclaration, PlannedNode, SourceDocument, TokenException } from "./types.ts";
 import { sha256 } from "../core/hash.ts";
 import postcss from "postcss";
 
@@ -32,6 +32,10 @@ function replaceCssAtom(value: string, sample: string, replacement: string): str
   const pattern = new RegExp(`(?<![\\w.-])${escaped}(?![\\w.-])`, "g");
   if (!pattern.test(value)) return undefined;
   return value.replace(pattern, replacement);
+}
+
+function normalizeCssValue(value: string): string {
+  return value.trim().replace(/\s+/g, " ").replace(/\s*,\s*/g, ", ").replace(/\s*\/\s*/g, "/");
 }
 
 export function bindValue(property: string, rawValue: string, registry: TokenRegistry, relativeThreshold = 0.08): { value: string; token?: Token | undefined; error?: number | undefined } {
@@ -73,6 +77,29 @@ function selectorClasses(selector: string): string[] {
   return [...selector.matchAll(/\.([_a-zA-Z]+[\w-]*)/g)].flatMap((match) => match[1] ? [match[1]] : []);
 }
 
+function cssEscapedClass(name: string): string {
+  return name.replace(/([^a-zA-Z0-9_-])/g, "\\$1");
+}
+
+function defaultStateTarget(selector: string): string | undefined {
+  if (/::(?:before|after|marker|placeholder)|:(?:hover|focus|focus-visible|focus-within|active|visited|checked|disabled|open)\b/i.test(selector)) return undefined;
+  return selector.trim().split(/[\s>+~]+/).filter(Boolean).at(-1);
+}
+
+function selectorTargetsNode(selector: string, node: PlannedNode): boolean {
+  const target = defaultStateTarget(selector);
+  if (!target || target === ":root") return false;
+  const classNames = [...node.oldClasses, ...node.classes];
+  const targetHasKnownClass = classNames.some((name) => target.includes(`.${cssEscapedClass(name)}`) || target.includes(`.${name}`));
+  const targetClasses = selectorClasses(target);
+  if (targetClasses.length > 0) return targetHasKnownClass;
+  const id = node.attributes.id;
+  if (id && target.includes(`#${id}`)) return true;
+  const tag = target.match(/^(?:\*|([a-z][a-z0-9-]*))/i)?.[1]?.toLowerCase();
+  if (tag) return tag === node.originalTag || tag === node.tag;
+  return false;
+}
+
 export function resolveStyles(source: SourceDocument, root: PlannedNode, registry: TokenRegistry, relativeThreshold = 0.08): { styles: StyleIntent[]; exceptions: TokenException[] } {
   const styles: StyleIntent[] = [];
   const exceptions: TokenException[] = [];
@@ -92,7 +119,8 @@ export function resolveStyles(source: SourceDocument, root: PlannedNode, registr
   for (const node of nodes) {
     const sourceDeclarations = source.declarations.filter((declaration) => {
       if (declaration.sourceNodeId === node.nodeId) return true;
-      const classes = selectorClasses(declaration.selector);
+      if (!selectorTargetsNode(declaration.selector, node)) return false;
+      const classes = selectorClasses(defaultStateTarget(declaration.selector) ?? "");
       if (classes.some((className) => node.oldClasses.includes(className) || node.classes.includes(className))) return true;
       if (node.block && node.classes.includes(node.block) && (blockSourceClasses.get(node.block) ?? []).some((sourceBlock) => classes.includes(sourceBlock))) return true;
       return node.classes.some((plannedClass) => {
@@ -110,7 +138,7 @@ export function resolveStyles(source: SourceDocument, root: PlannedNode, registr
       if (classification === "governed-design-value" && !binding.token) {
         exceptions.push({ id: `token-exception-${sha256(`${node.nodeId}:${declaration.property}:${declaration.value}`).slice(0, 10)}`, property: declaration.property, value: declaration.value, selector: node.classes[0] ? `.${node.classes[0]}` : node.tag, reason: "No compatible registered token within policy tolerance", risk: "medium", owner: "unassigned", expires: addDays(new Date(), 90).toISOString().slice(0, 10), reviewAction: "bind an existing token, approve a project token, or explicitly reapprove" });
       }
-      return { property: declaration.property, value: binding.value, important: declaration.important, source: declaration.selector, classification, ...(binding.token ? { tokenRole: binding.token.semanticRole } : {}), bindingStatus: classification !== "governed-design-value" ? "not-applicable" as const : binding.token ? "bound" as const : "exception" as const };
+      return { property: declaration.property, value: normalizeCssValue(binding.value), important: declaration.important, source: declaration.selector, classification, ...(binding.token ? { tokenRole: binding.token.semanticRole } : {}), bindingStatus: classification !== "governed-design-value" ? "not-applicable" as const : binding.token ? "bound" as const : "exception" as const };
     });
     styles.push({ nodeId: node.nodeId, styleRole: node.role, layoutRole: node.role.includes("layout") || node.role.includes("list") ? node.role : "content-owned", contentRole: node.role, confidence: { value: 0.85, kind: "ordinal-uncalibrated", evidence: [{ source: "compiled-css", nodeId: node.nodeId, signal: `${declarations.length} matched declarations`, authority: "computed-visual-truth", weight: 0.9 }], risk: "low" }, declarations });
   }
@@ -151,4 +179,54 @@ export function extractTokenRegistry(css: string, source = "compiled-project-css
     tokens.push({ id: name, name, type, category: type === "dimension" ? "dimension" : type, value, runtimeVariable: declaration.prop, runtimeExpression: `var(${declaration.prop})`, semanticRole: declaration.prop.slice(2), allowedProperties: allowedProperties(declaration.prop), source, status: "active", sampledValues: { "default@1280": declaration.value } });
   });
   return { schemaVersion: "dtcg-2025-10+gen2prod-0.1.0", conformsTo: ["DTCG Format Module 2025.10"], adapterSchema: "gen2prod-token-adapter-0.1.0", tokens };
+}
+
+function tokenFamily(property: string, value: string): string {
+  if (/^(?:color|background-color|border(?:-[a-z]+)?-color|outline-color)$/.test(property) && /^(?:#|rgb|hsl|okl|lab|color\()/i.test(value.trim())) return "color";
+  if (/^(?:padding|margin|gap|row-gap|column-gap)(?:-|$)/.test(property)) return "space";
+  if (/^font-size$/.test(property)) return "font-size";
+  if (/^font-(?:weight|family)$/.test(property)) return property;
+  if (/^(?:line-height|letter-spacing)$/.test(property)) return property;
+  if (/border-radius$/.test(property)) return "radius";
+  if (/shadow$/.test(property)) return "shadow";
+  if (/^(?:transition|animation)/.test(property)) return "motion";
+  return property.replace(/[^a-z0-9]+/g, "-");
+}
+
+export function augmentTokenRegistry(registry: TokenRegistry, declarations: CssDeclaration[], minimumSupport = 2): TokenRegistry {
+  const output = structuredClone(registry);
+  const groups = new Map<string, { family: string; value: string; properties: Set<string>; selectors: Set<string> }>();
+  for (const declaration of declarations) {
+    if (classifyDeclaration(declaration.property, declaration.value) !== "governed-design-value") continue;
+    if (/var\(--/.test(declaration.value) || /^(?:inherit|initial|unset|revert|none|normal)$/i.test(declaration.value.trim())) continue;
+    const family = tokenFamily(declaration.property, declaration.value);
+    const key = `${family}\0${declaration.value.trim()}`;
+    const group = groups.get(key) ?? { family, value: declaration.value.trim(), properties: new Set<string>(), selectors: new Set<string>() };
+    group.properties.add(declaration.property);
+    group.selectors.add(declaration.selector);
+    groups.set(key, group);
+  }
+  for (const group of [...groups.values()].sort((left, right) => `${left.family}:${left.value}`.localeCompare(`${right.family}:${right.value}`))) {
+    if (group.selectors.size < minimumSupport) continue;
+    if (output.tokens.some((token) => Object.values(token.sampledValues).includes(group.value) && [...group.properties].some((property) => token.allowedProperties.includes(property)))) continue;
+    const suffix = sha256(`${group.family}:${group.value}`).slice(0, 8);
+    const runtimeVariable = `--g2p-${group.family}-${suffix}`;
+    const parsed = numeric(group.value);
+    const type: Token["type"] = group.family === "color" ? "color" : group.family === "shadow" ? "shadow" : group.family === "font-weight" ? "fontWeight" : group.family === "motion" ? "duration" : parsed ? "dimension" : "project";
+    output.tokens.push({
+      id: `legacy.${group.family}.${suffix}`,
+      name: `legacy.${group.family}.${suffix}`,
+      type,
+      category: `legacy-exact-${group.family}`,
+      value: parsed ? { value: parsed.number, unit: parsed.unit } : group.value,
+      runtimeVariable,
+      runtimeExpression: `var(${runtimeVariable})`,
+      semanticRole: `legacy-exact-${group.family}`,
+      allowedProperties: [...group.properties].sort(),
+      source: `repeated-exact-value:${group.selectors.size}-selectors`,
+      status: "active",
+      sampledValues: { "default@1280": group.value },
+    });
+  }
+  return output;
 }
