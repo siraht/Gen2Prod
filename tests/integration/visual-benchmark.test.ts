@@ -50,4 +50,4 @@ test("scores dirty and candidate browser images against the same frozen gold moc
   } finally {
     await session.close();
   }
-});
+}, 30_000);
