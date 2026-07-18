@@ -38,7 +38,9 @@ function renderResourceLinks(plan: CompilationPlan): string {
 function renderNode(node: PlannedNode, depth = 0, includeNodeIds = false): string {
   const indent = "  ".repeat(depth);
   const attributes = { ...node.attributes, ...(node.classes.length ? { class: node.classes.join(" ") } : {}), ...(includeNodeIds ? { "data-g2p-node": node.nodeId } : {}) };
-  const attributeText = Object.entries(attributes).filter(([name]) => name !== "data-g2p-node" && name !== "data-gen2prod-id").map(([name, value]) => value === "" && BOOLEAN_ATTRIBUTES.has(name) ? name : `${name}="${escapeHtml(value)}"`).join(" ");
+  const attributeText = Object.entries(attributes)
+    .filter(([name]) => name !== "data-gen2prod-id" && (includeNodeIds || name !== "data-g2p-node"))
+    .map(([name, value]) => value === "" && BOOLEAN_ATTRIBUTES.has(name) ? name : `${name}="${escapeHtml(value)}"`).join(" ");
   const opening = `${indent}<${node.tag}${attributeText ? ` ${attributeText}` : ""}>`;
   if (VOID_TAGS.has(node.tag)) return opening;
   const orderedText = node.content?.some((item) => item.kind === "text");

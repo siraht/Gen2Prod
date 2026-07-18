@@ -8,6 +8,7 @@ import { renderGold } from "../../src/synthetic/render.ts";
 import { ingestStaticHtml } from "../../src/compiler/ingest.ts";
 import { compileStaticPage } from "../../src/compiler/pipeline.ts";
 import { bindValue, extractTokenRegistry } from "../../src/compiler/tokens.ts";
+import { emitHtml } from "../../src/compiler/emit.ts";
 
 async function fixtureInput() {
   const spec = createArchetypes()[0]!;
@@ -490,6 +491,8 @@ describe("static compilation", () => {
     expect(projectOutput.scss).not.toContain("--unused");
     const approvedOutput = await compileStaticPage({ htmlPath, tokenRegistry: approved, fallbackTokenRegistry: fallback, frameworkClassCatalog: ["grid--3"] });
     expect(approvedOutput.plan.tokens.tokens.find((token) => token.runtimeVariable === "--space-m")?.sampledValues["default@1280"]).toBe("4rem");
+    expect(emitHtml(approvedOutput.plan, "page.css", true)).toContain('data-g2p-node="');
+    expect(approvedOutput.html).not.toContain('data-g2p-node="');
   });
 });
 

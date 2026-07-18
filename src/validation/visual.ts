@@ -269,6 +269,9 @@ export async function compareCaptures(baseline: CaptureResult["captures"][number
   const categoryMismatches: Record<string, { changed: number; total: number }> = {};
   let unmatchedVisibleNodes = 0;
   const unmatchedVisibleNodeDetails: VisualMetrics["unmatchedVisibleNodeDetails"] = [];
+  // Older frozen captures predate viewportHeight. Use the paired candidate's
+  // recorded height so historical visual baselines remain finite and usable.
+  const baselineViewportHeight = Number.isFinite(baseline.viewportHeight) ? baseline.viewportHeight : Number.isFinite(candidate.viewportHeight) ? candidate.viewportHeight : 1;
   for (const [id, before] of baselineNodes) {
     const after = nodeMatches.get(id);
     if (!after) {
@@ -278,7 +281,7 @@ export async function compareCaptures(baseline: CaptureResult["captures"][number
       }
       continue;
     }
-    const position = Math.abs(before.box.x - after.box.x) / Math.max(baseline.viewport, 1) + Math.abs(before.box.y - after.box.y) / Math.max(baseline.viewportHeight, 1);
+    const position = Math.abs(before.box.x - after.box.x) / Math.max(baseline.viewport, 1) + Math.abs(before.box.y - after.box.y) / Math.max(baselineViewportHeight, 1);
     const size = Math.abs(before.box.width - after.box.width) / Math.max(before.box.width, 1) + Math.abs(before.box.height - after.box.height) / Math.max(before.box.height, 1);
     const delta = 0.5 * position + 0.5 * size;
     deltas.push(delta);

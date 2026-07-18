@@ -58,6 +58,19 @@ describe("validation gates", () => {
 });
 
 describe("image comparison calibration", () => {
+  test("keeps layout metrics finite for legacy captures without viewport height", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-legacy-capture-"));
+    const screenshot = join(directory, "solid.png");
+    const image = new PNG({ width: 10, height: 10 }); image.data.fill(255);
+    await Bun.write(screenshot, PNG.sync.write(image));
+    const node = { nodeId: "title", tag: "h1", text: "Title", visible: true, box: { x: 0, y: 2, width: 10, height: 5 }, styles: { display: "block" } };
+    const base = { viewport: 10, viewportHeight: undefined as unknown as number, theme: "light" as const, state: "default", screenshot, screenshotHash: "hash", dom: [node], accessibilityTree: [], performance: {}, seo: {}, console: [] };
+    const candidate = { ...base, viewportHeight: 20, dom: [{ ...node, box: { ...node.box, y: 4 } }] };
+    const metrics = await compareCaptures(base, candidate);
+    expect(Number.isFinite(metrics.layout.mean)).toBeTrue();
+    expect(Number.isFinite(metrics.layout.p95)).toBeTrue();
+  });
+
   test("does not treat generated capture-order locators as cross-build node identity", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-node-match-"));
     const screenshot = join(directory, "solid.png");
