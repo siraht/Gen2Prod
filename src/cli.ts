@@ -439,12 +439,15 @@ program
   .option("--fixtures <path>", "synthetic manifest", "fixtures/generated/manifest.json")
   .addOption(new Option("--track <track>", "research track").choices(["policy", "pass", "verifier"]).default("policy"))
   .option("--budget <number>", "number of experiments")
+  .option("--naturalistic <path>", "optional project-isolated naturalistic manifest used as a cross-corpus promotion constraint")
+  .option("--naturalistic-max-per-project <number>", "naturalistic pages sampled per project and candidate", "1")
+  .option("--naturalistic-limit <number>", "optional total naturalistic page cap per candidate")
   .addOption(new Option("--split <split>", "search split").choices(["train", "validation"]).default("validation"))
-  .action(async (options: { fixtures: string; track: "policy" | "pass" | "verifier"; budget?: string; split: "train" | "validation" }) => {
+  .action(async (options: { fixtures: string; track: "policy" | "pass" | "verifier"; budget?: string; split: "train" | "validation"; naturalistic?: string; naturalisticMaxPerProject: string; naturalisticLimit?: string }) => {
     const project = await config();
     const acss = await prepareConfiguredAutomaticCss(project, globals().acss);
-    const summary = await runResearch({ manifestPath: resolve(options.fixtures), workspace: resolve(project.workspace), track: options.track, budget: Number.parseInt(options.budget ?? String(project.research.budget), 10), split: options.split, hiddenHoldoutEvery: project.research.hiddenHoldoutEvery, acss });
-    emit(result("research", summary), `Research complete\nTrack: ${options.track}\nKept in research: ${summary.accepted}\nReverted: ${summary.rejected}\nInitial cost: ${summary.initialFitness.normalizedComputeCost.toFixed(3)}\nFinal research cost: ${summary.finalFitness.normalizedComputeCost.toFixed(3)}\nProduction promotion: ${summary.promotion.promoted ? "accepted" : "unchanged"}\n${summary.promotion.reason}\nResearch incumbent: ${summary.incumbent.name}\nProduction incumbent: ${summary.productionIncumbent.name}`);
+    const summary = await runResearch({ manifestPath: resolve(options.fixtures), workspace: resolve(project.workspace), track: options.track, budget: Number.parseInt(options.budget ?? String(project.research.budget), 10), split: options.split, hiddenHoldoutEvery: project.research.hiddenHoldoutEvery, acss, ...(options.naturalistic ? { naturalistic: { manifestPath: resolve(options.naturalistic), maxPerProject: Number.parseInt(options.naturalisticMaxPerProject, 10), ...(options.naturalisticLimit ? { limit: Number.parseInt(options.naturalisticLimit, 10) } : {}), browserExecutable: project.capture.browserExecutable } } : {}) });
+    emit(result("research", summary), `Research complete\nTrack: ${options.track}\nKept in research: ${summary.accepted}\nReverted: ${summary.rejected}\nInitial cost: ${summary.initialFitness.normalizedComputeCost.toFixed(3)}\nFinal research cost: ${summary.finalFitness.normalizedComputeCost.toFixed(3)}${summary.naturalistic ? `\nNaturalistic validation: ${summary.naturalistic.initialFitness.criticalGateFailures.toFixed(3)} → ${summary.naturalistic.finalFitness.criticalGateFailures.toFixed(3)} hard-failure fitness\nNaturalistic holdout non-regression: ${summary.naturalistic.holdoutNonRegression ? "pass" : "fail"}` : ""}\nProduction promotion: ${summary.promotion.promoted ? "accepted" : "unchanged"}\n${summary.promotion.reason}\nResearch incumbent: ${summary.incumbent.name}\nProduction incumbent: ${summary.productionIncumbent.name}`);
   });
 
 program

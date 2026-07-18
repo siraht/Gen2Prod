@@ -88,6 +88,10 @@ export const ExperimentResultSchema = z.object({
     actualResourceUseChanged: z.boolean(),
     effective: z.boolean(),
   }),
+  naturalisticIncumbentFitness: FitnessVectorSchema.optional(),
+  naturalisticCandidateFitness: FitnessVectorSchema.optional(),
+  naturalisticNonRegression: z.object({ passed: z.boolean(), reasons: z.array(z.string()) }).optional(),
+  naturalisticIntervention: z.object({ outputChanged: z.boolean(), fitnessChanged: z.boolean(), effective: z.boolean() }).optional(),
   holdoutFitness: FitnessVectorSchema.optional(),
 });
 

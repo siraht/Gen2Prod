@@ -9,6 +9,8 @@ import { evaluatePolicy } from "./evaluate.ts";
 import { proposeMutation, type MutationTrack } from "./mutate.ts";
 import { openCaptureSession, type CaptureSession } from "../evidence/capture.ts";
 import type { AutomaticCssBundle } from "../acss/schema.ts";
+import { evaluateNaturalisticCorpus, type NaturalisticEvaluation } from "../corpus/evaluate.ts";
+import { compareNaturalisticFixtures, naturalisticFitness, naturalisticInterventionEffect } from "./naturalistic.ts";
 
 export type ResearchOptions = {
   manifestPath: string;
@@ -18,6 +20,13 @@ export type ResearchOptions = {
   split: "train" | "validation";
   hiddenHoldoutEvery: number;
   acss?: AutomaticCssBundle | undefined;
+  naturalistic?: {
+    manifestPath: string;
+    maxPerProject?: number | undefined;
+    limit?: number | undefined;
+    viewport?: number | undefined;
+    browserExecutable?: string | undefined;
+  } | undefined;
 };
 
 export type ResearchSummary = {
@@ -31,6 +40,14 @@ export type ResearchSummary = {
   baselineHoldoutFitness: ExperimentResult["candidateFitness"];
   finalHoldoutFitness: ExperimentResult["candidateFitness"];
   promotion: ResearchPromotion;
+  naturalistic?: {
+    corpusFingerprint: string;
+    initialFitness: ExperimentResult["candidateFitness"];
+    finalFitness: ExperimentResult["candidateFitness"];
+    baselineHoldoutFitness: ExperimentResult["candidateFitness"];
+    finalHoldoutFitness: ExperimentResult["candidateFitness"];
+    holdoutNonRegression: boolean;
+  } | undefined;
 };
 
 async function append(path: string, line: string): Promise<void> {
@@ -72,6 +89,41 @@ function interventionEffect(incumbent: Awaited<ReturnType<typeof evaluatePolicy>
 
 function policyIdentity(policy: TransformationPolicy): string { return hashJson({ ...policy, name: "_" }); }
 
+async function evaluateNatural(options: ResearchOptions, policy: TransformationPolicy, split: "train" | "validation" | "holdout", directory: string, captureSession: CaptureSession): Promise<NaturalisticEvaluation | undefined> {
+  if (!options.naturalistic) return undefined;
+  return evaluateNaturalisticCorpus({
+    manifestPath: options.naturalistic.manifestPath,
+    outputDirectory: directory,
+    split,
+    maxPerProject: options.naturalistic.maxPerProject ?? 1,
+    ...(options.naturalistic.limit ? { limit: options.naturalistic.limit } : {}),
+    ...(options.naturalistic.viewport ? { viewport: options.naturalistic.viewport } : {}),
+    capture: true,
+    captureLive: false,
+    ...(options.naturalistic.browserExecutable ? { browserExecutable: options.naturalistic.browserExecutable } : {}),
+    captureSession,
+    policy,
+    acss: options.acss,
+  });
+}
+
+async function appendNaturalisticResearchTrajectories(root: string, evaluation: NaturalisticEvaluation | undefined, experiment: ExperimentResult): Promise<void> {
+  if (!evaluation || !await pathExists(evaluation.trajectoryExport.path)) return;
+  const lines = (await Bun.file(evaluation.trajectoryExport.path).text()).split("\n").filter(Boolean);
+  for (const [index, line] of lines.entries()) {
+    const trajectory = TrajectorySchema.parse(JSON.parse(line));
+    const researchTrajectory = TrajectorySchema.parse({
+      ...trajectory,
+      trajectoryId: `${trajectory.trajectoryId}-research-${index}`,
+      experimentId: experiment.experimentId,
+      observations: { ...trajectory.observations, researchOutcome: experiment.outcome },
+      planSummary: { ...trajectory.planSummary, researchPatchHash: experiment.patchHash },
+      accepted: experiment.outcome === "keep",
+    });
+    await append(join(root, "trajectories.jsonl"), JSON.stringify(researchTrajectory));
+  }
+}
+
 async function runResearchWithSession(options: ResearchOptions, captureSession: CaptureSession): Promise<ResearchSummary> {
   const root = join(options.workspace, "research");
   const experimentsDirectory = join(root, "experiments");
@@ -86,7 +138,9 @@ async function runResearchWithSession(options: ResearchOptions, captureSession: 
   const initialPolicy = resumePath ? TransformationPolicySchema.parse(await readJson(resumePath)) : defaultPolicy;
   let incumbent = initialPolicy;
   let incumbentEvaluation = await evaluatePolicy({ manifestPath: options.manifestPath, policy: incumbent, split: options.split, workDirectory: join(root, "baseline"), captureSession, acss: options.acss });
+  let incumbentNatural = await evaluateNatural(options, incumbent, options.split, join(root, "naturalistic", "baseline"), captureSession);
   const initialFitness = incumbentEvaluation.fitness;
+  const initialNaturalFitness = incumbentNatural ? naturalisticFitness(incumbentNatural) : undefined;
   const experiments: ExperimentResult[] = [];
   let lastKeptExperimentId = "no-surviving-candidate";
   for (let iteration = 0; iteration < options.budget; iteration += 1) {
@@ -96,11 +150,19 @@ async function runResearchWithSession(options: ResearchOptions, captureSession: 
     await ensureDirectory(directory);
     await writeJsonAtomic(join(directory, "candidate-policy.json"), mutation.candidate);
     const candidateEvaluation = await evaluatePolicy({ manifestPath: options.manifestPath, policy: mutation.candidate, split: options.split, workDirectory: join(directory, "evaluation"), captureSession, acss: options.acss });
+    const candidateNatural = await evaluateNatural(options, mutation.candidate, options.split, join(directory, "naturalistic"), captureSession);
     const controlsPass = candidateEvaluation.mutationControlRecall === 1;
     const intervention = interventionEffect(incumbentEvaluation, candidateEvaluation);
-    const improved = compareFitness(candidateEvaluation.fitness, incumbentEvaluation.fitness) < 0;
+    const naturalIntervention = incumbentNatural && candidateNatural ? naturalisticInterventionEffect(incumbentNatural, candidateNatural) : undefined;
+    const naturalNonRegression = incumbentNatural && candidateNatural ? compareNaturalisticFixtures(incumbentNatural, candidateNatural) : undefined;
+    const syntheticComparison = compareFitness(candidateEvaluation.fitness, incumbentEvaluation.fitness);
+    const naturalComparison = incumbentNatural && candidateNatural ? compareFitness(naturalisticFitness(candidateNatural), naturalisticFitness(incumbentNatural)) : 0;
+    const improved = syntheticComparison <= 0 && naturalComparison <= 0 && (syntheticComparison < 0 || naturalComparison < 0);
+    const effective = intervention.effective || Boolean(naturalIntervention?.effective);
+    const naturalSafetyPass = naturalNonRegression?.passed ?? !options.naturalistic;
     const policySafetyPass = mutation.candidate.compiler.preserveUnknownClasses && !mutation.candidate.compiler.inferMissingBehavior;
-    const keep = controlsPass && policySafetyPass && intervention.effective && improved && candidateEvaluation.frozenEvaluatorHash === incumbentEvaluation.frozenEvaluatorHash;
+    const naturalEvaluatorFrozen = !incumbentNatural || !candidateNatural || (candidateNatural.evaluatorHash === incumbentNatural.evaluatorHash && candidateNatural.corpusFingerprint === incumbentNatural.corpusFingerprint && candidateNatural.fixtureSelectionHash === incumbentNatural.fixtureSelectionHash);
+    const keep = controlsPass && policySafetyPass && effective && naturalSafetyPass && improved && candidateEvaluation.frozenEvaluatorHash === incumbentEvaluation.frozenEvaluatorHash && naturalEvaluatorFrozen;
     const experiment = ExperimentResultSchema.parse({
       schemaVersion: "0.1.0",
       experimentId,
@@ -119,22 +181,32 @@ async function runResearchWithSession(options: ResearchOptions, captureSession: 
         ? "Rejected: frozen evaluator mutation-control recall regressed."
         : !policySafetyPass
           ? "Rejected: candidate weakened a non-negotiable unknown-class or behavior-inference safety constraint."
-          : !intervention.effective
+          : !effective
             ? "Reverted: requested policy change had no measured output, fitness, or actual resource-use effect."
+            : !naturalSafetyPass
+              ? `Reverted: naturalistic project non-regression failed (${naturalNonRegression?.reasons.join("; ")}).`
             : !improved
-              ? "Reverted: candidate did not improve lexicographic fitness."
-              : "Kept: hard controls pass and an effective intervention improved lexicographic fitness.",
+              ? "Reverted: candidate did not improve either synthetic or naturalistic lexicographic fitness without regressing the other."
+              : "Kept: hard controls pass and an effective intervention improved synthetic or naturalistic fitness without cross-corpus regression.",
       patchHash: hashJson({ field: mutation.changedField, before: mutation.before, after: mutation.after }),
       frozenEvaluatorHash: candidateEvaluation.frozenEvaluatorHash,
       intervention,
+      ...(incumbentNatural && candidateNatural ? {
+        naturalisticIncumbentFitness: naturalisticFitness(incumbentNatural),
+        naturalisticCandidateFitness: naturalisticFitness(candidateNatural),
+        naturalisticNonRegression: naturalNonRegression,
+        naturalisticIntervention: naturalIntervention,
+      } : {}),
     });
     await writeJsonAtomic(join(directory, "experiment-result.json"), experiment);
     await append(join(root, "results.tsv"), [experiment.experimentId, experiment.timestamp, experiment.track, experiment.changedField, JSON.stringify(experiment.before), JSON.stringify(experiment.after), experiment.candidateFitness.criticalGateFailures, experiment.candidateFitness.semanticContractError, experiment.candidateFitness.bemComponentError, experiment.candidateFitness.normalizedComputeCost, experiment.outcome, experiment.patchHash].join("\t"));
     for (const trajectory of trajectories(experiment, candidateEvaluation)) await append(join(root, "trajectories.jsonl"), JSON.stringify(trajectory));
+    await appendNaturalisticResearchTrajectories(root, candidateNatural, experiment);
     experiments.push(experiment);
     if (keep) {
       incumbent = mutation.candidate;
       incumbentEvaluation = candidateEvaluation;
+      incumbentNatural = candidateNatural;
       lastKeptExperimentId = experimentId;
       await writeJsonAtomic(incumbentPath, incumbent);
     }
@@ -146,11 +218,22 @@ async function runResearchWithSession(options: ResearchOptions, captureSession: 
   const candidateHoldout = samePolicy
     ? baselineHoldout
     : await evaluatePolicy({ manifestPath: options.manifestPath, policy: incumbent, split: "holdout", workDirectory: join(root, "final", "candidate-holdout"), captureSession, acss: options.acss });
+  const baselineNaturalHoldout = await evaluateNatural(options, initialPolicy, "holdout", join(root, "naturalistic", "final", "baseline-holdout"), captureSession);
+  const candidateNaturalHoldout = samePolicy
+    ? baselineNaturalHoldout
+    : await evaluateNatural(options, incumbent, "holdout", join(root, "naturalistic", "final", "candidate-holdout"), captureSession);
+  const naturalHoldoutAudit = baselineNaturalHoldout && candidateNaturalHoldout ? compareNaturalisticFixtures(baselineNaturalHoldout, candidateNaturalHoldout) : undefined;
+  const naturalHoldoutNonRegression = baselineNaturalHoldout && candidateNaturalHoldout
+    ? naturalHoldoutAudit!.passed && compareFitness(naturalisticFitness(candidateNaturalHoldout), naturalisticFitness(baselineNaturalHoldout)) <= 0
+    : !options.naturalistic;
   const holdoutNonRegression = candidateHoldout.mutationControlRecall === 1
     && baselineHoldout.mutationControlRecall === 1
     && candidateHoldout.frozenEvaluatorHash === baselineHoldout.frozenEvaluatorHash
-    && compareFitness(candidateHoldout.fitness, baselineHoldout.fitness) <= 0;
-  const validationImproved = compareFitness(incumbentEvaluation.fitness, initialFitness) < 0;
+    && compareFitness(candidateHoldout.fitness, baselineHoldout.fitness) <= 0
+    && naturalHoldoutNonRegression;
+  const finalSyntheticComparison = compareFitness(incumbentEvaluation.fitness, initialFitness);
+  const finalNaturalComparison = incumbentNatural && initialNaturalFitness ? compareFitness(naturalisticFitness(incumbentNatural), initialNaturalFitness) : 0;
+  const validationImproved = finalSyntheticComparison <= 0 && finalNaturalComparison <= 0 && (finalSyntheticComparison < 0 || finalNaturalComparison < 0);
   const promoted = !samePolicy && validationImproved && holdoutNonRegression;
   const productionIncumbent = promoted ? incumbent : initialPolicy;
   const reason = samePolicy
@@ -191,11 +274,28 @@ async function runResearchWithSession(options: ResearchOptions, captureSession: 
       candidatePolicyHash: hashJson(incumbent),
       baseline: baselineHoldout,
       candidate: candidateHoldout,
+      naturalistic: baselineNaturalHoldout && candidateNaturalHoldout ? {
+        corpusFingerprint: baselineNaturalHoldout.corpusFingerprint,
+        evaluatorHash: baselineNaturalHoldout.evaluatorHash,
+        baselineEvaluationId: baselineNaturalHoldout.evaluationId,
+        candidateEvaluationId: candidateNaturalHoldout.evaluationId,
+        baselineFitness: naturalisticFitness(baselineNaturalHoldout),
+        candidateFitness: naturalisticFitness(candidateNaturalHoldout),
+        nonRegression: naturalHoldoutAudit,
+      } : undefined,
       holdoutNonRegression,
       promoted,
       reason,
     }),
   ]);
+  const naturalistic = incumbentNatural && initialNaturalFitness && baselineNaturalHoldout && candidateNaturalHoldout ? {
+    corpusFingerprint: incumbentNatural.corpusFingerprint,
+    initialFitness: initialNaturalFitness,
+    finalFitness: naturalisticFitness(incumbentNatural),
+    baselineHoldoutFitness: naturalisticFitness(baselineNaturalHoldout),
+    finalHoldoutFitness: naturalisticFitness(candidateNaturalHoldout),
+    holdoutNonRegression: naturalHoldoutNonRegression,
+  } : undefined;
   return {
     incumbent,
     productionIncumbent,
@@ -207,6 +307,7 @@ async function runResearchWithSession(options: ResearchOptions, captureSession: 
     baselineHoldoutFitness: baselineHoldout.fitness,
     finalHoldoutFitness: candidateHoldout.fitness,
     promotion,
+    ...(naturalistic ? { naturalistic } : {}),
   };
 }
 
