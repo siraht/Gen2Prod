@@ -54,6 +54,8 @@ export async function evaluateImageBuild(options: EvaluateImageBuildOptions): Pr
   const candidateCapture = await capturePage({ url: pathToFileURL(htmlPath).href, outputDirectory: join(outputDirectory, "capture"), viewports: [builderFrame.viewport.width], states: ["default"], themes: ["light"], viewportHeight: builderFrame.viewport.height, browserExecutable: options.browserExecutable, materializeScrollStates: false });
   const screenshot = candidateCapture.captures[0]!.screenshot;
   const difference = await imageDifference(targetPath, screenshot, join(outputDirectory, "target-vs-candidate.png"));
+  const dirtyFrame = manifest.frames.find((item) => item.kind === "dirty-render" && item.viewport.width === builderFrame.viewport.width);
+  const dirtyDifference = dirtyFrame ? await imageDifference(targetPath, resolve(dirname(manifestPath), dirtyFrame.path), join(outputDirectory, "target-vs-dirty.png")) : undefined;
   const targetPng = PNG.sync.read(Buffer.from(await Bun.file(targetPath).arrayBuffer()));
   const candidatePng = PNG.sync.read(Buffer.from(await Bun.file(screenshot).arrayBuffer()));
 
@@ -109,7 +111,7 @@ export async function evaluateImageBuild(options: EvaluateImageBuildOptions): Pr
     split: manifest.split,
     sourceFrameHash: builderFrame.sha256,
     candidate: { html: htmlPath, css: cssPath, screenshot, screenshotHash: await hashFile(screenshot) },
-    visual: { pixelDifferenceRatio: difference.ratio, widthMismatch: difference.widthMismatch, heightMismatch: difference.heightMismatch, macroStructureLoss: structureLoss, ...(previous ? { previousPixelDifferenceRatio: previous.ratio, recovery: previous.ratio > 1e-9 ? (previous.ratio - difference.ratio) / previous.ratio : 0 } : {}) },
+    visual: { pixelDifferenceRatio: difference.ratio, widthMismatch: difference.widthMismatch, heightMismatch: difference.heightMismatch, macroStructureLoss: structureLoss, ...(dirtyDifference ? { dirtyPixelDifferenceRatio: dirtyDifference.ratio, recoveryFromDirty: dirtyDifference.ratio > 1e-9 ? (dirtyDifference.ratio - difference.ratio) / dirtyDifference.ratio : difference.ratio <= 1e-9 ? 1 : -difference.ratio } : {}), ...(previous ? { previousPixelDifferenceRatio: previous.ratio, recovery: previous.ratio > 1e-9 ? (previous.ratio - difference.ratio) / previous.ratio : 0 } : {}) },
     semantics,
     interactions: { hypothesisCount: plan.interactions.length, hypothesesRequiringVerification: plan.interactions.filter((item) => item.verification.required).length, prohibitedClaimCoverage, safeStateCssCoverage: safeStateChecks.filter(Boolean).length / safeStateChecks.length, unresolvedConcernCoverage },
     leakage: { passed: leakagePassed, sourceUrlUsedByBuilder: provenance.sourceUrlUsedByBuilder, quarantinedInputCount: provenance.quarantinedInputsUsed.length, fullFrameWallpaperDetected, rasterCoverage: crop.actualCoverage, maximumRasterCoverage: crop.maximumCoverage },
