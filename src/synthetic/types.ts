@@ -138,11 +138,22 @@ export const SyntheticTrainingExampleSchema = z.object({
   prohibitedInferences: z.array(z.string()),
 });
 
+export const ObservedRegionMaskSchema = z.object({
+  id: z.string(),
+  x: z.number().nonnegative(),
+  y: z.number().nonnegative(),
+  width: z.number().positive(),
+  height: z.number().positive(),
+  unit: z.enum(["px", "fraction"]).default("px"),
+  mode: z.enum(["locked", "ignore"]),
+});
+
 export const ObservedPairChangeManifestSchema = z.object({
   schemaVersion: z.string().default("0.1.0"),
   intentionalChanges: z.array(z.string()).default([]),
   lockedRegions: z.array(z.string()).default([]),
   ignoredRegions: z.array(z.string()).default([]),
+  regionMasks: z.array(ObservedRegionMaskSchema).default([]),
   notes: z.string().optional(),
 });
 
@@ -169,6 +180,7 @@ export const SyntheticObservedPairSchema = z.object({
   intentionalChanges: z.array(z.string()),
   lockedRegions: z.array(z.string()),
   ignoredRegions: z.array(z.string()),
+  regionMasks: z.array(ObservedRegionMaskSchema).default([]),
   authority: z.object({
     content: z.enum(["clean-html", "strategy", "canonical-spec", "mixed"]),
     pixels: z.enum(["exact-clean-screenshot", "region-scoped", "preference-only", "canonical-render"]),

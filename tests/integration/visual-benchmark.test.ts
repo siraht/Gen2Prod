@@ -30,14 +30,15 @@ test("scores dirty and candidate browser images against the same frozen gold moc
     await Bun.write(join(fixture, "fixture.observed-pair.json"), JSON.stringify({
       schemaVersion: "0.1.0",
       fixtureId: "hero-cta",
-      alignment: "exact",
-      fitnessUse: "exact-pixel-gold",
+      alignment: "partial",
+      fitnessUse: "region-masked",
       artifacts: { dirtyHtml: "fixture.corrupted.html", dirtyCss: "corrupted.css", cleanHtml: "fixture.gold.html", cleanCss: "gold.css", strategy: "fixture.strategy.json" },
       conditions: baseline.conditions.map((condition) => ({ viewport: condition.viewport, theme: condition.theme, state: condition.state, dirtyScreenshot: condition.dirtyScreenshot, cleanScreenshot: condition.goldScreenshot })),
       intentionalChanges: [],
       lockedRegions: ["full-page"],
       ignoredRegions: [],
-      authority: { content: "canonical-spec", pixels: "exact-clean-screenshot", semantics: "canonical-normal-form" },
+      regionMasks: [{ id: "reviewed-full-page", x: 0, y: 0, width: 1, height: 1, unit: "fraction", mode: "locked" }],
+      authority: { content: "canonical-spec", pixels: "region-scoped", semantics: "canonical-normal-form" },
     }));
     const observedManifestPath = join(root, "observed-manifest.json");
     await Bun.write(observedManifestPath, JSON.stringify({ ...manifest, fixtures: manifest.fixtures.filter((item) => item.id === "hero-cta") }));

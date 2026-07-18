@@ -83,6 +83,7 @@ export async function importNaturalisticFixture(options: ImportNaturalisticOptio
     intentionalChanges: changeManifest.intentionalChanges,
     lockedRegions: changeManifest.lockedRegions,
     ignoredRegions: changeManifest.ignoredRegions,
+    regionMasks: changeManifest.regionMasks,
     authority: {
       content: observedCleanHtml ? "clean-html" : observedStrategy ? "mixed" : "canonical-spec",
       pixels: alignment === "exact" && cleanScreenshot ? "exact-clean-screenshot" : alignment === "partial" ? "region-scoped" : alignment === "non-1-to-1" ? "preference-only" : "canonical-render",

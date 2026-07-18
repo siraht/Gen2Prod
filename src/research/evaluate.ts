@@ -13,7 +13,7 @@ import { contextFromCompiled, validate, type ValidationReport } from "../validat
 import { EVALUATOR_MUTATIONS } from "../validation/mutations.ts";
 import { ensureVisualBenchmark, evaluateCandidateVisuals, VISUAL_VIEWPORTS } from "../synthetic/visual-benchmark.ts";
 import { openCaptureSession, type CaptureSession } from "../evidence/capture.ts";
-import { imageDifference } from "../validation/visual.ts";
+import { imageDifference, imageDifferenceMasked } from "../validation/visual.ts";
 
 export type EvaluateOptions = {
   manifestPath: string;
@@ -180,6 +180,10 @@ async function evaluateObservedPair(fixtureDirectory: string, outputDirectory: s
   const pairPath = join(fixtureDirectory, "fixture.observed-pair.json");
   if (!await pathExists(pairPath)) return undefined;
   const pair = SyntheticObservedPairSchema.parse(await readJson(pairPath));
+  const useRegionMasks = pair.fitnessUse === "region-masked" && pair.regionMasks.length > 0;
+  const compareObserved = (baseline: string, candidate: string, diff: string) => useRegionMasks
+    ? imageDifferenceMasked(baseline, candidate, pair.regionMasks, diff)
+    : imageDifference(baseline, candidate, diff);
   const measurements: { dirty: number; candidate: number }[] = [];
   for (const condition of pair.conditions) {
     if (!condition.cleanScreenshot) continue;
@@ -187,15 +191,15 @@ async function evaluateObservedPair(fixtureDirectory: string, outputDirectory: s
     if (!candidate) continue;
     const cleanPath = resolve(fixtureDirectory, condition.cleanScreenshot);
     const candidateDiff = join(outputDirectory, "observed-diff", `candidate-vs-observed-clean-${condition.viewport}-${condition.theme}-${condition.state}.png`);
-    const candidatePixel = (await imageDifference(cleanPath, candidate.candidateScreenshot, candidateDiff)).ratio;
-    const dirtyPixel = condition.dirtyScreenshot ? (await imageDifference(cleanPath, resolve(fixtureDirectory, condition.dirtyScreenshot), join(outputDirectory, "observed-diff", `dirty-vs-observed-clean-${condition.viewport}-${condition.theme}-${condition.state}.png`))).ratio : 1;
+    const candidatePixel = (await compareObserved(cleanPath, candidate.candidateScreenshot, candidateDiff)).ratio;
+    const dirtyPixel = condition.dirtyScreenshot ? (await compareObserved(cleanPath, resolve(fixtureDirectory, condition.dirtyScreenshot), join(outputDirectory, "observed-diff", `dirty-vs-observed-clean-${condition.viewport}-${condition.theme}-${condition.state}.png`))).ratio : 1;
     measurements.push({ dirty: dirtyPixel, candidate: candidatePixel });
   }
   if (measurements.length === 0) return undefined;
   const mean = (field: "dirty" | "candidate") => measurements.reduce((sum, item) => sum + item[field], 0) / measurements.length;
   const dirty = mean("dirty");
   const candidate = mean("candidate");
-  return { alignment: pair.alignment, usedInFitness: pair.fitnessUse === "exact-pixel-gold", conditionCount: measurements.length, dirtyPixelDifferenceRatio: dirty, candidatePixelDifferenceRatio: candidate, recovery: dirty > 1e-9 ? (dirty - candidate) / dirty : candidate <= 1e-9 ? 1 : -candidate };
+  return { alignment: pair.alignment, usedInFitness: pair.fitnessUse === "exact-pixel-gold" || useRegionMasks, conditionCount: measurements.length, dirtyPixelDifferenceRatio: dirty, candidatePixelDifferenceRatio: candidate, recovery: dirty > 1e-9 ? (dirty - candidate) / dirty : candidate <= 1e-9 ? 1 : -candidate };
 }
 
 async function evaluateFixtureCase(options: {

@@ -15,6 +15,7 @@ export type VisualMetrics = {
 };
 
 export type ImageDifference = { ratio: number; widthMismatch: number; heightMismatch: number };
+export type ImageRegionMask = { id: string; x: number; y: number; width: number; height: number; unit: "px" | "fraction"; mode: "locked" | "ignore" };
 export type NormalizedImageDifference = ImageDifference & {
   normalization: "none" | "width";
   scaleApplied: number;
@@ -64,7 +65,7 @@ function resizeBilinear(image: PNG, width: number, height: number): PNG {
   return output;
 }
 
-async function compareImages(baseline: PNG, candidate: PNG, diffPath?: string): Promise<ImageDifference> {
+async function compareImages(baseline: PNG, candidate: PNG, diffPath?: string, regions: ImageRegionMask[] = []): Promise<ImageDifference> {
   const width = Math.min(baseline.width, candidate.width);
   const height = Math.min(baseline.height, candidate.height);
   if (width === 0 || height === 0) return { ratio: 1, widthMismatch: 1, heightMismatch: 1 };
@@ -75,14 +76,35 @@ async function compareImages(baseline: PNG, candidate: PNG, diffPath?: string): 
   };
   const baselineCrop = crop(baseline);
   const candidateCrop = crop(candidate);
+  const locked = regions.filter((region) => region.mode === "locked");
+  const ignored = regions.filter((region) => region.mode === "ignore");
+  const contains = (region: ImageRegionMask, x: number, y: number) => {
+    const left = region.unit === "fraction" ? region.x * width : region.x;
+    const top = region.unit === "fraction" ? region.y * height : region.y;
+    const regionWidth = region.unit === "fraction" ? region.width * width : region.width;
+    const regionHeight = region.unit === "fraction" ? region.height * height : region.height;
+    return x >= left && x < left + regionWidth && y >= top && y < top + regionHeight;
+  };
+  let includedPixels = width * height;
+  if (regions.length) {
+    includedPixels = 0;
+    for (let y = 0; y < height; y += 1) for (let x = 0; x < width; x += 1) {
+      const included = (locked.length === 0 || locked.some((region) => contains(region, x, y)))
+        && !ignored.some((region) => contains(region, x, y));
+      if (included) { includedPixels += 1; continue; }
+      const offset = (y * width + x) * 4;
+      for (let channel = 0; channel < 4; channel += 1) candidateCrop.data[offset + channel] = baselineCrop.data[offset + channel]!;
+    }
+  }
+  if (includedPixels === 0) return { ratio: 1, widthMismatch: 0, heightMismatch: 0 };
   const diff = diffPath ? new PNG({ width, height }) : undefined;
   const mismatched = pixelmatch(baselineCrop.data, candidateCrop.data, diff?.data, width, height, { threshold: 0.1, includeAA: false });
   if (diffPath && diff) {
     await ensureDirectory(dirname(diffPath));
     await Bun.write(diffPath, PNG.sync.write(diff));
   }
-  const areaPenalty = Math.abs(baseline.width * baseline.height - candidate.width * candidate.height) / Math.max(baseline.width * baseline.height, 1);
-  return { ratio: Math.min(1, mismatched / (width * height) + areaPenalty), widthMismatch: Math.abs(baseline.width - candidate.width) / Math.max(baseline.width, 1), heightMismatch: Math.abs(baseline.height - candidate.height) / Math.max(baseline.height, 1) };
+  const areaPenalty = regions.length ? 0 : Math.abs(baseline.width * baseline.height - candidate.width * candidate.height) / Math.max(baseline.width * baseline.height, 1);
+  return { ratio: Math.min(1, mismatched / includedPixels + areaPenalty), widthMismatch: Math.abs(baseline.width - candidate.width) / Math.max(baseline.width, 1), heightMismatch: Math.abs(baseline.height - candidate.height) / Math.max(baseline.height, 1) };
 }
 
 export async function imageDifference(baselinePath: string, candidatePath: string, diffPath?: string): Promise<ImageDifference> {
@@ -90,6 +112,13 @@ export async function imageDifference(baselinePath: string, candidatePath: strin
   const baseline = PNG.sync.read(Buffer.from(baselineBuffer));
   const candidate = PNG.sync.read(Buffer.from(candidateBuffer));
   return compareImages(baseline, candidate, diffPath);
+}
+
+export async function imageDifferenceMasked(baselinePath: string, candidatePath: string, regions: ImageRegionMask[], diffPath?: string): Promise<ImageDifference> {
+  const [baselineBuffer, candidateBuffer] = await Promise.all([Bun.file(baselinePath).arrayBuffer(), Bun.file(candidatePath).arrayBuffer()]);
+  const baseline = PNG.sync.read(Buffer.from(baselineBuffer));
+  const candidate = PNG.sync.read(Buffer.from(candidateBuffer));
+  return compareImages(baseline, candidate, diffPath, regions);
 }
 
 /**

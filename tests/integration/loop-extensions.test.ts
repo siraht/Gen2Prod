@@ -17,7 +17,7 @@ test("imports naturalistic generator output with family-aware provenance", async
   await prepareSyntheticCurriculum({ root, seed: 19, countPerArchetype: 1 });
   const source = join(root, "hero-cta");
   const changeManifestPath = join(root, "observed-changes.json");
-  await Bun.write(changeManifestPath, JSON.stringify({ intentionalChanges: ["headline revised after stakeholder review"], lockedRegions: ["hero-media"], ignoredRegions: ["dynamic-customer-count"] }));
+  await Bun.write(changeManifestPath, JSON.stringify({ intentionalChanges: ["headline revised after stakeholder review"], lockedRegions: ["hero-media"], ignoredRegions: ["dynamic-customer-count"], regionMasks: [{ id: "hero-media", x: 0.5, y: 0, width: 0.5, height: 0.5, unit: "fraction", mode: "locked" }] }));
   const imported = await importNaturalisticFixture({
     root,
     canonicalPath: join(source, "fixture.canonical.json"),
@@ -37,10 +37,11 @@ test("imports naturalistic generator output with family-aware provenance", async
   expect(imported.manifest.fixtures.find((fixture) => fixture.id === "hero-naturalistic")?.generatorFamily).toBe("synthetic-codex-family");
   const trace = await Bun.file(join(root, "hero-naturalistic", "fixture.corruption-trace.json")).json() as { operations: { kind: string }[] };
   expect(trace.operations[0]?.kind).toBe("model-generated");
-  const observed = await Bun.file(join(root, "hero-naturalistic", "fixture.observed-pair.json")).json() as { alignment: string; fitnessUse: string; intentionalChanges: string[] };
+  const observed = await Bun.file(join(root, "hero-naturalistic", "fixture.observed-pair.json")).json() as { alignment: string; fitnessUse: string; intentionalChanges: string[]; regionMasks: unknown[] };
   expect(observed.alignment).toBe("non-1-to-1");
   expect(observed.fitnessUse).toBe("preference-only");
   expect(observed.intentionalChanges).toContain("headline revised after stakeholder review");
+  expect(observed.regionMasks).toHaveLength(1);
 });
 
 test("runs all controlled A-F modality configurations under one evaluator", async () => {

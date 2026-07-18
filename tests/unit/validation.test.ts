@@ -8,7 +8,7 @@ import { renderGold } from "../../src/synthetic/render.ts";
 import { compileStaticPage } from "../../src/compiler/pipeline.ts";
 import { EVALUATOR_MUTATIONS } from "../../src/validation/mutations.ts";
 import { contextFromCompiled, validate } from "../../src/validation/gates.ts";
-import { compareCaptures, imageDifference, imageDifferenceWidthNormalized } from "../../src/validation/visual.ts";
+import { compareCaptures, imageDifference, imageDifferenceMasked, imageDifferenceWidthNormalized } from "../../src/validation/visual.ts";
 
 const thresholds = { minBemCoverage: 0.95, minTokenCoverage: 0.5, maxVisualPixelRatio: 0.01, provisional: true };
 
@@ -128,5 +128,28 @@ describe("image comparison calibration", () => {
     expect(normalized.normalization).toBe("width");
     expect(normalized.scaleApplied).toBe(0.25);
     expect(normalized.sourceWidthMismatch).toBe(3);
+  });
+
+  test("scores reviewed locked regions while excluding intentional changes", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-image-mask-"));
+    const baselinePath = join(directory, "baseline.png");
+    const candidatePath = join(directory, "candidate.png");
+    const baseline = new PNG({ width: 20, height: 10 });
+    const candidate = new PNG({ width: 20, height: 10 });
+    baseline.data.fill(255);
+    candidate.data.fill(255);
+    for (let y = 0; y < 10; y += 1) for (let x = 0; x < 10; x += 1) {
+      const offset = (y * 20 + x) * 4;
+      candidate.data[offset] = 0;
+      candidate.data[offset + 1] = 0;
+      candidate.data[offset + 2] = 0;
+    }
+    await Bun.write(baselinePath, PNG.sync.write(baseline));
+    await Bun.write(candidatePath, PNG.sync.write(candidate));
+    expect((await imageDifference(baselinePath, candidatePath)).ratio).toBeGreaterThan(0.4);
+    const locked = await imageDifferenceMasked(baselinePath, candidatePath, [{ id: "stable-right", x: 0.5, y: 0, width: 0.5, height: 1, unit: "fraction", mode: "locked" }]);
+    expect(locked.ratio).toBe(0);
+    const changed = await imageDifferenceMasked(baselinePath, candidatePath, [{ id: "changed-left", x: 0, y: 0, width: 0.5, height: 1, unit: "fraction", mode: "locked" }]);
+    expect(changed.ratio).toBeGreaterThan(0.8);
   });
 });
