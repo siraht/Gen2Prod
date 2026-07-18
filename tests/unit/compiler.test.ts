@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createArchetypes } from "../../src/synthetic/archetypes.ts";
@@ -38,5 +38,25 @@ describe("static compilation", () => {
     expect(output.scss).toContain(".hero");
     expect(output.scss).toContain("var(--space-m)");
     expect(output.correspondence.every((match) => match.confidence === "high")).toBeTrue();
+  });
+
+  test("reconstructs every archetype without hidden node lineage markers", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-unmarked-compile-"));
+    for (const [index, spec] of createArchetypes().entries()) {
+      const gold = renderGold(spec);
+      const corrupted = corruptFixture(spec, gold, 100 + index, ["semanticErasure", "classDegradation", "styleLowering"]);
+      const fixtureDirectory = join(directory, spec.id);
+      await mkdir(fixtureDirectory, { recursive: true });
+      const markedPath = join(fixtureDirectory, "marked.html");
+      const unmarkedPath = join(fixtureDirectory, "unmarked.html");
+      const cssPath = join(fixtureDirectory, "page.css");
+      await Bun.write(markedPath, corrupted.html);
+      await Bun.write(unmarkedPath, corrupted.html.replace(/\s+data-(?:g2p-node|gen2prod-id)="[^"]+"/g, ""));
+      await Bun.write(cssPath, corrupted.css);
+      const marked = await compileStaticPage({ htmlPath: markedPath, cssPath, tokenRegistry: spec.tokens });
+      const unmarked = await compileStaticPage({ htmlPath: unmarkedPath, cssPath, tokenRegistry: spec.tokens });
+      expect(unmarked.html).toBe(marked.html);
+      expect(unmarked.scss).toBe(marked.scss);
+    }
   });
 });

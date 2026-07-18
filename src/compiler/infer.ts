@@ -24,6 +24,34 @@ function descendantClasses(node: DomNode): string[] {
   return [...node.children.flatMap((child) => [...oldClasses(child), ...descendantClasses(child)])];
 }
 
+function descendants(node: DomNode): DomNode[] {
+  return [...node.children, ...node.children.flatMap(descendants)];
+}
+
+function repeatedContainer(node: DomNode): boolean {
+  if (node.children.length < 2) return false;
+  const signatures = node.children.map((child) => `${child.tag}:${child.children.map((item) => item.tag).join(",")}`);
+  return new Set(signatures).size === 1;
+}
+
+function isRepeatedItem(node: DomNode, parent: DomNode | undefined): boolean {
+  return Boolean(parent && repeatedContainer(parent) && parent.children.includes(node));
+}
+
+function interactiveGroup(node: DomNode): boolean {
+  if (node.children.length === 0 || !node.children.every((child) => ["a", "button"].includes(child.tag))) return false;
+  if (node.children.length > 1) return true;
+  const child = node.children[0]!;
+  const attrs = attributes(child);
+  return /button--|primary|cta/i.test(`${attrs["data-g2p-variants"] ?? ""} ${attrs["data-hook"] ?? ""}`);
+}
+
+function testimonialPair(node: DomNode | undefined): boolean {
+  if (!node || node.children.length !== 2) return false;
+  const [quote, attribution] = node.children;
+  return Boolean(quote && attribution && ["div", "span"].includes(quote.tag) && ["div", "span"].includes(attribution.tag) && quote.text.trim() && /[,—–-]/.test(attribution.text));
+}
+
 function semanticTag(node: DomNode, parent: DomNode | undefined, useStableNodeHints: boolean): { tag: string; confidence: "high" | "medium" | "low"; role: string } {
   const id = node.nodeId.toLowerCase();
   const attrs = attributes(node);
@@ -48,17 +76,38 @@ function semanticTag(node: DomNode, parent: DomNode | undefined, useStableNodeHi
   if (id.includes("label")) return { tag: "label", confidence: "medium", role: "field-label" };
   if (id.includes("submit")) return { tag: "button", confidence: "medium", role: "submit" };
   if (/(?:^|-)(?:inner|content|actions|media)$/.test(id) || oldClasses(node).some((className) => /__(?:inner|content|actions|media)$/.test(className))) return { tag: "div", confidence: "high", role: "component-container" };
-  if (attrs["aria-labelledby"] || node.children.some((child) => /^h[1-6]$/.test(child.tag))) return { tag: "section", confidence: "medium", role: "titled-region" };
+  if (testimonialPair(node)) return { tag: "figure", confidence: "medium", role: "testimonial-quote" };
+  if (testimonialPair(parent)) return parent?.children[0] === node ? { tag: "blockquote", confidence: "medium", role: "quote" } : { tag: "figcaption", confidence: "medium", role: "attribution" };
+  if (node.children.some((child) => (attributes(child)["aria-label"] || attributes(child).role === "navigation") && descendants(child).some((descendant) => descendant.tag === "a"))) return { tag: "header", confidence: "medium", role: "site-header" };
+  if ((attrs["aria-label"] || attrs.role === "navigation") && descendants(node).some((child) => child.tag === "a")) return { tag: "nav", confidence: "high", role: "navigation" };
+  if (isRepeatedItem(node, parent)) return { tag: "li", confidence: "medium", role: "list-item" };
+  if (repeatedContainer(node)) return { tag: "ul", confidence: "medium", role: "list" };
+  if (attrs["aria-labelledby"] || ((parent?.tag === "main" || parent?.tag === "body") && node.children.some((child) => /^h[1-6]$/.test(child.tag)))) return { tag: "section", confidence: "medium", role: "titled-region" };
+  if (interactiveGroup(node)) return { tag: "div", confidence: "medium", role: "action-group" };
+  if (node.children.length === 1 && node.children[0]?.tag === "img") return { tag: "div", confidence: "medium", role: "visual-container" };
+  const nested = descendants(node);
+  if (parent && attributes(parent)["aria-labelledby"] && parent.children.length === 1) return { tag: "div", confidence: "medium", role: "layout-container" };
+  if (nested.some((child) => /^h[1-6]$/.test(child.tag)) && nested.some((child) => child.tag === "img")) return { tag: "div", confidence: "medium", role: "layout-container" };
+  if (node.children.some((child) => /^h[1-6]$/.test(child.tag))) return { tag: "div", confidence: "medium", role: "content-stack" };
   return { tag: node.tag, confidence: "low", role: "generic-container" };
 }
 
-function explicitRole(node: DomNode): string {
+function explicitRole(node: DomNode, parent?: DomNode): string {
   if (node.tag === "h1") return "primary-heading";
-  if (/^h[2-6]$/.test(node.tag)) return "section-heading";
+  if (/^h[2-6]$/.test(node.tag)) return parent?.children.some((child) => child.tag === "p") ? "card-heading" : "section-heading";
   if (node.tag === "a") return "link";
   if (node.tag === "button") return node.attributes.some((attribute) => attribute.name === "type" && attribute.value === "submit") ? "submit" : "button";
-  if (node.tag === "img") return "image";
+  if (node.tag === "img") return "meaningful-image";
   if (node.tag === "form") return "form";
+  if (node.tag === "label") return "field-label";
+  if (["input", "select", "textarea"].includes(node.tag)) return "field-input";
+  if (node.tag === "summary") return "disclosure-button";
+  if (node.tag === "details") return "disclosure";
+  if (node.tag === "figcaption") return "attribution";
+  if (node.tag === "blockquote") return "quote";
+  if (node.tag === "p" && parent?.tag === "details") return "disclosure-answer";
+  if (node.tag === "p" && /(?:[$€£¥]\s?\d|\d\s?(?:\/|per\s)(?:month|year))/i.test(node.text)) return "price";
+  if (node.tag === "p") return parent?.children.some((child) => /^h[1-6]$/.test(child.tag)) ? "supporting-copy" : "body-copy";
   return node.tag;
 }
 
@@ -72,6 +121,10 @@ function rootBlock(node: DomNode, semantic: { tag: string }, parentBlock: string
   if (useStableNodeHints && /^plan-\d+$/.test(id)) return "pricing-card";
   if (useStableNodeHints && id === "quote") return "testimonial-card";
   if (useStableNodeHints && id === "contact-form") return "contact-form";
+  if (semantic.tag === "form" && parentBlock) return `${parentBlock}-form`;
+  if (semantic.tag === "figure" && parentBlock) return parentBlock === "testimonial" ? "testimonial-card" : `${parentBlock}-card`;
+  if (semantic.tag === "li" && parentBlock && node.children.some((child) => /^h[1-6]$/.test(child.tag))) return parentBlock === "feature-grid" ? "feature-card" : `${parentBlock}-card`;
+  if (semantic.tag === "header" && descendants(node).some((child) => attributes(child)["aria-label"] || attributes(child).role === "navigation")) return "site-header";
   if ((semantic.tag === "section" || semantic.tag === "header" || semantic.tag === "footer") && id.startsWith("n-")) {
     const labelled = node.attributes.find((attribute) => attribute.name === "aria-labelledby")?.value.replace(/-title$/, "");
     return labelled ? canonicalName(labelled) : parentBlock;
@@ -83,7 +136,8 @@ function canonicalName(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").replace(/^features$/, "feature-grid");
 }
 
-function elementName(nodeId: string, block: string): string {
+function elementName(node: DomNode, role: string, block: string): string {
+  const nodeId = node.nodeId;
   const aliases: Record<string, string> = {
     "features-inner": "inner", "features-title": "title", "features-list": "list",
     "pricing-inner": "inner", "pricing-title": "title", "pricing-list": "list",
@@ -93,6 +147,8 @@ function elementName(nodeId: string, block: string): string {
     "email-input": "input", "email-label": "label", "form-submit": "action", "navigation-title": "title",
   };
   if (aliases[nodeId]) return aliases[nodeId];
+  const roleAliases: Record<string, string> = { "primary-heading": "title", "section-heading": "title", "card-heading": "title", "supporting-copy": block === "hero" ? "lede" : "text", "body-copy": "text", "price": "price", "layout-container": "inner", "content-stack": "content", "action-group": "actions", "visual-container": "media", "meaningful-image": "image", "navigation": "nav", "link": "link", "list": "list", "list-item": "item", "field-label": "label", "field-input": "input", "disclosure": "item", "disclosure-button": "question", "disclosure-answer": "answer", "attribution": "attribution", "quote": "quote" };
+  if (roleAliases[role]) return roleAliases[role];
   if (/^faq-summary-?\d*$/.test(nodeId)) return "question";
   if (/^faq-answer-?\d*$/.test(nodeId)) return "answer";
   if (nodeId === "quote-text") return "quote";
@@ -105,6 +161,7 @@ function elementName(nodeId: string, block: string): string {
 
 function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: string | null, counts: SemanticPlan["confidenceSummary"], review: SemanticPlan["review"], useStableNodeHints: boolean): PlannedNode {
   const semantic = semanticTag(node, parent, useStableNodeHints);
+  if (node.tag !== "div" && node.tag !== "span") semantic.role = explicitRole(node, parent);
   counts[semantic.confidence] += 1;
   if (semantic.confidence === "low" && (node.tag === "div" || node.tag === "span")) review.push({ nodeId: node.nodeId, concern: "ambiguous semantic container", evidenceNeeded: ["accessibility tree", "section crop if visually separated"] });
   const block = rootBlock(node, semantic, parentBlock, useStableNodeHints);
@@ -112,7 +169,7 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
   let classes: string[] = [];
   if (node.tag === "body") classes = ["page"];
   else if (block && isNewBlock) classes = semantic.tag === "li" && parentBlock ? [`${parentBlock}__item`, block] : [block];
-  else if (block && !["main", "html"].includes(semantic.tag)) classes = [`${block}__${elementName(node.nodeId, block)}`];
+  else if (block && !["main", "html"].includes(semantic.tag)) classes = [`${block}__${elementName(node, semantic.role, block)}`];
   const existingBem = oldClasses(node).filter((className) => className.includes("__") || className.includes("--"));
   if (existingBem.length > 0) {
     const bases = oldClasses(node).filter((className) => existingBem.some((candidate) => candidate.startsWith(`${className}--`)) || descendantClasses(node).some((candidate) => candidate.startsWith(`${className}__`)));
@@ -120,7 +177,7 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
     const missingModifierBases = existingBem.filter((className) => className.includes("--")).map((className) => className.split("--")[0]!).filter((base) => !preserved.includes(base));
     classes = [...new Set([...missingModifierBases, ...preserved])];
   }
-  if ((semantic.tag === "a" || semantic.tag === "button") && (node.nodeId.includes("cta") || node.nodeId.includes("submit") || node.text.toLowerCase().includes("choose"))) classes = ["button", "button--primary"];
+  if ((semantic.tag === "a" || semantic.tag === "button") && (semantic.role === "submit" || node.nodeId.includes("cta") || node.nodeId.includes("submit") || node.text.toLowerCase().includes("choose") || (parent && interactiveGroup(parent)))) classes = ["button", "button--primary"];
   if (block === "hero" && isNewBlock && plannedSourceHasId(node, "media")) classes = ["hero", "hero--split"];
   const attrs = attributes(node);
   if (attrs["data-g2p-variants"]) {
@@ -171,7 +228,7 @@ function addMissingFormLabels(root: PlannedNode, review: SemanticPlan["review"])
         if (["input", "select", "textarea"].includes(child.tag) && child.attributes.id && labelTargets.has(child.attributes.id)) delete child.attributes["aria-label"];
         if (["input", "select", "textarea"].includes(child.tag) && child.attributes.id && !labelTargets.has(child.attributes.id)) {
           const block = form.block ?? "form";
-          const nodeId = child.nodeId.replace(/-input$/, "-label");
+          const nodeId = child.nodeId.endsWith("-input") ? child.nodeId.replace(/-input$/, "-label") : `${child.nodeId}-label`;
           next.push({ nodeId, originalTag: "label", tag: "label", role: "field-label", block, classes: [`${block}__label`], oldClasses: [], attributes: { for: child.attributes.id }, text: (child.attributes.name ?? "Field").replace(/[-_]+/g, " ").replace(/^./, (value) => value.toUpperCase()), children: [] });
           delete child.attributes["aria-label"];
           review.push({ nodeId, concern: "generated visible label copy requires content-authority review", evidenceNeeded: ["approved form content"] });

@@ -67,10 +67,29 @@ function selectorClasses(selector: string): string[] {
 export function resolveStyles(source: SourceDocument, root: PlannedNode, registry: TokenRegistry, relativeThreshold = 0.08): { styles: StyleIntent[]; exceptions: TokenException[] } {
   const styles: StyleIntent[] = [];
   const exceptions: TokenException[] = [];
-  for (const node of allNodes(root)) {
+  const nodes = allNodes(root);
+  const blockSourceClasses = new Map<string, string[]>();
+  for (const node of nodes) for (const className of node.classes) {
+    if (className.includes("__") || className.includes("--")) continue;
+    if (node.block !== className) continue;
+    const aliases = new Set(node.oldClasses);
+    for (const [ancestorBlock, sourceBlocks] of blockSourceClasses) {
+      if (!className.startsWith(`${ancestorBlock}-`)) continue;
+      const suffix = className.slice(ancestorBlock.length);
+      for (const sourceBlock of sourceBlocks) aliases.add(`${sourceBlock}${suffix}`);
+    }
+    blockSourceClasses.set(className, [...aliases]);
+  }
+  for (const node of nodes) {
     const sourceDeclarations = source.declarations.filter((declaration) => {
       const classes = selectorClasses(declaration.selector);
-      return classes.length > 0 && classes.some((className) => node.oldClasses.includes(className) || node.classes.includes(className));
+      if (classes.some((className) => node.oldClasses.includes(className) || node.classes.includes(className))) return true;
+      if (node.block && node.classes.includes(node.block) && (blockSourceClasses.get(node.block) ?? []).some((sourceBlock) => classes.includes(sourceBlock))) return true;
+      return node.classes.some((plannedClass) => {
+        const match = plannedClass.match(/^([^_]+)((?:__|--).+)$/);
+        if (!match?.[1] || !match[2]) return false;
+        return (blockSourceClasses.get(match[1]) ?? []).some((sourceBlock) => classes.includes(`${sourceBlock}${match[2]}`));
+      });
     });
     const deduplicated = new Map<string, typeof sourceDeclarations[number]>();
     for (const declaration of sourceDeclarations) deduplicated.set(declaration.property, declaration);

@@ -9,15 +9,15 @@ function escapeHtml(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
-function renderNode(node: PlannedNode, depth = 0): string {
+function renderNode(node: PlannedNode, depth = 0, includeNodeIds = false): string {
   const indent = "  ".repeat(depth);
-  const attributes = { ...node.attributes, ...(node.classes.length ? { class: node.classes.join(" ") } : {}) };
+  const attributes = { ...node.attributes, ...(node.classes.length ? { class: node.classes.join(" ") } : {}), ...(includeNodeIds ? { "data-g2p-node": node.nodeId } : {}) };
   const attributeText = Object.entries(attributes).filter(([name]) => name !== "data-g2p-node" && name !== "data-gen2prod-id").map(([name, value]) => value === "" ? name : `${name}="${escapeHtml(value)}"`).join(" ");
   const opening = `${indent}<${node.tag}${attributeText ? ` ${attributeText}` : ""}>`;
   if (VOID_TAGS.has(node.tag)) return opening;
   if (node.children.length === 0) return `${opening}${escapeHtml(node.text)}</${node.tag}>`;
   const text = node.text.trim() ? `${indent}  ${escapeHtml(node.text.trim())}\n` : "";
-  const children = node.children.map((child) => renderNode(child, depth + 1)).join("\n");
+  const children = node.children.map((child) => renderNode(child, depth + 1, includeNodeIds)).join("\n");
   return `${opening}\n${text}${children}\n${indent}</${node.tag}>`;
 }
 
@@ -61,8 +61,8 @@ export function emitScss(plan: CompilationPlan): string {
   return `/* Generated deterministically from G2P-NF. */\n:root {\n${tokenDefinitions}\n}\n\n${rendered}\n`;
 }
 
-export function emitHtml(plan: CompilationPlan, cssHref = "page.css"): string {
-  const body = renderNode(plan.semantics.root);
+export function emitHtml(plan: CompilationPlan, cssHref = "page.css", includeNodeIds = false): string {
+  const body = renderNode(plan.semantics.root, 0, includeNodeIds);
   const sourceTitle = plan.source.html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() || "Production page";
   const sourceDescription = plan.source.html.match(/<meta\s+[^>]*name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i)?.[1]
     ?? plan.source.html.match(/<meta\s+[^>]*content=["']([^"']*)["'][^>]*name=["']description["'][^>]*>/i)?.[1]
