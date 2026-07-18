@@ -10,6 +10,13 @@ import { compileStaticPage } from "../../src/compiler/pipeline.ts";
 import { bindValue, extractTokenRegistry } from "../../src/compiler/tokens.ts";
 import { emitHtml } from "../../src/compiler/emit.ts";
 
+type Compiled = Awaited<ReturnType<typeof compileStaticPage>>;
+
+function resolvedSample(output: Compiled, value: string | undefined): string | undefined {
+  if (!value) return value;
+  return output.plan.tokens.tokens.find((token) => token.runtimeExpression === value)?.sampledValues["default@1280"] ?? value;
+}
+
 async function fixtureInput() {
   const spec = createArchetypes()[0]!;
   const gold = renderGold(spec);
@@ -72,7 +79,9 @@ describe("static compilation", () => {
     const output = await compileStaticPage({ htmlPath, tokenRegistry: inputTokens() });
     expect(output.html).not.toContain("style=");
     expect(output.scss).toContain("color: var(--ink)");
-    expect(output.scss).toContain("margin-top: 8px");
+    const margin = output.plan.styles.flatMap((style) => style.declarations).find((declaration) => declaration.property === "margin-top");
+    expect(resolvedSample(output, margin?.value)).toBe("8px");
+    expect(margin?.value).toStartWith("var(--g2p-space-");
   });
 
   test("preserves inherited document-root style foundations", async () => {
@@ -115,7 +124,8 @@ describe("static compilation", () => {
     const htmlPath = join(directory, "page.html");
     await Bun.write(htmlPath, '<!doctype html><html><head><title>Important</title><meta name="description" content="Important fixture"><style>.title{color:red!important}.title{color:blue}</style></head><body><main><h1 class="title">Resolved cascade</h1></main></body></html>');
     const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
-    expect(output.scss).toContain("color: red");
+    const color = output.plan.styles.flatMap((style) => style.declarations).find((declaration) => declaration.property === "color");
+    expect(resolvedSample(output, color?.value)).toBe("red");
     expect(output.scss).not.toContain("!important");
   });
 
@@ -259,7 +269,8 @@ describe("static compilation", () => {
     expect(output.html).toContain('class="hero"');
     expect(output.scss).toContain("padding: var(--space-m)");
     expect(output.scss).toContain("&:hover");
-    expect(output.scss).toContain("padding: 99px");
+    const hoverPadding = output.plan.styles.flatMap((style) => style.declarations).find((declaration) => declaration.property === "padding" && declaration.condition?.states.includes("hover"));
+    expect(resolvedSample(output, hoverPadding?.value)).toBe("99px");
     expect(output.scss).toContain("&::after");
     expect(output.scss).toContain('content: "x"');
   });
@@ -303,9 +314,9 @@ describe("static compilation", () => {
     const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
     const heading = output.plan.styles.find((style) => style.styleRole === "primary-heading");
     expect(heading?.declarations.filter((item) => item.property === "font-size")).toHaveLength(2);
-    expect(heading?.declarations.some((item) => item.value === "7rem" && item.condition?.media.includes("(min-width: 1024px)"))).toBeTrue();
+    expect(heading?.declarations.some((item) => resolvedSample(output, item.value) === "7rem" && item.condition?.media.includes("(min-width: 1024px)"))).toBeTrue();
     expect(output.scss).toContain("@media (min-width: 1024px)");
-    expect(output.scss).toContain("font-size: 7rem;");
+    expect(output.scss).toMatch(/font-size: var\(--g2p-font-size-/);
   });
 
   test("matches leading-negative utility class selectors", async () => {
@@ -314,14 +325,14 @@ describe("static compilation", () => {
     await Bun.write(htmlPath, '<!doctype html><html><head><title>Negative utility</title><meta name="description" content="Negative utility fixture"><style>.-mx-4{margin-left:-1rem;margin-right:-1rem}.-right-12{right:-3rem}</style></head><body><main><section class="-mx-4"><h1>Full bleed</h1><span class="-right-12">Offset</span></section></main></body></html>');
     const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
     const declarations = output.plan.styles.flatMap((style) => style.declarations);
-    expect(declarations.some((item) => item.property === "margin-left" && item.value === "-1rem")).toBeTrue();
-    expect(declarations.some((item) => item.property === "margin-right" && item.value === "-1rem")).toBeTrue();
+    expect(declarations.some((item) => item.property === "margin-left" && resolvedSample(output, item.value) === "-1rem")).toBeTrue();
+    expect(declarations.some((item) => item.property === "margin-right" && resolvedSample(output, item.value) === "-1rem")).toBeTrue();
     expect(declarations.some((item) => item.property === "right" && item.value === "-3rem")).toBeTrue();
-    expect(output.scss).toContain("margin-left: -1rem;");
+    expect(output.scss).toMatch(/margin-left: var\(--g2p-space-/);
     expect(output.scss).toContain("right: -3rem;");
   });
 
-  test("creates exact project aliases only for repeated governed values", async () => {
+  test("registers exact experimental aliases for repeated and one-off governed values", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-project-tokens-"));
     const htmlPath = join(directory, "page.html");
     await Bun.write(htmlPath, '<!doctype html><html><head><title>Tokens</title><meta name="description" content="Token fixture"><style>.hero{color:#456789}.hero-title{color:#456789}.hero-copy{margin-top:13px}</style></head><body><main data-g2p-node="main"><section data-g2p-node="hero" class="hero" aria-labelledby="hero-title"><h1 data-g2p-node="hero-title" class="hero-title">Tokens</h1><p data-g2p-node="hero-copy" class="hero-copy">Exact legacy values</p></section></main></body></html>');
@@ -329,7 +340,9 @@ describe("static compilation", () => {
     const projectToken = output.plan.tokens.tokens.find((token) => token.sampledValues["default@1280"] === "#456789");
     expect(projectToken?.source).toContain("2-selectors");
     expect(output.scss).toContain(`var(${projectToken?.runtimeVariable})`);
-    expect(output.plan.tokens.tokens.some((token) => token.sampledValues["default@1280"] === "13px")).toBeFalse();
+    const oneOff = output.plan.tokens.tokens.find((token) => token.sampledValues["default@1280"] === "13px");
+    expect(oneOff?.status).toBe("experimental");
+    expect(output.scss).toContain(`var(${oneOff?.runtimeVariable})`);
   });
 
   test("emits parser-stable list structure and Tailwind color syntax", async () => {
@@ -337,11 +350,12 @@ describe("static compilation", () => {
     const sourcePath = join(directory, "source.html");
     const cssPath = join(directory, "source.css");
     await Bun.write(sourcePath, '<!doctype html><html><head><title>Stable</title><meta name="description" content="Stable fixture"></head><body><main data-g2p-node="main"><div data-g2p-node="items" class="items"><div data-g2p-node="row-1" class="row"><span>A</span><span>B</span></div><div data-g2p-node="row-2" class="row"><span>C</span><span>D</span></div></div></main></body></html>');
-    await Bun.write(cssPath, '.items{color:rgb(229 231 235/var(--tw-opacity));box-shadow:0 0 #0000}.row{display:flex}');
+    await Bun.write(cssPath, ':root{--tw-opacity:1}.items{color:rgb(229 231 235/var(--tw-opacity));box-shadow:0 0 #0000}.row{display:flex}');
     const first = await compileStaticPage({ htmlPath: sourcePath, cssPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
     expect(first.html).not.toMatch(/<li[^>]*>\s*<li/);
     expect(first.scss).toContain("rgba(229, 231, 235, var(--tw-opacity))");
-    expect(first.scss).toContain("rgba(0, 0, 0, 0)");
+    expect(first.plan.tokens.tokens.some((token) => token.sampledValues["default@1280"] === "0 0 #0000")).toBeTrue();
+    expect(first.scss).toMatch(/box-shadow: var\(--g2p-shadow-/);
     const emittedHtml = join(directory, "page.html");
     const emittedCss = join(directory, "page.css");
     await Bun.write(emittedHtml, first.html);
@@ -430,11 +444,11 @@ describe("static compilation", () => {
     </style></head><body><main data-g2p-node="main"><section data-g2p-node="surface" class="surface"><h1>Cascade</h1><div class="stack"><p data-g2p-node="first" class="item">First</p><p data-g2p-node="second" id="second" class="item">Second</p></div></section></main></body></html>`);
     const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
     const byNode = new Map(output.plan.styles.map((style) => [style.nodeId, Object.fromEntries(style.declarations.map((declaration) => [declaration.property, declaration.value]))]));
-    expect(byNode.get("surface")?.["background"]).toBe("#000");
+    expect(resolvedSample(output, byNode.get("surface")?.["background"])).toBe("#000");
     expect(byNode.get("first")?.["font-weight"]).toBeUndefined();
     expect(byNode.get("first")?.["margin-top"]).toBeUndefined();
-    expect(byNode.get("second")?.["margin-top"]).toBe("10px");
-    expect(byNode.get("second")?.color).toBe("#123456");
+    expect(resolvedSample(output, byNode.get("second")?.["margin-top"])).toBe("10px");
+    expect(resolvedSample(output, byNode.get("second")?.color)).toBe("#123456");
     expect(byNode.get("g2p-universal-root")?.["box-sizing"]).toBe("border-box");
     expect(output.scss.match(/box-sizing: border-box;/g)).toHaveLength(1);
   });

@@ -499,7 +499,7 @@ function tokenFamily(property: string, value: string): string {
   return property.replace(/[^a-z0-9]+/g, "-");
 }
 
-export function augmentTokenRegistry(registry: TokenRegistry, declarations: CssDeclaration[], minimumSupport = 2): TokenRegistry {
+export function augmentTokenRegistry(registry: TokenRegistry, declarations: CssDeclaration[], minimumSupport = 1): TokenRegistry {
   const output = structuredClone(registry);
   const groups = new Map<string, { family: string; value: string; properties: Set<string>; selectors: Set<string> }>();
   for (const declaration of declarations) {
@@ -530,8 +530,8 @@ export function augmentTokenRegistry(registry: TokenRegistry, declarations: CssD
       runtimeExpression: `var(${runtimeVariable})`,
       semanticRole: `legacy-exact-${group.family}`,
       allowedProperties: [...group.properties].sort(),
-      source: `repeated-exact-value:${group.selectors.size}-selectors`,
-      status: "active",
+      source: `source-exact-value:${group.selectors.size}-selector${group.selectors.size === 1 ? "" : "s"}`,
+      status: "experimental",
       sampledValues: { "default@1280": group.value },
     });
   }

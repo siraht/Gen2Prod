@@ -32,7 +32,10 @@ export async function buildCompilationPlan(options: CompileOptions): Promise<Com
   const governedTokens = authoritativeTokens ? mergeTokenRegistries(approvedTokens, authoritativeTokens) : approvedTokens;
   const alreadyCanonical = /<meta\s+[^>]*name=["']generator["'][^>]*content=["']Gen2Prod["']/i.test(source.html)
     || /<meta\s+[^>]*content=["']Gen2Prod["'][^>]*name=["']generator["']/i.test(source.html);
-  const tokens = alreadyCanonical ? governedTokens : augmentTokenRegistry(governedTokens, source.declarations);
+  // Every governed source value receives a registered project alias when an
+  // approved ACSS/project token cannot represent it. One-off values remain
+  // experimental and reviewable, but never leak into production SCSS raw.
+  const tokens = alreadyCanonical ? governedTokens : augmentTokenRegistry(governedTokens, source.declarations, 1);
   const semantics = inferSemantics(source, { useStableNodeHints: options.policy?.compiler.useStableNodeHints ?? true, preserveExplicitSemantics: alreadyCanonical });
   const resolved = resolveStyles(source, semantics.root, tokens, options.policy?.thresholds.tokenSnapRelative ?? 0.02);
   differentiateStyleVariants(semantics.root, resolved.styles);
