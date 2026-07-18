@@ -9,6 +9,15 @@ export const CanonicalNodeSchema: z.ZodType<CanonicalNode> = z.lazy(() => z.obje
   attributes: z.record(z.string(), z.string()),
   text: z.string().optional(),
   styles: z.record(z.string(), z.string()),
+  conditionalStyles: z.array(z.object({
+    condition: z.object({
+      states: z.array(z.string()).default([]),
+      media: z.array(z.string()).default([]),
+      supports: z.array(z.string()).default([]),
+      pseudo: z.string().optional(),
+    }),
+    styles: z.record(z.string(), z.string()),
+  })),
   children: z.array(CanonicalNodeSchema),
 }));
 
@@ -20,6 +29,7 @@ export type CanonicalNode = {
   attributes: Record<string, string>;
   text?: string | undefined;
   styles: Record<string, string>;
+  conditionalStyles: { condition: { states: string[]; media: string[]; supports: string[]; pseudo?: string | undefined }; styles: Record<string, string> }[];
   children: CanonicalNode[];
 };
 

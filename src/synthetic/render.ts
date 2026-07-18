@@ -67,7 +67,20 @@ export function renderScss(spec: CanonicalPageSpec): string {
     const ordered = [...rules.entries()].sort(([left], [right]) => left === block ? -1 : right === block ? 1 : left.localeCompare(right));
     return `.${block} {\n${ordered.map(([className, styles]) => renderRule(className, styles)).join("\n\n")}\n}`;
   }).join("\n\n");
-  return `:root {\n${tokenCss(spec)}\n}\n\n${blocks}\n`;
+  const conditionalRules = nodes.flatMap((current) => {
+    const styledClass = current.classes.find((className) => className.includes("__")) ?? current.classes.find((className) => !className.includes("--")) ?? current.classes[0];
+    if (!styledClass) return [];
+    return current.conditionalStyles.map((entry) => {
+      const declarations = Object.entries(entry.styles).map(([property, value]) => `    ${property}: ${value};`).join("\n");
+      const states = entry.condition.states.map((state) => `:${state}`).join("");
+      const pseudo = entry.condition.pseudo ?? "";
+      let rule = `.${styledClass}${states}${pseudo} {\n${declarations}\n}`;
+      for (const supports of [...entry.condition.supports].reverse()) rule = `@supports ${supports} {\n  ${rule.replaceAll("\n", "\n  ")}\n}`;
+      for (const media of [...entry.condition.media].reverse()) rule = `@media ${media} {\n  ${rule.replaceAll("\n", "\n  ")}\n}`;
+      return rule;
+    });
+  }).join("\n\n");
+  return `:root {\n${tokenCss(spec)}\n}\n\n${blocks}${conditionalRules ? `\n\n${conditionalRules}` : ""}\n`;
 }
 
 export function renderGold(spec: CanonicalPageSpec): { html: string; scss: string; css: string } {
@@ -94,21 +107,30 @@ function deterministicConfidence(nodeId: string) {
 
 export function normalFormFromSpec(spec: CanonicalPageSpec): NormalForm {
   const nodes = allNodes(spec.root);
-  const styles: StyleIntent[] = nodes.filter((current) => Object.keys(current.styles).length > 0).map((current) => ({
+  const styles: StyleIntent[] = nodes.filter((current) => Object.keys(current.styles).length > 0 || current.conditionalStyles.length > 0).map((current) => ({
     nodeId: current.nodeId,
     styleRole: current.role,
     layoutRole: current.role.includes("layout") ? current.role : "content-owned",
     contentRole: current.role,
     confidence: deterministicConfidence(current.nodeId),
-    declarations: Object.entries(current.styles).map(([property, value]) => ({
+    declarations: [...Object.entries(current.styles).map(([property, value]) => ({
       property,
       value,
       important: false,
       source: "canonical-spec",
-      classification: value.startsWith("var(") ? "governed-design-value" : "structural-constant",
+      classification: value.startsWith("var(") ? "governed-design-value" as const : "structural-constant" as const,
       ...(value.startsWith("var(") ? { tokenRole: spec.tokens.tokens.find((token) => token.runtimeExpression === value)?.semanticRole } : {}),
-      bindingStatus: value.startsWith("var(") ? "bound" : "not-applicable",
-    })),
+      bindingStatus: value.startsWith("var(") ? "bound" as const : "not-applicable" as const,
+    })), ...current.conditionalStyles.flatMap((entry) => Object.entries(entry.styles).map(([property, value]) => ({
+      property,
+      value,
+      important: false,
+      source: "canonical-spec",
+      classification: value.startsWith("var(") ? "governed-design-value" as const : "structural-constant" as const,
+      ...(value.startsWith("var(") ? { tokenRole: spec.tokens.tokens.find((token) => token.runtimeExpression === value)?.semanticRole } : {}),
+      bindingStatus: value.startsWith("var(") ? "bound" as const : "not-applicable" as const,
+      condition: entry.condition,
+    })))],
   }));
   const blocks = new Map<string, CanonicalNode[]>();
   for (const current of nodes) {
