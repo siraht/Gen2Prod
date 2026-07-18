@@ -344,13 +344,6 @@ function cascadeWins(candidate: CssDeclaration, candidateOrder: number, current:
   return candidateOrder > currentOrder;
 }
 
-function aliasFallbackEligible(selector: string): boolean {
-  // Alias recovery is only safe for a selector that addresses the aliased
-  // element itself. Descendant/combinator rules are handled by selectorMatches
-  // and must never be flattened onto the owning BEM block.
-  return /^\.[_a-zA-Z]+[\w-]*$/.test(selector);
-}
-
 type StyleCondition = NonNullable<StyleIntent["declarations"][number]["condition"]>;
 
 function conditionedSelector(declaration: CssDeclaration): { selector: string; condition?: StyleCondition } {
@@ -377,31 +370,11 @@ export function resolveStyles(source: SourceDocument, root: PlannedNode, registr
   const nodes = allNodes(root);
   const matching = selectorContext(source, root);
   const declarationOrders = new Map(source.declarations.map((declaration, index) => [declaration, index]));
-  const blockSourceClasses = new Map<string, string[]>();
-  for (const node of nodes) for (const className of node.classes) {
-    if (className.includes("__") || className.includes("--")) continue;
-    if (node.block !== className) continue;
-    const aliases = new Set(node.oldClasses);
-    for (const [ancestorBlock, sourceBlocks] of blockSourceClasses) {
-      if (!className.startsWith(`${ancestorBlock}-`)) continue;
-      const suffix = className.slice(ancestorBlock.length);
-      for (const sourceBlock of sourceBlocks) aliases.add(`${sourceBlock}${suffix}`);
-    }
-    blockSourceClasses.set(className, [...aliases]);
-  }
   for (const node of nodes) {
     const sourceDeclarations = source.declarations.filter((declaration) => {
       if (declaration.sourceNodeId === node.nodeId) return true;
       const conditioned = conditionedSelector(declaration);
-      if (selectorMatches(conditioned.selector, node, matching)) return true;
-      if (!aliasFallbackEligible(conditioned.selector)) return false;
-      const classes = selectorClasses(conditioned.selector);
-      if (node.block && node.classes.includes(node.block) && (blockSourceClasses.get(node.block) ?? []).some((sourceBlock) => classes.includes(sourceBlock))) return true;
-      return node.classes.some((plannedClass) => {
-        const match = plannedClass.match(/^([^_]+)((?:__|--).+)$/);
-        if (!match?.[1] || !match[2]) return false;
-        return (blockSourceClasses.get(match[1]) ?? []).some((sourceBlock) => classes.includes(`${sourceBlock}${match[2]}`));
-      });
+      return selectorMatches(conditioned.selector, node, matching);
     });
     const deduplicated = new Map<string, { declaration: typeof sourceDeclarations[number]; order: number; condition?: StyleCondition }>();
     for (const declaration of sourceDeclarations) {
