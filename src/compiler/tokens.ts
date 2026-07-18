@@ -82,6 +82,7 @@ export function resolveStyles(source: SourceDocument, root: PlannedNode, registr
   }
   for (const node of nodes) {
     const sourceDeclarations = source.declarations.filter((declaration) => {
+      if (declaration.sourceNodeId === node.nodeId) return true;
       const classes = selectorClasses(declaration.selector);
       if (classes.some((className) => node.oldClasses.includes(className) || node.classes.includes(className))) return true;
       if (node.block && node.classes.includes(node.block) && (blockSourceClasses.get(node.block) ?? []).some((sourceBlock) => classes.includes(sourceBlock))) return true;

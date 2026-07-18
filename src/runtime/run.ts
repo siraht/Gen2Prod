@@ -8,6 +8,7 @@ import type { RequiredAction } from "../core/result.ts";
 import type { TransformationPolicy } from "../core/policy.ts";
 import { ReplayLog } from "../core/replay.ts";
 import { compileStaticPage } from "../compiler/pipeline.ts";
+import { loadSourceCss } from "../compiler/ingest.ts";
 import { extractTokenRegistry } from "../compiler/tokens.ts";
 import type { CompiledPage } from "../compiler/types.ts";
 import { capturePage, type CaptureResult } from "../evidence/capture.ts";
@@ -95,7 +96,7 @@ async function compileInput(options: RunOptions, outputDirectory: string, requir
     return { compiled: await compileStaticPage({ htmlPath, cssPath, tokenRegistry: greenfield.spec.tokens, policy: options.policy }), cssPath, greenfield };
   }
   const cssPath = await discoverCss(options.input, options.cssPath);
-  const css = cssPath ? await Bun.file(cssPath).text() : "";
+  const css = (await loadSourceCss(options.input, cssPath)).css;
   const registry = options.tokenPath ? options.tokenPath : extractTokenRegistry(css);
   if (typeof registry !== "string" && registry.tokens.length === 0) requiredActions.push({ id: "token-registry-authority", summary: "Provide or approve a project token registry", detail: "No runtime CSS custom properties were found. The compiler recorded governed values as expiring exceptions; supply --tokens with an ACSS/DTCG adapter registry to eliminate them.", blocking: false });
   return { compiled: await compileStaticPage({ htmlPath: options.input, ...(cssPath ? { cssPath } : {}), tokenRegistry: registry, policy: options.policy }), ...(cssPath ? { cssPath } : {}) };

@@ -59,4 +59,29 @@ describe("static compilation", () => {
       expect(unmarked.scss).toBe(marked.scss);
     }
   });
+
+  test("lowers embedded and inline CSS into governed BEM output", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-inline-compile-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, `<!doctype html><html><head><title>Embedded</title><meta name="description" content="Embedded CSS fixture"><style>:root{--ink:#112233;--space-m:16px}.raw-hero{padding:var(--space-m)}.raw-title{color:var(--ink)}</style></head><body><div data-g2p-node="main"><div data-g2p-node="hero" class="raw-hero" aria-labelledby="hero-title"><h1 data-g2p-node="hero-title" class="raw-title" style="margin-top: 8px">Embedded styles</h1></div></div></body></html>`);
+    const source = await ingestStaticHtml(htmlPath);
+    expect(source.styleSources.map((item) => item.origin)).toEqual(["embedded", "inline"]);
+    expect(source.declarations.some((declaration) => declaration.sourceNodeId === "hero-title" && declaration.property === "margin-top")).toBeTrue();
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: inputTokens() });
+    expect(output.html).not.toContain("style=");
+    expect(output.scss).toContain("color: var(--ink)");
+    expect(output.scss).toContain("margin-top: 8px");
+  });
 });
+
+function inputTokens() {
+  return {
+    schemaVersion: "dtcg-2025-10+gen2prod-0.1.0",
+    conformsTo: ["DTCG Format Module 2025.10"],
+    adapterSchema: "gen2prod-token-adapter-0.1.0",
+    tokens: [
+      { id: "color.ink", name: "color.ink", type: "color" as const, category: "color", value: "#112233", runtimeVariable: "--ink", runtimeExpression: "var(--ink)", semanticRole: "text", allowedProperties: ["color"], source: "test", status: "active" as const, sampledValues: { "default@1280": "#112233" } },
+      { id: "space.m", name: "space.m", type: "dimension" as const, category: "dimension", value: { value: 16, unit: "px" }, runtimeVariable: "--space-m", runtimeExpression: "var(--space-m)", semanticRole: "spacing", allowedProperties: ["padding", "margin", "gap"], source: "test", status: "active" as const, sampledValues: { "default@1280": "16px" } },
+    ],
+  };
+}

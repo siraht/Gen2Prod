@@ -29,18 +29,28 @@ function specificity(selector: string): [number, number, number] {
   return [ids, classes, elements];
 }
 
-export function parseCss(css: string): CssDeclaration[] {
+export function parseCss(css: string, origin: CssDeclaration["origin"] = "external"): CssDeclaration[] {
   const declarations: CssDeclaration[] = [];
   if (!css.trim()) return declarations;
   const root = postcss.parse(css);
   root.walkRules((rule) => {
     for (const selector of rule.selectors) {
       rule.walkDecls((declaration) => {
-        declarations.push({ selector, property: declaration.prop, value: declaration.value, important: declaration.important, specificity: specificity(selector) });
+        declarations.push({ selector, property: declaration.prop, value: declaration.value, important: declaration.important, specificity: specificity(selector), origin });
       });
     }
   });
   return declarations;
+}
+
+export function extractEmbeddedCss(html: string): string {
+  return [...html.matchAll(/<style\b[^>]*>([\s\S]*?)<\/style>/gi)].flatMap((match) => match[1] ? [match[1]] : []).join("\n");
+}
+
+export async function loadSourceCss(htmlPath: string, cssPath?: string): Promise<{ css: string; externalCss: string; embeddedCss: string }> {
+  const [html, externalCss] = await Promise.all([Bun.file(htmlPath).text(), cssPath ? Bun.file(cssPath).text() : Promise.resolve("")]);
+  const embeddedCss = extractEmbeddedCss(html);
+  return { css: [externalCss, embeddedCss].filter((value) => value.trim()).join("\n"), externalCss, embeddedCss };
 }
 
 function textOf(node: P5Node): string {
@@ -84,12 +94,22 @@ function classesFromDom(root: DomNode): string[] {
   return [...here, ...root.children.flatMap(classesFromDom)];
 }
 
+function inlineDeclarations(root: DomNode): CssDeclaration[] {
+  const style = root.attributes.find((attribute) => attribute.name === "style")?.value.trim();
+  const here = style ? parseCss(`[data-g2p-source-node="${root.nodeId}"]{${style}}`, "inline").map((declaration) => ({ ...declaration, sourceNodeId: root.nodeId })) : [];
+  return [...here, ...root.children.flatMap(inlineDeclarations)];
+}
+
 export async function ingestStaticHtml(htmlPath: string, cssPath?: string): Promise<SourceDocument> {
   const html = await Bun.file(htmlPath).text();
-  const css = cssPath ? await Bun.file(cssPath).text() : "";
+  const sourceCss = await loadSourceCss(htmlPath, cssPath);
   const document = parse(html, { sourceCodeLocationInfo: true });
   const dom = domFromParse5(rootElement(document), htmlPath);
-  const declarations = parseCss(css);
+  const declarations = [
+    ...parseCss(sourceCss.externalCss, "external"),
+    ...parseCss(sourceCss.embeddedCss, "embedded"),
+    ...inlineDeclarations(dom),
+  ];
   const classCounts = new Map<string, number>();
   for (const name of classesFromDom(dom)) classCounts.set(name, (classCounts.get(name) ?? 0) + 1);
   const classInventory: ClassInventoryItem[] = [...classCounts.entries()].sort(([left], [right]) => left.localeCompare(right)).map(([name, occurrences]) => {
@@ -101,10 +121,15 @@ export async function ingestStaticHtml(htmlPath: string, cssPath?: string): Prom
     path: htmlPath,
     html,
     ...(cssPath ? { cssPath } : {}),
-    css,
+    css: sourceCss.css,
     dom,
     classInventory,
     declarations,
+    styleSources: [
+      ...(sourceCss.externalCss ? [{ origin: "external" as const, label: cssPath ?? "external-css", bytes: new TextEncoder().encode(sourceCss.externalCss).byteLength }] : []),
+      ...(sourceCss.embeddedCss ? [{ origin: "embedded" as const, label: `${basename(htmlPath)}:<style>`, bytes: new TextEncoder().encode(sourceCss.embeddedCss).byteLength }] : []),
+      ...(declarations.some((declaration) => declaration.origin === "inline") ? [{ origin: "inline" as const, label: `${basename(htmlPath)}:style-attributes`, bytes: declarations.filter((declaration) => declaration.origin === "inline").reduce((sum, declaration) => sum + declaration.property.length + declaration.value.length, 0) }] : []),
+    ],
     authorities: ["content", "links", "forms", "behavior-hooks", "semantics-partial", "conditional-branches"],
   };
 }
@@ -120,6 +145,7 @@ export function sourceSummary(source: SourceDocument): Record<string, unknown> {
     classes: source.classInventory.length,
     classRoles,
     declarations: source.declarations.length,
+    styleSources: source.styleSources,
   };
 }
 

@@ -13,7 +13,7 @@ const BLOCK_ALIASES: Record<string, string> = {
 };
 
 function attributes(node: DomNode): Record<string, string> {
-  return Object.fromEntries(node.attributes.filter((attribute) => attribute.name !== "class" && attribute.name !== "data-g2p-node" && attribute.name !== "data-gen2prod-id").map((attribute) => [attribute.name, attribute.value]));
+  return Object.fromEntries(node.attributes.filter((attribute) => !["class", "style", "data-g2p-node", "data-gen2prod-id"].includes(attribute.name)).map((attribute) => [attribute.name, attribute.value]));
 }
 
 function oldClasses(node: DomNode): string[] {

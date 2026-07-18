@@ -17,6 +17,8 @@ export type CssDeclaration = {
   value: string;
   important: boolean;
   specificity: [number, number, number];
+  sourceNodeId?: string | undefined;
+  origin?: "external" | "embedded" | "inline" | "rendered" | undefined;
 };
 
 export type SourceDocument = {
@@ -27,6 +29,7 @@ export type SourceDocument = {
   dom: DomNode;
   classInventory: ClassInventoryItem[];
   declarations: CssDeclaration[];
+  styleSources: { origin: "external" | "embedded" | "inline" | "rendered"; label: string; bytes: number }[];
   authorities: AuthorityConcern[];
 };
 
