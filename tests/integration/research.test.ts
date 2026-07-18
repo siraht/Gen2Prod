@@ -17,8 +17,14 @@ test("runs frozen keep/revert experiments and records trajectories", async () =>
   expect(summary.experiments.every((experiment) => !experiment.intervention.effective)).toBeTrue();
   expect(summary.experiments.every((experiment) => experiment.reason.includes("no measured output"))).toBeTrue();
   expect(summary.experiments.every((experiment) => experiment.mutationControlRecall === 1)).toBeTrue();
+  expect(summary.experiments.every((experiment) => experiment.holdoutFitness === undefined)).toBeTrue();
+  expect(summary.promotion.promoted).toBeFalse();
+  expect(summary.productionIncumbent).toEqual(defaultPolicy);
   expect(await Bun.file(join(directory, "work", "research", "results.tsv")).exists()).toBeTrue();
   expect((await Bun.file(join(directory, "work", "research", "trajectories.jsonl")).text()).split("\n").filter(Boolean).length).toBeGreaterThan(0);
+  expect(await Bun.file(join(directory, "work", "research", "sealed-holdout-audit.json")).exists()).toBeTrue();
+  const experimentDirectories = await Array.fromAsync(new Bun.Glob("experiments/*/holdout").scan({ cwd: join(directory, "work", "research"), onlyFiles: false }));
+  expect(experimentDirectories).toHaveLength(0);
   const canonical = join(directory, "work", "research", "incumbent-policy.json");
   await Bun.write(canonical, JSON.stringify({ ...defaultPolicy, name: "seeded-production-incumbent", thresholds: { ...defaultPolicy.thresholds, semanticReview: 0.75 } }));
   const resumed = await runResearch({ manifestPath: join(fixtures, "manifest.json"), workspace: join(directory, "work"), track: "pass", budget: 1, split: "validation", hiddenHoldoutEvery: 2 });

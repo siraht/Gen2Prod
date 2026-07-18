@@ -426,7 +426,7 @@ program
     const project = await config();
     const acss = await prepareConfiguredAutomaticCss(project, globals().acss);
     const summary = await runResearch({ manifestPath: resolve(options.fixtures), workspace: resolve(project.workspace), track: options.track, budget: Number.parseInt(options.budget ?? String(project.research.budget), 10), split: options.split, hiddenHoldoutEvery: project.research.hiddenHoldoutEvery, acss });
-    emit(result("research", summary), `Research complete\nTrack: ${options.track}\nKept: ${summary.accepted}\nReverted: ${summary.rejected}\nInitial cost: ${summary.initialFitness.normalizedComputeCost.toFixed(3)}\nFinal cost: ${summary.finalFitness.normalizedComputeCost.toFixed(3)}\nIncumbent: ${summary.incumbent.name}`);
+    emit(result("research", summary), `Research complete\nTrack: ${options.track}\nKept in research: ${summary.accepted}\nReverted: ${summary.rejected}\nInitial cost: ${summary.initialFitness.normalizedComputeCost.toFixed(3)}\nFinal research cost: ${summary.finalFitness.normalizedComputeCost.toFixed(3)}\nProduction promotion: ${summary.promotion.promoted ? "accepted" : "unchanged"}\n${summary.promotion.reason}\nResearch incumbent: ${summary.incumbent.name}\nProduction incumbent: ${summary.productionIncumbent.name}`);
   });
 
 program

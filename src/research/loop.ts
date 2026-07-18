@@ -3,7 +3,7 @@ import { compareFitness } from "../core/fitness.ts";
 import { ensureDirectory, pathExists, readJson, writeJsonAtomic } from "../core/fs.ts";
 import { hashJson } from "../core/hash.ts";
 import { TransformationPolicySchema, type TransformationPolicy } from "../core/policy.ts";
-import { ExperimentResultSchema, ResearchPromotionSchema, TrajectorySchema, type ExperimentResult, type Trajectory } from "../schemas/research.ts";
+import { ExperimentResultSchema, ResearchPromotionSchema, TrajectorySchema, type ExperimentResult, type ResearchPromotion, type Trajectory } from "../schemas/research.ts";
 import { defaultPolicy } from "./policy.ts";
 import { evaluatePolicy } from "./evaluate.ts";
 import { proposeMutation, type MutationTrack } from "./mutate.ts";
@@ -22,11 +22,15 @@ export type ResearchOptions = {
 
 export type ResearchSummary = {
   incumbent: TransformationPolicy;
+  productionIncumbent: TransformationPolicy;
   experiments: ExperimentResult[];
   accepted: number;
   rejected: number;
   initialFitness: ExperimentResult["incumbentFitness"];
   finalFitness: ExperimentResult["candidateFitness"];
+  baselineHoldoutFitness: ExperimentResult["candidateFitness"];
+  finalHoldoutFitness: ExperimentResult["candidateFitness"];
+  promotion: ResearchPromotion;
 };
 
 async function append(path: string, line: string): Promise<void> {
@@ -66,6 +70,8 @@ function interventionEffect(incumbent: Awaited<ReturnType<typeof evaluatePolicy>
   return { outputChanged, nonCostFitnessChanged, actualResourceUseChanged, effective: outputChanged || nonCostFitnessChanged || actualResourceUseChanged };
 }
 
+function policyIdentity(policy: TransformationPolicy): string { return hashJson({ ...policy, name: "_" }); }
+
 async function runResearchWithSession(options: ResearchOptions, captureSession: CaptureSession): Promise<ResearchSummary> {
   const root = join(options.workspace, "research");
   const experimentsDirectory = join(root, "experiments");
@@ -77,10 +83,12 @@ async function runResearchWithSession(options: ResearchOptions, captureSession: 
     : await pathExists(incumbentPath)
       ? incumbentPath
       : undefined;
-  let incumbent = resumePath ? TransformationPolicySchema.parse(await readJson(resumePath)) : defaultPolicy;
+  const initialPolicy = resumePath ? TransformationPolicySchema.parse(await readJson(resumePath)) : defaultPolicy;
+  let incumbent = initialPolicy;
   let incumbentEvaluation = await evaluatePolicy({ manifestPath: options.manifestPath, policy: incumbent, split: options.split, workDirectory: join(root, "baseline"), captureSession, acss: options.acss });
   const initialFitness = incumbentEvaluation.fitness;
   const experiments: ExperimentResult[] = [];
+  let lastKeptExperimentId = "no-surviving-candidate";
   for (let iteration = 0; iteration < options.budget; iteration += 1) {
     const mutation = proposeMutation(incumbent, options.track, iteration);
     const experimentId = `experiment-${String(iteration + 1).padStart(4, "0")}-${crypto.randomUUID().slice(0, 8)}`;
@@ -93,11 +101,6 @@ async function runResearchWithSession(options: ResearchOptions, captureSession: 
     const improved = compareFitness(candidateEvaluation.fitness, incumbentEvaluation.fitness) < 0;
     const policySafetyPass = mutation.candidate.compiler.preserveUnknownClasses && !mutation.candidate.compiler.inferMissingBehavior;
     const keep = controlsPass && policySafetyPass && intervention.effective && improved && candidateEvaluation.frozenEvaluatorHash === incumbentEvaluation.frozenEvaluatorHash;
-    let holdoutFitness: ExperimentResult["holdoutFitness"];
-    if ((iteration + 1) % options.hiddenHoldoutEvery === 0) {
-      const holdout = await evaluatePolicy({ manifestPath: options.manifestPath, policy: mutation.candidate, split: "holdout", workDirectory: join(directory, "holdout"), captureSession, acss: options.acss });
-      holdoutFitness = holdout.fitness;
-    }
     const experiment = ExperimentResultSchema.parse({
       schemaVersion: "0.1.0",
       experimentId,
@@ -124,36 +127,87 @@ async function runResearchWithSession(options: ResearchOptions, captureSession: 
       patchHash: hashJson({ field: mutation.changedField, before: mutation.before, after: mutation.after }),
       frozenEvaluatorHash: candidateEvaluation.frozenEvaluatorHash,
       intervention,
-      ...(holdoutFitness ? { holdoutFitness } : {}),
     });
     await writeJsonAtomic(join(directory, "experiment-result.json"), experiment);
     await append(join(root, "results.tsv"), [experiment.experimentId, experiment.timestamp, experiment.track, experiment.changedField, JSON.stringify(experiment.before), JSON.stringify(experiment.after), experiment.candidateFitness.criticalGateFailures, experiment.candidateFitness.semanticContractError, experiment.candidateFitness.bemComponentError, experiment.candidateFitness.normalizedComputeCost, experiment.outcome, experiment.patchHash].join("\t"));
     for (const trajectory of trajectories(experiment, candidateEvaluation)) await append(join(root, "trajectories.jsonl"), JSON.stringify(trajectory));
     experiments.push(experiment);
     if (keep) {
-      const previousFitness = incumbentEvaluation.fitness;
       incumbent = mutation.candidate;
       incumbentEvaluation = candidateEvaluation;
-      await Promise.all([
-        writeJsonAtomic(incumbentPath, incumbent),
-        writeJsonAtomic(canonicalIncumbentPath, incumbent),
-        writeJsonAtomic(join(root, "incumbent-promotion.json"), ResearchPromotionSchema.parse({
-          schemaVersion: "0.1.0",
-          promotedAt: new Date().toISOString(),
-          experimentId,
-          track: options.track,
-          policyHash: candidateEvaluation.policyHash,
-          frozenEvaluatorHash: candidateEvaluation.frozenEvaluatorHash,
-          mutationControlRecall: 1,
-          previousFitness,
-          promotedFitness: candidateEvaluation.fitness,
-          canonicalPolicyPath: canonicalIncumbentPath,
-          trackPolicyPath: incumbentPath,
-        })),
-      ]);
+      lastKeptExperimentId = experimentId;
+      await writeJsonAtomic(incumbentPath, incumbent);
     }
   }
-  return { incumbent, experiments, accepted: experiments.filter((item) => item.outcome === "keep").length, rejected: experiments.filter((item) => item.outcome === "revert").length, initialFitness, finalFitness: incumbentEvaluation.fitness };
+  // Search never reads holdout evidence. Once the research candidate is fixed,
+  // open the sealed split exactly once and compare it with the production policy.
+  const baselineHoldout = await evaluatePolicy({ manifestPath: options.manifestPath, policy: initialPolicy, split: "holdout", workDirectory: join(root, "final", "baseline-holdout"), captureSession, acss: options.acss });
+  const samePolicy = policyIdentity(initialPolicy) === policyIdentity(incumbent);
+  const candidateHoldout = samePolicy
+    ? baselineHoldout
+    : await evaluatePolicy({ manifestPath: options.manifestPath, policy: incumbent, split: "holdout", workDirectory: join(root, "final", "candidate-holdout"), captureSession, acss: options.acss });
+  const holdoutNonRegression = candidateHoldout.mutationControlRecall === 1
+    && baselineHoldout.mutationControlRecall === 1
+    && candidateHoldout.frozenEvaluatorHash === baselineHoldout.frozenEvaluatorHash
+    && compareFitness(candidateHoldout.fitness, baselineHoldout.fitness) <= 0;
+  const validationImproved = compareFitness(incumbentEvaluation.fitness, initialFitness) < 0;
+  const promoted = !samePolicy && validationImproved && holdoutNonRegression;
+  const productionIncumbent = promoted ? incumbent : initialPolicy;
+  const reason = samePolicy
+    ? "No effective candidate survived search; the production incumbent is unchanged."
+    : !validationImproved
+      ? "Candidate retained as research evidence but did not improve the search split."
+      : holdoutNonRegression
+        ? "Promoted after search-split improvement and a sealed holdout non-regression audit."
+        : "Candidate retained as research evidence but production promotion was rejected by the sealed holdout audit.";
+  const promotion = ResearchPromotionSchema.parse({
+    schemaVersion: "0.1.0",
+    promotedAt: new Date().toISOString(),
+    experimentId: lastKeptExperimentId,
+    track: options.track,
+    promoted,
+    reason,
+    policyHash: incumbentEvaluation.policyHash,
+    productionPolicyHash: hashJson(productionIncumbent),
+    frozenEvaluatorHash: candidateHoldout.frozenEvaluatorHash,
+    mutationControlRecall: candidateHoldout.mutationControlRecall,
+    previousFitness: initialFitness,
+    promotedFitness: incumbentEvaluation.fitness,
+    baselineHoldoutFitness: baselineHoldout.fitness,
+    candidateHoldoutFitness: candidateHoldout.fitness,
+    holdoutNonRegression,
+    canonicalPolicyPath: canonicalIncumbentPath,
+    trackPolicyPath: incumbentPath,
+  });
+  await Promise.all([
+    writeJsonAtomic(incumbentPath, incumbent),
+    writeJsonAtomic(canonicalIncumbentPath, productionIncumbent),
+    writeJsonAtomic(join(root, "incumbent-promotion.json"), promotion),
+    writeJsonAtomic(join(root, "sealed-holdout-audit.json"), {
+      schemaVersion: "0.1.0",
+      openedAfterSearch: true,
+      requestedLegacyCadence: options.hiddenHoldoutEvery,
+      baselinePolicyHash: hashJson(initialPolicy),
+      candidatePolicyHash: hashJson(incumbent),
+      baseline: baselineHoldout,
+      candidate: candidateHoldout,
+      holdoutNonRegression,
+      promoted,
+      reason,
+    }),
+  ]);
+  return {
+    incumbent,
+    productionIncumbent,
+    experiments,
+    accepted: experiments.filter((item) => item.outcome === "keep").length,
+    rejected: experiments.filter((item) => item.outcome === "revert").length,
+    initialFitness,
+    finalFitness: incumbentEvaluation.fitness,
+    baselineHoldoutFitness: baselineHoldout.fitness,
+    finalHoldoutFitness: candidateHoldout.fitness,
+    promotion,
+  };
 }
 
 export async function runResearch(options: ResearchOptions): Promise<ResearchSummary> {
