@@ -33,6 +33,7 @@ import { prepareSyntheticImageCurriculum } from "./image-only/synthetic.ts";
 import { writeImageContentStrategy } from "./image-only/strategy.ts";
 import { importImageTarget } from "./image-only/import.ts";
 import { auditLiveImageBuild } from "./image-only/audit.ts";
+import { evaluateSyntheticImageCurriculum } from "./image-only/curriculum.ts";
 
 type GlobalOptions = { config: string; workspace: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -204,6 +205,17 @@ image
     const curriculum = await prepareSyntheticImageCurriculum(resolve(options.fixtures), resolve(options.output), Number.parseInt(options.viewport, 10));
     const splitCounts = curriculum.targets.reduce<Record<string, number>>((counts, target) => { counts[target.split] = (counts[target.split] ?? 0) + 1; return counts; }, {});
     emit(result("image synth-prepare", curriculum), `Prepared ${curriculum.targets.length} strict image-only gold/dirty pairs.\nSplits: train=${splitCounts.train ?? 0}, validation=${splitCounts.validation ?? 0}, holdout=${splitCounts.holdout ?? 0}\nSemantic/source answers are post-build audit only.\nCurriculum: ${join(resolve(options.output), "curriculum.json")}`);
+  });
+image
+  .command("synth-evaluate")
+  .description("reconstruct gold screenshots only, score against paired dirty renders, and export trajectories")
+  .option("--curriculum <path>", "prepared image-only curriculum", ".gen2prod/image-only/synthetic/curriculum.json")
+  .option("--output <path>", "evaluation and build output", ".gen2prod/image-only/synthetic-evaluation")
+  .addOption(new Option("--split <split>", "project-isolated split").choices(["train", "validation", "holdout", "all"]).default("all"))
+  .action(async (options: { curriculum: string; output: string; split: "train" | "validation" | "holdout" | "all" }) => {
+    const project = await config();
+    const evaluation = await evaluateSyntheticImageCurriculum({ curriculumPath: resolve(options.curriculum), outputDirectory: resolve(options.output), split: options.split, browserExecutable: project.capture.browserExecutable });
+    emit(result("image synth-evaluate", evaluation), `Synthetic image evaluation ${evaluation.evaluationId}\nAccepted: ${evaluation.aggregate.accepted}/${evaluation.aggregate.targets}; idempotence: ${(evaluation.aggregate.idempotenceRate * 100).toFixed(1)}%\nDirty pixel loss: ${(evaluation.aggregate.meanDirtyPixelLoss * 100).toFixed(2)}%; candidate pixel loss: ${(evaluation.aggregate.meanPixelLoss * 100).toFixed(2)}%\nMean recovery from dirty: ${(evaluation.aggregate.meanRecoveryFromDirty * 100).toFixed(1)}%\nText recall: ${(evaluation.aggregate.meanTextRecall * 100).toFixed(1)}%; BEM: ${(evaluation.aggregate.meanBemCoverage * 100).toFixed(1)}%\nTrajectories: ${evaluation.trajectories.path}`);
   });
 image
   .command("capture <url>")
