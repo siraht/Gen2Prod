@@ -4,6 +4,12 @@ Your plan already contains most of the production substrate: uncertain inputs be
 
 The missing piece is a **meta-loop that improves Gen2Prod itself**.
 
+## Executable status (2026-07-18)
+
+The repository now runs all three loops for the static HTML/compiled-CSS scope and adds a bounded strict image-only evidence path. Hash-bound screenshots feed deterministic segmentation, local OCR, semantic/content hypotheses, BEM HTML/SCSS emission, browser image diff, explicit interaction uncertainty, project-isolated one-change research, idempotence replay, and accepted/rejected trajectory distillation. A paired synthetic curriculum scores both dirty-to-target and candidate-to-target renders, so source cleanliness cannot hide visual regression.
+
+This implementation does not relax the modality table below. The image path emits a reviewable semantic hypothesis; it does not claim that pixels prove content intent, URLs, behavior, responsive rules, token names, asset meaning, accessibility conformance, or production readiness. Multi-frame scroll/temporal/hover/focus evidence narrows dynamic hypotheses but still requires behavior contracts or authorized traces for side effects and implementation semantics. Current executable evidence and remaining boundaries are maintained in [implementation-matrix.md](implementation-matrix.md) and [image-only-loop.md](image-only-loop.md).
+
 # The three-loop architecture
 
 ## 1. Production transformation loop
@@ -747,4 +753,3 @@ The next plan revision should add an explicit **Autoresearch and Synthetic Curri
 
 [1]: https://arxiv.org/abs/2502.14948?utm_source=chatgpt.com "Learning to Solve and Verify: A Self-Play Framework for Code and Test Generation"
 [2]: https://github.com/karpathy/autoresearch "GitHub - karpathy/autoresearch: AI agents running research on single-GPU nanochat training automatically · GitHub"
-

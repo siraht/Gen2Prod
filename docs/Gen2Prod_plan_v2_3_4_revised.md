@@ -3782,6 +3782,12 @@ training custom vision models
 
 MVP 4 should start with style/layout convergence on known semantic fixtures before accepting screenshot-only source requests. That preserves the mockup-to-code intent without turning the MVP into unconstrained image reconstruction.
 
+### Current bounded screenshot-only implementation
+
+The measurement harness is now stable enough to accept screenshot-only requests as a strict **input/evidence path**, not as a fifth production operating mode. Live or uploaded images are hash-bound; source, DOM, CSS and web extraction are quarantined from the builder; local OCR/segmentation yields unreviewed strategy and semantic hypotheses; deterministic emission produces one-H1 BEM HTML/SCSS; and the browser render is scored for pixel/macro loss, content recall, semantic contracts, uncertainty coverage, dirty-to-clean recovery, idempotence and source/raster leakage. One-change research uses project-isolated train/validation/holdout splits and exports accepted/rejected trajectories.
+
+The original defer remains in force for claims of unrestricted automation. A visually accepted reconstruction is not a complete production site until copy, routes/actions, responsive states, asset meaning, accessibility and dynamic behavior receive authoritative evidence. Temporal/scroll/hover/focus frames prove only observed pixel deltas; they do not prove URLs, side effects, JavaScript mechanisms or animation timing. See [image-only-loop.md](image-only-loop.md) for the executable authority contract.
+
 ## MVP 5 — CI/productization
 
 Add:
