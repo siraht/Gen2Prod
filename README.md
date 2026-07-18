@@ -1,11 +1,350 @@
 # Gen2Prod
 
-Gen2Prod is a measured website transformation compiler and self-improving policy laboratory. It converts uncertain website artifacts into a canonical semantic/component/BEM/token normal form, deterministically emits production code, validates the result, and learns better evidence and pass-selection policies from frozen synthetic benchmarks.
+Gen2Prod turns uncertain website artifacts into semantic, BEM-structured, token-governed production code—and runs a frozen Karpathy-style research loop to improve its own transformation policy without weakening the evaluator.
 
-The implementation is currently being built against [the compiler plan](./docs/Gen2Prod_plan_v2_3_4_revised.md) and [the Karpathy-style loop design](./docs/karpathyloop.md). The CLI contract is documented in [docs/cli-contract.md](./docs/cli-contract.md).
+## TL;DR
+
+**The problem:** AI-generated pages can look plausible while hiding div soup, utility-class drift, raw design values, broken behavior, weak accessibility, and no reproducible way to decide whether a cleanup actually improved anything.
+
+**The solution:** Gen2Prod recovers a typed canonical normal form, emits HTML/SCSS deterministically, captures browser truth, enforces hard gates, repairs locally, benchmarks policy changes on synthetic and held-out fixtures, and distills accepted/rejected trajectories into smaller selector, verifier, and planner models.
+
+| Capability | Concrete result |
+| --- | --- |
+| Measured compiler | Source, rendered DOM, accessibility tree, computed styles, boxes, screenshots, intent, components, and tokens reconcile into G2P-NF |
+| Hard constraints | Build, BEM, token, inline-style, accessibility, SEO, security, and mode-specific visual failures cannot be outweighed by a soft score |
+| Reproducibility | Content hashes, manifests, source authority, versioned schemas, replay events, and idempotence checks make every decision attributable |
+| Synthetic curriculum | Seven archetypes plus imported model-generator families produce gold code, controlled/naturalistic failures, exact lineage where available, negative controls, and train/validation/held-out splits |
+| Autoresearch | One bounded mutation per experiment; frozen evaluator; separate policy/pass/verifier tracks; automatic keep or revert |
+| Distillation | Exports supervised, preference, and verifier JSONL and trains reloadable selector/verifier/planner models |
+| Local-first operation | The entire loop runs with deterministic local planners; an external structured-model provider is optional |
+
+## Quick example
 
 ```bash
 pnpm install
-bun run cli --help
-bun run verify
+
+# Verify the runtime and installed Chrome.
+bun run cli -- doctor
+
+# Generate the frozen synthetic curriculum.
+bun run cli -- synth prepare --force
+
+# Prove the current policy against every split.
+bun run cli -- evaluate --split all
+
+# Measure which evidence modalities actually change fitness.
+bun run cli -- evaluate --split validation --ablation
+
+# Run autonomous keep/revert experiments.
+bun run cli -- research --track policy --budget 5
+
+# Turn accepted and rejected traces into smaller models.
+bun run cli -- distill --target all
+
+# Convert a messy static page with real browser evidence.
+bun run cli -- run fixtures/generated/hero-cta/fixture.corrupted.html \
+  --css fixtures/generated/hero-cta/corrupted.css \
+  --tokens fixtures/generated/hero-cta/fixture.gold.tokens.json \
+  --mode legacy-conversion --profile refactor
+
+# Generate from strategy/content constraints instead.
+bun run cli -- run examples/project.brief.json \
+  --mode greenfield --profile redesign
 ```
+
+Add `--json` to any result-producing command for the stable automation envelope. Primary data goes to stdout; diagnostics and required human actions go to stderr.
+
+## Design principles
+
+1. **AI proposes meaning; code applies it.** Model-assisted work emits schema-validated plans. Parsing, patching, Sass emission, measurement, gates, and reporting remain deterministic.
+2. **The evaluator is harder to change than the policy.** Research candidates cannot edit fixture generation, gold artifacts, gates, or the frozen evaluator. Mutation controls prove that known defects still fail.
+3. **Hard gates dominate utility.** A token-coverage gain cannot compensate for a broken link, inaccessible control, unsafe script, or visual regression in a locked refactor.
+4. **Acquire only decision-changing evidence.** Source and browser facts come first. Full screenshots, section crops, cross-page inventory, or extra model candidates are paid for only when uncertainty warrants them.
+5. **Repair locally and preserve authority.** A missing authoritative URL, asset, content decision, or design token becomes an exact review action—not an invented answer or a broad rewrite.
+
+## Operating modes
+
+| Mode | Use it for | Visual authority |
+| --- | --- | --- |
+| `greenfield` | Strategy/content brief to production HTML/SCSS | Generated contracts or an approved visual target |
+| `legacy-conversion` | Tailwind/inline/div-soup conversion | Browser-computed baseline; strict in `refactor` profile |
+| `intentional-redesign` | Approved UX/design change | Redesign brief and locked regions |
+| `optimization-only` | Token, consistency, accessibility, or performance work | No unexpected movement |
+
+Profiles are `refactor`, `migration`, `redesign`, `mockup-convergence`, and `optimization`. A run records exactly one mode/profile and cannot silently transition.
+
+## Installation
+
+Gen2Prod is currently source-distributed; no remote installer or package registry release is claimed.
+
+### pnpm and Bun
+
+```bash
+git clone <your-repository-url> Gen2Prod
+cd Gen2Prod
+pnpm install --frozen-lockfile
+bun run build
+./dist/cli.js doctor
+```
+
+### Bun only
+
+```bash
+bun install --frozen-lockfile
+bun src/cli.ts doctor
+```
+
+### Development checkout
+
+```bash
+pnpm install
+bun run check
+bun test
+bun run acceptance
+bun run build
+```
+
+Requirements are Bun 1.2 or later and Chrome/Chromium for browser evidence. The current environment is detected with `gen2prod doctor`. Set `GEN2PROD_BROWSER` if auto-discovery cannot find the executable.
+
+## Command reference
+
+Global flags:
+
+```text
+--config <path>       Project YAML configuration
+--workspace <path>    Override the artifact workspace
+--json                Stable machine-readable envelope
+--no-input            Disable interactive input (commands are noninteractive today)
+--verbose             Reserved diagnostic detail switch
+--help                Command-specific help
+--version             CLI version
+```
+
+| Command | Purpose | Example |
+| --- | --- | --- |
+| `init [directory]` | Write config and export versioned JSON Schemas | `gen2prod init ./site` |
+| `synth prepare` | Build gold/corrupt fixtures, lineage, splits, and controls | `gen2prod synth prepare --seed 1337 --count 2` |
+| `synth import` | Add model-generated messy output with generator-family provenance | `gen2prod synth import canonical-spec.json messy.html --css messy.css --family codex-v1` |
+| `evaluate` | Score a policy with the frozen evaluator | `gen2prod evaluate --split holdout` |
+| `evaluate --ablation` | Run controlled evidence configurations A through F | `gen2prod evaluate --split validation --ablation` |
+| `run <input>` | Execute any production mode | `gen2prod run page.html --css app.css --tokens tokens.json` |
+| `validate <target>` | Run Gates A–J on emitted files | `gen2prod validate .gen2prod/runs/<run-id>` |
+| `research` | Run policy/pass/verifier keep-revert experiments | `gen2prod research --track pass --budget 8` |
+| `distill` | Export datasets and train selected models | `gen2prod distill --target verifier` |
+| `report [run]` | Print the latest or selected transformation report | `gen2prod report` |
+| `doctor` | Check config, browser, runtime, providers, and pass registry | `gen2prod --json doctor` |
+
+Use `gen2prod <command> --help` for every option. The detailed I/O and exit-code contract is in [docs/cli-contract.md](docs/cli-contract.md).
+
+## Configuration
+
+```yaml
+schemaVersion: "0.1.0"
+mode: legacy-conversion
+profile: refactor
+workspace: .gen2prod
+
+capture:
+  viewports: [360, 768, 1280, 1440]
+  themes: [light]
+  states: [default, focus-visible]
+  browserExecutable: auto
+
+policy:
+  file: src/research/policy.ts
+
+research:
+  budget: 12
+  split: validation
+  hiddenHoldoutEvery: 5
+
+validation:
+  wcag: WCAG2AA
+  provisionalThresholds: true
+  maxVisualPixelRatio: 0.01
+  minBemCoverage: 0.95
+  minTokenCoverage: 0.95
+```
+
+Precedence is command flags, `GEN2PROD_*` environment variables, project configuration, then built-in defaults. After research accepts an incumbent policy, `run` and `evaluate` automatically prefer `.gen2prod/research/incumbent-policy.json`; an explicit `--policy` always wins.
+
+Environment variables are listed in [.env.example](.env.example). The optional HTTP planner endpoint must return structured candidates; local deterministic planners remain the default.
+
+## Architecture
+
+```mermaid
+flowchart TD
+  subgraph Production["Production transformation loop"]
+    A["Source / brief / visual target"] --> B["Evidence acquisition"]
+    B --> C["G2P Normal Form"]
+    C --> D["Deterministic HTML + SCSS"]
+    D --> E["Gates A–J"]
+    E -->|localized failure| F["Narrow repair plan"]
+    F --> D
+  end
+
+  subgraph Research["Frozen autoresearch loop"]
+    P["Incumbent policy"] --> M["One bounded mutation"]
+    M --> V["Frozen fixtures + evaluator"]
+    V --> K{"Hard controls pass and fitness improves?"}
+    K -->|yes| P2["Promote incumbent"]
+    K -->|no| R["Revert candidate"]
+  end
+
+  subgraph Distillation["Distillation loop"]
+    T["Accepted + rejected trajectories"] --> DS["SFT / preference / verifier datasets"]
+    DS --> SM["Selector model"]
+    DS --> VM["Verifier model"]
+    DS --> PM["Structured planner model"]
+  end
+
+  E --> T
+  V --> T
+  P2 --> B
+  SM --> B
+  VM --> E
+  PM --> C
+```
+
+Important on-disk artifacts:
+
+```text
+.gen2prod/
+  runs/<run-id>/
+    manifest.json
+    plan.json
+    replay.jsonl
+    idempotence/result.json
+    validation.json
+    repairs.json
+    output/page.{html,scss,css}
+    capture/{baseline,candidate}/
+    reports/
+  research/
+    incumbent-{policy,pass,verifier}.json
+    results.tsv
+    trajectories.jsonl
+    experiments/<experiment-id>/
+  distilled/
+    datasets/{supervised,preferences,verifier}.jsonl
+    {selector,verifier,planner}.model.json
+```
+
+The normative designs are [docs/Gen2Prod_plan_v2_3_4_revised.md](docs/Gen2Prod_plan_v2_3_4_revised.md) and [docs/karpathyloop.md](docs/karpathyloop.md). [docs/implementation-matrix.md](docs/implementation-matrix.md) maps each layer to executable evidence.
+
+Both research evaluations and production runs feed `research/trajectories.jsonl`. The former contributes accepted/rejected policy trials; the latter contributes real-run observations, exact idempotence labels, hard-gate labels, and measured evaluator-mutation recall. Naturalistic output can be added without rewriting the procedural generator:
+
+```bash
+gen2prod synth import canonical-spec.json model-page.html \
+  --css model-page.css --family generator-model-version \
+  --split holdout --fixture-id stable-family-case
+```
+
+## How Gen2Prod compares
+
+| Capability | Gen2Prod | One-shot AI rewrite | Linter only | Screenshot-to-code tool |
+| --- | --- | --- | --- | --- |
+| Typed semantic/component/BEM/token IR | Full | Usually absent | Partial findings | Usually absent |
+| Deterministic source emission | Yes | Model-dependent | No emission | Model-dependent |
+| Browser-computed baseline | Yes | Rare | Sometimes | Target pixels only |
+| Hard accessibility/behavior/security gates | Yes | Prompt-dependent | Tool-specific | Usually secondary |
+| Exact corruption lineage | Synthetic curriculum | No | No | No |
+| Policy keep/revert research | Frozen and automatic | No | No | No |
+| Cost-aware evidence routing | Explicit policy | Ad hoc | N/A | Vision-first |
+| Distilled selector/verifier/planner | Yes | No | No | Sometimes proprietary |
+
+Use Gen2Prod when correctness, replayability, design-system governance, or repeatable improvement matters. A one-shot rewrite remains faster for disposable prototypes whose behavior and production contracts do not matter.
+
+## Testing and acceptance
+
+```bash
+bun run check       # Strict TypeScript
+bun test            # Unit + browser-backed integration tests
+bun run acceptance  # Frozen generation/evaluation/research/distillation proof
+bun run build       # Standalone Bun bundle
+bun run verify      # Everything above
+```
+
+Acceptance requires every synthetic fixture to reach zero hard-gate, semantic, BEM, token-accounting, and idempotence error while all evaluator mutations are caught. The frozen fingerprint covers evaluator logic, gates, compiler passes, manifest, corrupt inputs, gold artifacts, traces, lineage, and expected-gate controls. Thresholds still report their provisional calibration status until the fixture suite spans representative real projects, frameworks, browsers, and generator-model families.
+
+## Troubleshooting
+
+### “No Chrome/Chromium executable found”
+
+```bash
+export GEN2PROD_BROWSER=/absolute/path/to/google-chrome
+bun run cli -- doctor
+```
+
+### “No runtime CSS custom properties were found”
+
+Pass an authoritative ACSS/DTCG adapter registry. Without one, Gen2Prod continues safely and records expiring token exceptions.
+
+```bash
+gen2prod run page.html --css app.css --tokens acss.registry.json
+```
+
+### A refactor fails Gate J even though source code looks correct
+
+Gate J measures the stabilized browser render, not source similarity. Inspect `reports/design-delta-explorer.json` and the paired captures before changing thresholds.
+
+### Research rejects every candidate
+
+That can be correct: the incumbent may already dominate the proposed mutations. Read `.gen2prod/research/results.tsv`; candidates are reverted on any hard-control regression, equal fitness, or worse lexicographic outcome.
+
+### `validate` reports token values as unaccounted
+
+Standalone `validate` does not reconstruct a missing exception ledger. Prefer validating the original run directory or supply the token registry during `run` so accounting provenance remains attached.
+
+### Generated fixtures already exist
+
+Synthetic preparation refuses accidental overwrite.
+
+```bash
+gen2prod synth prepare --force
+```
+
+## Limitations
+
+- Static HTML plus compiled CSS is the production-ready conversion adapter. JSX/TSX, Vue, Svelte, Astro, template, builder, and CMS adapters are represented in the architecture but not yet source-patching implementations.
+- The shipped production planner is deterministic and fixture-proven. The structured HTTP provider contract and naturalistic-import path are available, but selecting an external model, credentials, prompts, and cost ceiling remains a project-owner decision.
+- Automatic accessibility checks do not establish full WCAG conformance. Screen-reader usability, alternative-text quality, reading-order nuance, and cognitive clarity remain human review tasks.
+- Lab performance evidence does not replace field Core Web Vitals data. Real sites must connect segmented RUM before claiming field outcomes.
+- Visual convergence searches small token-valued patches. It deliberately stops when a remaining gap needs a new asset, content decision, component variant, or design-system change.
+- Fixture thresholds are explicitly provisional. The seed suite proves mechanics and mutation sensitivity, not population-level statistical calibration.
+
+See [docs/external-actions.md](docs/external-actions.md) for the exact approvals and production evidence a real project owner must supply.
+
+## FAQ
+
+### What is G2P-NF?
+
+Gen2Prod Normal Form is the typed latent state containing semantic DOM, component ownership, BEM graph, style intent, token bindings, and interaction contracts. Final code is serialized from it rather than generated directly from prose.
+
+### Does the research loop edit its own evaluator?
+
+No. Preparation, gold fixtures, gate definitions, and evaluation hashes are frozen during experiments. Policy, pass, and verifier tracks are isolated, and mutation controls must retain 100% recall.
+
+### Is a screenshot treated as semantic truth?
+
+No. An approved screenshot controls declared pixels/regions only. Content, URLs, behavior, responsive rules, semantics, and token names require source, design metadata, or human authority.
+
+### Can it run without an API key?
+
+Yes. All shipped tests, fixture generation, compilation, validation, research, and distillation run locally. An external model is optional.
+
+### What happens when human authority is missing?
+
+The run records a precise `requiredActions` entry and continues all unrelated work. It never invents a destination URL, legal/privacy decision, brand asset, token authority, or subjective approval.
+
+### Why are both accepted and rejected trajectories retained?
+
+Accepted trials provide structured planning examples; accepted/rejected pairs teach preferences; gate labels train the verifier. A reverted experiment is useful data, not wasted compute.
+
+## About contributions
+
+> *About Contributions:* Please don't take this the wrong way, but I do not accept outside contributions for any of my projects. I simply don't have the mental bandwidth to review anything, and it's my name on the thing, so I'm responsible for any problems it causes; thus, the risk-reward is highly asymmetric from my perspective. I'd also have to worry about other "stakeholders," which seems unwise for tools I mostly make for myself for free. Feel free to submit issues, and even PRs if you want to illustrate a proposed fix, but know I won't merge them directly. Instead, I'll have Claude or Codex review submissions via `gh` and independently decide whether and how to address them. Bug reports in particular are welcome. Sorry if this offends, but I want to avoid wasted time and hurt feelings. I understand this isn't in sync with the prevailing open-source ethos that seeks community contributions, but it's the only way I can move at this velocity and keep my sanity.
+
+## License
+
+No license has been declared in this repository. Do not assume redistribution rights until the owner adds one.
