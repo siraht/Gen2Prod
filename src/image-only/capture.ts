@@ -30,16 +30,28 @@ async function frame(path: string, outputDirectory: string, values: Omit<ImageOn
 }
 
 async function waitForVisualAssets(page: import("playwright-core").Page): Promise<void> {
-  await page.evaluate(() => document.fonts.ready);
-  await page.evaluate(() => Promise.race([
-    Promise.all([...document.images].map((image) => image.complete
-      ? image.decode().catch(() => undefined)
-      : new Promise<void>((resolve) => {
-        image.addEventListener("load", () => resolve(), { once: true });
-        image.addEventListener("error", () => resolve(), { once: true });
-      }))),
-    new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
-  ]));
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    try {
+      await page.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+      await page.evaluate(() => document.fonts.ready);
+      await page.evaluate(() => Promise.race([
+        Promise.all([...document.images].map((image) => image.complete
+          ? image.decode().catch(() => undefined)
+          : new Promise<void>((resolve) => {
+            image.addEventListener("load", () => resolve(), { once: true });
+            image.addEventListener("error", () => resolve(), { once: true });
+          }))),
+        new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+      ]));
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!/execution context was destroyed|navigation|target closed/i.test(error instanceof Error ? error.message : String(error))) throw error;
+      await page.waitForTimeout(250);
+    }
+  }
+  throw lastError;
 }
 
 async function materializeByScrolling(page: import("playwright-core").Page): Promise<{ positions: number[]; pageHeight: number }> {
