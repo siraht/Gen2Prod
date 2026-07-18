@@ -9,8 +9,9 @@ import type { AccessibilityAudit } from "./accessibility.ts";
 import { classes, flatten, parseElements, type ValidationElement } from "./dom.ts";
 import { compareCaptures, type VisualMetrics } from "./visual.ts";
 import { imageDifference } from "./visual.ts";
-import { isUtilityClass } from "../core/classes.ts";
+import { isBemClass, isUtilityClass } from "../core/classes.ts";
 import { slotEntropy } from "../report/consistency.ts";
+import { analyzeCssSelectorContract, analyzeScssNestingContract } from "./styling-contract.ts";
 
 export type GateAssertion = GateResult["assertions"][number];
 
@@ -94,12 +95,6 @@ function selectorClasses(css: string): { selectors: string[]; classNames: string
   return { selectors, classNames: [...classNames], rawDeclarations, maxSpecificity, maxSpecificitySelector };
 }
 
-function bemClass(name: string): boolean {
-  return /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:__[a-z0-9]+(?:-[a-z0-9]+)*)?(?:--[a-z0-9]+(?:-[a-z0-9]+)*)?$/.test(name)
-    && !/__.*__/.test(name)
-    && !/--.*__/.test(name);
-}
-
 function htmlClasses(elements: ValidationElement[]): string[] {
   return [...new Set(flatten(elements).flatMap(classes))];
 }
@@ -128,7 +123,7 @@ function equivalentStyleBlocks(css: string, htmlNames: Set<string>): string[][] 
 
 function countStyledNodes(elements: ValidationElement[], cssClasses: Set<string>): { total: number; bem: number } {
   const styled = flatten(elements).filter((element) => classes(element).some((name) => cssClasses.has(name)));
-  return { total: styled.length, bem: styled.filter((element) => classes(element).filter((name) => cssClasses.has(name)).every(bemClass)).length };
+  return { total: styled.length, bem: styled.filter((element) => classes(element).filter((name) => cssClasses.has(name)).every(isBemClass)).length };
 }
 
 async function buildGate(context: ValidationContext): Promise<GateResult> {
@@ -152,16 +147,36 @@ async function bemGate(context: ValidationContext): Promise<GateResult> {
     const plannedClasses = new Set(context.plan?.bem.blocks.flatMap((block) => block.nodes.map((node) => node.className)) ?? []);
     const orphanClasses = htmlNames.filter((name) => cssSet.has(name) === false && !plannedClasses.has(name) && !/^(js-|qa-|e2e-)/.test(name));
     const utilityClasses = htmlNames.filter((name) => isUtilityClass(name) || /^u-\d+$/.test(name));
-    const invalid = htmlNames.filter((name) => !bemClass(name) && !/^(js-|qa-|e2e-)/.test(name));
+    const invalid = htmlNames.filter((name) => !isBemClass(name) && !/^(js-|qa-|e2e-)/.test(name));
+    const selectorContract = analyzeCssSelectorContract(context.css);
+    const nestingContract = analyzeScssNestingContract(context.scss);
+    const selectorFailures = selectorContract.violations.slice(0, 5).map((item) => `${item.selector} (${item.kind})`).join(", ");
+    const nestingFailures = nestingContract.violations.slice(0, 5).map((item) => `${item.selector} (${item.kind})`).join(", ");
     const bemCoverage = coverage.total ? coverage.bem / coverage.total : 1;
     return { assertions: [
       assertion("bem-taxonomy", invalid.length === 0, "error", invalid.length ? `Invalid class taxonomy: ${invalid.join(", ")}` : "All styled classes match BEM taxonomy"),
       assertion("tailwind-eliminated", utilityClasses.length === 0, "error", utilityClasses.length ? `Utility classes remain: ${utilityClasses.join(", ")}` : "No utility classes remain"),
+      assertion("class-only-bem-selectors", selectorContract.passed, "error", selectorContract.passed ? "Every styling selector is class-only BEM" : `Selector contract violations: ${selectorFailures}`),
+      assertion("nested-bem-scss", nestingContract.passed, "error", nestingContract.passed ? "BEM elements, modifiers, and states use SCSS nesting" : `SCSS nesting violations: ${nestingFailures}`),
       assertion("orphan-selectors", orphanSelectors.length === 0, "error", orphanSelectors.length ? `Orphan selectors: ${orphanSelectors.join(", ")}` : "No orphan selectors"),
       assertion("orphan-classes", orphanClasses.length === 0, "warning", orphanClasses.length ? `Unstyled/review classes: ${orphanClasses.join(", ")}` : "No orphan HTML classes"),
       assertion("specificity-budget", css.maxSpecificity <= 20, "error", `Maximum simplified specificity is ${css.maxSpecificity}${css.maxSpecificitySelector ? ` at ${css.maxSpecificitySelector}` : ""}`, { expected: "<=20", actual: css.maxSpecificity }),
       assertion("bem-coverage", bemCoverage >= context.thresholds.minBemCoverage, "error", `BEM coverage ${(bemCoverage * 100).toFixed(1)}%`, { expected: context.thresholds.minBemCoverage, actual: bemCoverage }),
-    ], metrics: { bemCoverage, orphanSelectors: orphanSelectors.length, orphanClasses: orphanClasses.length, utilityClasses: utilityClasses.length, maxSpecificity: css.maxSpecificity } };
+    ], metrics: {
+      bemCoverage,
+      orphanSelectors: orphanSelectors.length,
+      orphanClasses: orphanClasses.length,
+      utilityClasses: utilityClasses.length + selectorContract.metrics.utilitySelectors,
+      maxSpecificity: css.maxSpecificity,
+      elementSelectors: selectorContract.metrics.elementSelectors,
+      universalSelectors: selectorContract.metrics.universalSelectors,
+      idSelectors: selectorContract.metrics.idSelectors,
+      attributeSelectors: selectorContract.metrics.attributeSelectors,
+      combinatorSelectors: selectorContract.metrics.combinatorSelectors,
+      crossBlockSelectors: selectorContract.metrics.crossBlockSelectors,
+      flatBemRules: nestingContract.metrics.flatBemRules,
+      invalidNestedRules: nestingContract.metrics.invalidNestedRules,
+    } };
   });
 }
 
