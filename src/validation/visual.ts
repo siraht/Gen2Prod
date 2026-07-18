@@ -139,6 +139,10 @@ function matchText(node: CapturedNode): string {
   return (node.contentText || node.text).replace(/\s+/g, " ").trim();
 }
 
+function textIdentity(node: CapturedNode): string {
+  return matchText(node).toLowerCase().match(/[a-z0-9]+(?:['’][a-z0-9]+)?/g)?.join(" ") ?? "";
+}
+
 function isVisuallySubstantive(node: CapturedNode): boolean {
   if (!node.visible) return false;
   if (matchText(node) || /^(?:br|hr|img|svg|canvas|video|input|select|textarea|button|a|h[1-6]|p|li|summary|blockquote|figcaption|label)$/.test(node.tag)) return true;
@@ -158,9 +162,9 @@ function matchNodes(baseline: Map<string, CapturedNode>, candidate: Map<string, 
     return textPriority || Number(isVisuallySubstantive(right)) - Number(isVisuallySubstantive(left));
   });
   for (const [id, before] of remaining) {
-    const beforeText = matchText(before);
+    const beforeText = textIdentity(before);
     const candidates = [...candidate.values()].filter((node) => !usedCandidateIds.has(node.nodeId)).map((node) => {
-      const afterText = matchText(node);
+      const afterText = textIdentity(node);
       let score = 0;
       if (beforeText && afterText === beforeText) score += 1.5;
       else if (beforeText || afterText) score -= 0.75;

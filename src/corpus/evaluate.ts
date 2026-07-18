@@ -148,11 +148,18 @@ function formControls(html: string): string[] {
   return parsedElements(html).filter((element) => ["input", "select", "textarea", "button"].includes(element.tagName)).map((element) => {
     const tag = element.tagName;
     const attributes = Object.fromEntries(element.attrs.map(({ name, value }) => [name, value]));
+    let parent: DefaultTreeAdapterMap["parentNode"] | undefined = element.parentNode ?? undefined;
+    let insideForm = false;
+    while (parent) {
+      if ("tagName" in parent && parent.tagName === "form") { insideForm = true; break; }
+      parent = "parentNode" in parent ? parent.parentNode ?? undefined : undefined;
+    }
+    if (tag === "button" && attributes.type !== "submit" && !insideForm) return "";
     const name = attributes.name ?? attributes.id
       ?? (tag === "input" ? attributes.type : undefined)
       ?? "anonymous";
     return `${tag}:${name}`;
-  });
+  }).filter(Boolean);
 }
 
 function multisetRecall(source: string[], candidate: string[]): number {
