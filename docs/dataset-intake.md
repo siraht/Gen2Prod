@@ -26,6 +26,8 @@ Record the browser/OS, viewport width, theme, state, device scale, fonts, and an
 
 Non-one-to-one examples still teach content-to-section planning, semantic choices, component boundaries, token usage, acceptable edits, and which output a reviewer preferred. If the source and result share only part of the page, name the shared or locked regions.
 
+Even a small number of imperfect dirty-to-clean builds is useful. The highest-value addition is a short note or mask explaining what changed intentionally. Without it, the pair still trains planning and preference selection; with reviewed shared regions, it can also train localized image recovery. Mockups paired with the content strategy or page brief used to create them are particularly useful because they supervise the otherwise uncertain intent-to-hierarchy step.
+
 ## Change manifest
 
 ```json
@@ -81,5 +83,38 @@ gen2prod synth import canonical-spec.json dirty.html \
 ```
 
 The importer preserves the supplied material under `observed/`, writes `fixture.observed-pair.json`, creates an unmarked dirty input with lineage IDs removed, and adds the pair to the frozen corpus fingerprint. Exact observed screenshots participate directly in browser image-diff fitness. Partial pairs with reviewed coordinate masks participate in masked fitness; named-only partial pairs and non-one-to-one pairs remain preference/planner evidence.
+
+## Image-only mockups and live captures
+
+When HTML is unavailable, import the mockup directly:
+
+```bash
+gen2prod image import clean-mockup.png \
+  --target client-home-v2 \
+  --project client-home \
+  --dirty-image earlier-render.png \
+  --strategy content-strategy.md \
+  --split validation \
+  --output .gen2prod/image-only/imports/client-home-v2
+```
+
+Or acquire a live visual target without exposing its source to the builder:
+
+```bash
+gen2prod image capture https://example.com \
+  --target example-home \
+  --capture-policy visual-probe-sequence \
+  --split holdout
+```
+
+For a still-image project, the most useful bundle is:
+
+1. Full-page images at desktop, tablet, and mobile widths.
+2. The content strategy, page plan, approved copy, and asset inventory.
+3. State images for hover, focus, active, expanded/open, loading, error, success, reduced motion, carousel/video states, and any scroll-triggered reveal.
+4. A behavior contract naming routes, actions, form endpoints, focus movement, keyboard behavior, timing, and side effects.
+5. Optional dirty images and an alignment/change manifest so recovery can be measured rather than guessed.
+
+A still image cannot establish implementation mechanism or behavior. State pairs can prove that pixels change after a declared trigger, but route destinations, side effects, animation timing, responsive rules, and semantics remain unapproved until the matching contract or trace is supplied. See [image-only-loop.md](image-only-loop.md) for the full authority model.
 
 Do not include secrets, private customer data, licensed fonts/assets that cannot be used for evaluation, or credentials embedded in HTML. Replace sensitive content while preserving structure and annotate the substitution.

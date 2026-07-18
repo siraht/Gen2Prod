@@ -14,6 +14,7 @@ Gen2Prod turns uncertain website artifacts into semantic, BEM-structured, token-
 | Hard constraints | Build, BEM, token, inline-style, accessibility, SEO, security, and mode-specific visual failures cannot be outweighed by a soft score |
 | Reproducibility | Content hashes, manifests, source authority, versioned schemas, replay events, and idempotence checks make every decision attributable |
 | Synthetic curriculum | Seven archetypes plus imported model-generator families produce strategy, page briefs, varied content, rendered mockups, gold code, marked/unmarked dirty inputs, image diffs, lineage, controls, and held-out splits |
+| Strict image-only loop | Live captures or generated mockups become hash-bound visual targets; local OCR/segmentation proposes semantic BEM builds, dirty/target/candidate image diffs score them, and source leakage is forbidden |
 | Autoresearch | One bounded mutation per experiment; frozen evaluator; separate policy/pass/verifier tracks; automatic keep or revert |
 | Distillation | Exports supervised, preference, and verifier JSONL and trains reloadable selector/verifier/planner models |
 | Local-first operation | The entire loop runs with deterministic local planners; an external structured-model provider is optional |
@@ -50,6 +51,13 @@ bun run cli -- run fixtures/generated/hero-cta/fixture.corrupted.html \
 # Generate from strategy/content constraints instead.
 bun run cli -- run examples/project.brief.json \
   --mode greenfield --profile redesign
+
+# Or reconstruct from pixels alone, with non-visual authority left unresolved.
+bun run cli -- image capture https://example.com \
+  --target example-home --capture-policy visual-probe-sequence
+bun run cli -- image run \
+  .gen2prod/image-only/live/example-home/image-target.json \
+  --output .gen2prod/image-only/builds/example-home
 ```
 
 Add `--json` to any result-producing command for the stable automation envelope. Primary data goes to stdout; diagnostics and required human actions go to stderr.
@@ -125,6 +133,9 @@ Global flags:
 | `init [directory]` | Write config and export versioned JSON Schemas | `gen2prod init ./site` |
 | `synth prepare` | Build gold/corrupt fixtures, lineage, splits, and controls | `gen2prod synth prepare --seed 1337 --count 2` |
 | `synth import` | Add exact, partial, or non-1:1 dirty/clean examples with generator-family provenance | `gen2prod synth import canonical.json messy.html --css messy.css --family codex-v1 --alignment exact` |
+| `image import/capture` | Hash an image mockup or acquire strict still/scroll/state frames from a live page | `gen2prod image import mockup.png --target home-v1 --output .gen2prod/image-only/imports/home-v1` |
+| `image analyze/build/evaluate/run` | Infer a bounded semantic strategy, emit BEM HTML/SCSS, and score the browser render without source leakage | `gen2prod image run image-target.json --output .gen2prod/image-only/builds/home-v1` |
+| `image synth-prepare/synth-evaluate/research` | Build dirty/gold image curricula and run project-isolated one-change recursive improvement | `gen2prod image research --budget 10` |
 | `evaluate` | Score a policy with the frozen evaluator | `gen2prod evaluate --split holdout` |
 | `evaluate --ablation` | Run controlled evidence configurations A through F | `gen2prod evaluate --split validation --ablation` |
 | `run <input>` | Execute any production mode | `gen2prod run page.html --css app.css --tokens tokens.json` |
@@ -228,9 +239,14 @@ Important on-disk artifacts:
   distilled/
     datasets/{supervised,preferences,verifier}.jsonl
     {selector,verifier,planner}.model.json
+  image-only/
+    live/<target>/image-{target,analysis,state-analysis,content-strategy}.json
+    builds/<target>/{page.html,page.scss,evaluation/,required-actions.json}
+    research/{incumbent-policy.json,<research-id>/image-trajectories.jsonl}
+    synthetic-evaluation/{summary.json,image-trajectories.jsonl}
 ```
 
-The normative designs are [docs/Gen2Prod_plan_v2_3_4_revised.md](docs/Gen2Prod_plan_v2_3_4_revised.md) and [docs/karpathyloop.md](docs/karpathyloop.md). [docs/implementation-matrix.md](docs/implementation-matrix.md) maps each layer to executable evidence. [docs/dataset-intake.md](docs/dataset-intake.md) defines how to contribute exact, partial, and non-1:1 real examples.
+The normative designs are [docs/Gen2Prod_plan_v2_3_4_revised.md](docs/Gen2Prod_plan_v2_3_4_revised.md) and [docs/karpathyloop.md](docs/karpathyloop.md). [docs/implementation-matrix.md](docs/implementation-matrix.md) maps each layer to executable evidence. [docs/image-only-loop.md](docs/image-only-loop.md) defines the strict screenshot path and its authority boundary. [docs/dataset-intake.md](docs/dataset-intake.md) defines how to contribute exact, partial, and non-1:1 real examples.
 
 Both research evaluations and production runs feed `research/trajectories.jsonl`. The former contributes accepted/rejected policy trials; the latter contributes real-run observations, exact idempotence labels, hard-gate labels, and measured evaluator-mutation recall. Naturalistic output can be added without rewriting the procedural generator:
 
@@ -313,6 +329,7 @@ gen2prod synth prepare --force
 - Automatic accessibility checks do not establish full WCAG conformance. Screen-reader usability, alternative-text quality, reading-order nuance, and cognitive clarity remain human review tasks.
 - Lab performance evidence does not replace field Core Web Vitals data. Real sites must connect segmented RUM before claiming field outcomes.
 - Visual convergence searches small token-valued patches. It deliberately stops when a remaining gap needs a new asset, content decision, component variant, or design-system change.
+- Image-only reconstruction is a bounded semantic hypothesis generator, not proof of copy, routes, behavior, responsive intent, token identity, asset meaning, accessibility conformance, or deploy readiness. Multi-viewport/state images and human authority remain necessary.
 - Fixture thresholds are explicitly provisional. The seed suite proves mechanics and mutation sensitivity, not population-level statistical calibration.
 
 See [docs/external-actions.md](docs/external-actions.md) for the exact approvals and production evidence a real project owner must supply.

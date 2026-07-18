@@ -58,6 +58,8 @@ For redesign or mockup convergence, provide:
 
 When the convergence report says the next fix requires a design decision, specify the intended token/asset/content change and rerun with the same target hash.
 
+For strict image-only work, add desktop/tablet/mobile captures and state images for every material hover, focus, active, expanded, loading, error, success, carousel, video, scroll reveal and reduced-motion condition. Name the trigger and expected outcome. A frame pair can establish an observed visual change; provide a behavior contract or authorized interaction trace to establish destinations, side effects, focus movement, keyboard rules, animation timing, or implementation mechanism. Review OCR copy and image-derived strategy before treating either as content authority. Recapture any target flagged for suspicious blank-like coverage or explicitly confirm that the negative space is intentional.
+
 ## Accessibility review
 
 Automation covers static rules, the computed accessibility tree, axe-style checks, keyboard flow, focus visibility, and declared interaction smoke tests. A qualified reviewer must still check:
