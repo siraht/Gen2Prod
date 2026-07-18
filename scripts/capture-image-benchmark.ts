@@ -27,14 +27,26 @@ const targets = only.length ? catalog.targets.filter((target) => only.includes(t
 
 if (targets.length === 0) throw new Error("No image benchmark targets selected");
 
+const failures: { targetId: string; error: string }[] = [];
 for (const target of targets) {
   process.stderr.write(`capturing ${target.targetId} (${target.split})\n`);
-  const manifest = await captureImageTarget({
-    ...target,
-    outputDirectory: join(outputRoot, target.targetId),
-    viewport: { width: 1440, height: 900 },
-    capturePolicy: "visual-probe-sequence",
-    checkpointFractions: [0, 0.25, 0.5, 0.75, 1],
-  });
-  process.stdout.write(`${JSON.stringify({ targetId: target.targetId, split: target.split, frames: manifest.frames.length, scrollPositionsVisited: manifest.acquisition.scrollPositionsVisited, builderInputs: manifest.builderInputs.images })}\n`);
+  try {
+    const manifest = await captureImageTarget({
+      ...target,
+      outputDirectory: join(outputRoot, target.targetId),
+      viewport: { width: 1440, height: 900 },
+      capturePolicy: "visual-probe-sequence",
+      checkpointFractions: [0, 0.25, 0.5, 0.75, 1],
+    });
+    process.stdout.write(`${JSON.stringify({ targetId: target.targetId, split: target.split, frames: manifest.frames.length, scrollPositionsVisited: manifest.acquisition.scrollPositionsVisited, builderInputs: manifest.builderInputs.images })}\n`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    failures.push({ targetId: target.targetId, error: message });
+    process.stderr.write(`capture failed for ${target.targetId}: ${message}\n`);
+  }
+}
+
+if (failures.length) {
+  process.stderr.write(`${JSON.stringify({ failures })}\n`);
+  process.exitCode = 2;
 }

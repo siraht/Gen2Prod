@@ -57,7 +57,11 @@ async function waitForVisualAssets(page: import("playwright-core").Page): Promis
 async function materializeByScrolling(page: import("playwright-core").Page): Promise<{ positions: number[]; pageHeight: number }> {
   return page.evaluate(async () => {
     const positions: number[] = [];
-    const settle = () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 80))));
+    // Some animation-heavy pages intentionally suspend requestAnimationFrame
+    // while an off-screen smooth-scroll controller owns the timeline. A
+    // timer-bounded settle keeps acquisition finite without consulting DOM
+    // semantics or source code.
+    const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 100));
     let position = 0;
     let stableBottomPasses = 0;
     for (let step = 0; step < 240 && stableBottomPasses < 2; step += 1) {
@@ -91,11 +95,14 @@ export async function captureImageTarget(options: CaptureImageTargetOptions): Pr
   let pageHeight = viewport.height;
   try {
     await page.goto(options.url, { waitUntil: "load", timeout: 45_000 });
-    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await page.evaluate(() => Promise.race([
+      new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+      new Promise<void>((resolve) => setTimeout(resolve, 1_000)),
+    ]));
     await waitForVisualAssets(page);
 
     const initialPath = join(options.outputDirectory, "initial-full-page.png");
-    await page.screenshot({ path: initialPath, fullPage: true, animations: "allow" });
+    await page.screenshot({ path: initialPath, fullPage: true, animations: "allow", timeout: 45_000 });
     frames.push(await frame(initialPath, options.outputDirectory, { frameId: "initial", kind: "initial", viewport, scrollY: 0 }));
 
     if (capturePolicy !== "still") {
@@ -105,7 +112,7 @@ export async function captureImageTarget(options: CaptureImageTargetOptions): Pr
       await waitForVisualAssets(page);
       await page.addStyleTag({ content: "*,*::before,*::after{animation-play-state:paused!important;animation-delay:0s!important;transition-duration:0s!important;caret-color:transparent!important;scroll-behavior:auto!important}" });
       const targetPath = join(options.outputDirectory, "target-full-page.png");
-      await page.screenshot({ path: targetPath, fullPage: true, animations: "disabled" });
+      await page.screenshot({ path: targetPath, fullPage: true, animations: "disabled", timeout: 45_000 });
       frames.push(await frame(targetPath, options.outputDirectory, { frameId: "materialized", kind: "scroll-materialized", viewport, scrollY: 0 }));
 
       const fractions = [...new Set(options.checkpointFractions ?? (capturePolicy === "visual-probe-sequence" ? [0, 0.5, 1] : []))].filter((value) => value >= 0 && value <= 1).sort();
@@ -114,7 +121,7 @@ export async function captureImageTarget(options: CaptureImageTargetOptions): Pr
         await page.evaluate((top) => scrollTo({ top, behavior: "instant" }), scrollY);
         await page.waitForTimeout(100);
         const checkpointPath = join(options.outputDirectory, `checkpoint-${index + 1}.png`);
-        await page.screenshot({ path: checkpointPath, fullPage: false, animations: "disabled" });
+        await page.screenshot({ path: checkpointPath, fullPage: false, animations: "disabled", timeout: 20_000 });
         frames.push(await frame(checkpointPath, options.outputDirectory, { frameId: `checkpoint-${index + 1}`, kind: "scroll-checkpoint", viewport, scrollY, probe: { x: 0, y: scrollY, action: "scroll" } }));
       }
 
@@ -127,7 +134,7 @@ export async function captureImageTarget(options: CaptureImageTargetOptions): Pr
         }
         await page.waitForTimeout(100);
         const probePath = join(options.outputDirectory, `probe-${index + 1}-${probe.action}.png`);
-        await page.screenshot({ path: probePath, fullPage: false, animations: "disabled" });
+        await page.screenshot({ path: probePath, fullPage: false, animations: "disabled", timeout: 20_000 });
         frames.push(await frame(probePath, options.outputDirectory, { frameId: `probe-${index + 1}`, kind: probe.action === "hover" ? "hover-probe" : "focus-probe", viewport, scrollY: 0, probe: { ...probe, action: probe.action } }));
       }
     }
