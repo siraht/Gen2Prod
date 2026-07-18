@@ -106,6 +106,7 @@ function renderDeclarations(style: StyleIntent, indent: string): string {
 export function emitScss(plan: CompilationPlan): string {
   const styleMap = stylesByNode(plan.styles);
   const documentStyle = styleMap.get("g2p-document-root");
+  const universalStyle = styleMap.get("g2p-universal-root");
   const groups = new Map<string, { node: PlannedNode; className: string; style: StyleIntent }[]>();
   for (const node of allNodes(plan.semantics.root)) {
     const style = styleMap.get(node.nodeId);
@@ -133,7 +134,8 @@ export function emitScss(plan: CompilationPlan): string {
     return sample ? [`  ${token.runtimeVariable}: ${sample};`] : [];
   }).join("\n");
   const documentRule = documentStyle ? `html {\n${renderDeclarations(documentStyle, "  ")}\n}\n\n` : "";
-  return `/* Generated deterministically from G2P-NF. */\n:root {\n${tokenDefinitions}\n}\n\n${documentRule}${rendered}\n`;
+  const universalRule = universalStyle ? `* {\n${renderDeclarations(universalStyle, "  ")}\n}\n\n` : "";
+  return `/* Generated deterministically from G2P-NF. */\n:root {\n${tokenDefinitions}\n}\n\n${documentRule}${universalRule}${rendered}\n`;
 }
 
 export function emitHtml(plan: CompilationPlan, cssHref = "page.css", includeNodeIds = false): string {

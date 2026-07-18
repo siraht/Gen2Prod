@@ -338,6 +338,10 @@ function selectorContext(source: SourceDocument, root: PlannedNode): SelectorCon
   return { parent, virtualRoot };
 }
 
+function universalFoundationSelector(selector: string): boolean {
+  return selector.trim() === "*";
+}
+
 function cascadeWins(candidate: CssDeclaration, candidateOrder: number, current: CssDeclaration, currentOrder: number): boolean {
   if (candidate.important !== current.important) return candidate.important;
   const candidateInline = candidate.origin === "inline" ? 1 : 0;
@@ -384,12 +388,16 @@ export function resolveStyles(source: SourceDocument, root: PlannedNode, registr
   // The semantic output starts at <body>, while authored CSS frequently puts
   // inherited foundations on html/:root/:host. Resolve the virtual document
   // element too, or declarations such as Tailwind's root line-height vanish.
-  const nodes = [matching.virtualRoot, ...allNodes(root)];
+  const universalRoot: PlannedNode = { nodeId: "g2p-universal-root", originalTag: "*", tag: "*", role: "document-foundation", block: null, classes: [], oldClasses: [], attributes: {}, text: "", children: [] };
+  const nodes = [matching.virtualRoot, universalRoot, ...allNodes(root)];
   const declarationOrders = new Map(source.declarations.map((declaration, index) => [declaration, index]));
   for (const node of nodes) {
     const sourceDeclarations = source.declarations.filter((declaration) => {
       if (declaration.sourceNodeId === node.nodeId) return true;
       const conditioned = conditionedSelector(declaration);
+      const universal = universalFoundationSelector(conditioned.selector);
+      if (universal) return node === universalRoot;
+      if (node === universalRoot) return false;
       return selectorMatches(conditioned.selector, node, matching);
     });
     const deduplicated = new Map<string, { declaration: typeof sourceDeclarations[number]; order: number; condition?: StyleCondition }>();
