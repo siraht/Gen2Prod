@@ -47,6 +47,14 @@ describe("validation gates", () => {
     expect(report.gates.find((gate) => gate.gate === "J")?.passed).toBeFalse();
     expect(report.passed).toBeFalse();
   });
+
+  test("accepts an aria-named form control without requiring an unrelated id", async () => {
+    const compiled = await compiledHero();
+    const html = compiled.html.replace("</main>", '<input type="search" aria-label="Search products">\n</main>');
+    const report = await validate({ ...contextFromCompiled(compiled, thresholds), html });
+    const accessibility = report.gates.find((gate) => gate.gate === "E")!;
+    expect(accessibility.assertions.find((item) => item.id === "static-a11y")?.passed).toBeTrue();
+  });
 });
 
 describe("image comparison calibration", () => {

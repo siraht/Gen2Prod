@@ -182,7 +182,11 @@ async function accessibilityGate(context: ValidationContext): Promise<GateResult
       ...anchors.filter((element) => !element.attributes.href).map(() => "anchor missing href"),
       ...buttons.filter((element) => !element.attributes.type).map(() => "button missing explicit type"),
       ...images.filter((element) => !("alt" in element.attributes)).map(() => "image missing alt strategy"),
-      ...controls.filter((element) => !element.attributes.id || (!labels.has(element.attributes.id) && !element.attributes["aria-label"] && !element.attributes["aria-labelledby"])).map(() => "form control missing label"),
+      ...controls.filter((element) => {
+        const namedDirectly = Boolean(element.attributes["aria-label"] || element.attributes["aria-labelledby"]);
+        const namedByLabel = Boolean(element.attributes.id && labels.has(element.attributes.id));
+        return !namedDirectly && !namedByLabel;
+      }).map(() => "form control missing label"),
       ...divButtons.map(() => "noninteractive element styled as button"),
       ...missingHooks.map((hook) => `behavior hook removed: ${hook}`),
       ...focusSuppressions.map(() => "focus outline suppressed without a verified replacement"),
