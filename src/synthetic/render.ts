@@ -37,50 +37,53 @@ function allNodes(root: CanonicalNode): CanonicalNode[] {
   return [root, ...root.children.flatMap(allNodes)];
 }
 
-function renderRule(className: string, styles: Record<string, string>): string {
-  const declarations = Object.entries(styles).map(([property, value]) => `    ${property}: ${value};`).join("\n");
+function indent(value: string, spaces: number): string {
+  const prefix = " ".repeat(spaces);
+  return value.split("\n").map((line) => `${prefix}${line}`).join("\n");
+}
+
+function renderConditional(entry: CanonicalNode["conditionalStyles"][number], spaces: number): string {
+  const declarations = Object.entries(entry.styles).map(([property, value]) => `${property}: ${value};`).join("\n");
+  const states = entry.condition.states.map((state) => `:${state}`).join("");
+  const pseudo = entry.condition.pseudo ?? "";
+  let rule = states || pseudo ? `&${states}${pseudo} {\n${indent(declarations, 2)}\n}` : declarations;
+  for (const supports of [...entry.condition.supports].reverse()) rule = `@supports ${supports} {\n${indent(rule, 2)}\n}`;
+  for (const media of [...entry.condition.media].reverse()) rule = `@media ${media} {\n${indent(rule, 2)}\n}`;
+  return indent(rule, spaces);
+}
+
+function renderRule(className: string, styles: Record<string, string>, conditionalStyles: CanonicalNode["conditionalStyles"]): string {
+  const declarations = Object.entries(styles).map(([property, value]) => `${property}: ${value};`).join("\n");
+  const content = [declarations ? indent(declarations, className.includes("__") || className.includes("--") ? 4 : 2) : "", ...conditionalStyles.map((entry) => renderConditional(entry, className.includes("__") || className.includes("--") ? 4 : 2))].filter(Boolean).join("\n\n");
   if (className.includes("__")) {
     const suffix = className.slice(className.indexOf("__"));
-    return `  &${suffix} {\n${declarations}\n  }`;
+    return `  &${suffix} {\n${content}\n  }`;
   }
   if (className.includes("--")) {
     const suffix = className.slice(className.indexOf("--"));
-    return `  &${suffix} {\n${declarations}\n  }`;
+    return `  &${suffix} {\n${content}\n  }`;
   }
-  return declarations.replace(/^    /gm, "  ");
+  return content;
 }
 
 export function renderScss(spec: CanonicalPageSpec): string {
   const nodes = allNodes(spec.root);
-  const groups = new Map<string, Map<string, Record<string, string>>>();
+  const groups = new Map<string, Map<string, { styles: Record<string, string>; conditionalStyles: CanonicalNode["conditionalStyles"] }>>();
   for (const current of nodes) {
-    if (Object.keys(current.styles).length === 0 || current.classes.length === 0) continue;
+    if ((Object.keys(current.styles).length === 0 && current.conditionalStyles.length === 0) || current.classes.length === 0) continue;
     const styledClass = current.classes.find((className) => className.includes("__")) ?? current.classes.find((className) => !className.includes("--")) ?? current.classes[0];
     if (!styledClass) continue;
     const block = styledClass.split(/__|--/)[0]!;
-    const rules = groups.get(block) ?? new Map<string, Record<string, string>>();
-    rules.set(styledClass, current.styles);
+    const rules = groups.get(block) ?? new Map<string, { styles: Record<string, string>; conditionalStyles: CanonicalNode["conditionalStyles"] }>();
+    rules.set(styledClass, { styles: current.styles, conditionalStyles: current.conditionalStyles });
     groups.set(block, rules);
   }
 
   const blocks = [...groups.entries()].map(([block, rules]) => {
     const ordered = [...rules.entries()].sort(([left], [right]) => left === block ? -1 : right === block ? 1 : left.localeCompare(right));
-    return `.${block} {\n${ordered.map(([className, styles]) => renderRule(className, styles)).join("\n\n")}\n}`;
+    return `.${block} {\n${ordered.map(([className, rule]) => renderRule(className, rule.styles, rule.conditionalStyles)).join("\n\n")}\n}`;
   }).join("\n\n");
-  const conditionalRules = nodes.flatMap((current) => {
-    const styledClass = current.classes.find((className) => className.includes("__")) ?? current.classes.find((className) => !className.includes("--")) ?? current.classes[0];
-    if (!styledClass) return [];
-    return current.conditionalStyles.map((entry) => {
-      const declarations = Object.entries(entry.styles).map(([property, value]) => `    ${property}: ${value};`).join("\n");
-      const states = entry.condition.states.map((state) => `:${state}`).join("");
-      const pseudo = entry.condition.pseudo ?? "";
-      let rule = `.${styledClass}${states}${pseudo} {\n${declarations}\n}`;
-      for (const supports of [...entry.condition.supports].reverse()) rule = `@supports ${supports} {\n  ${rule.replaceAll("\n", "\n  ")}\n}`;
-      for (const media of [...entry.condition.media].reverse()) rule = `@media ${media} {\n  ${rule.replaceAll("\n", "\n  ")}\n}`;
-      return rule;
-    });
-  }).join("\n\n");
-  return `:root {\n${tokenCss(spec)}\n}\n\n${blocks}${conditionalRules ? `\n\n${conditionalRules}` : ""}\n`;
+  return `:root {\n${tokenCss(spec)}\n}\n\n${blocks}\n`;
 }
 
 export function renderGold(spec: CanonicalPageSpec): { html: string; scss: string; css: string } {

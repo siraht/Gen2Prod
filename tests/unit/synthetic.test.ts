@@ -4,6 +4,7 @@ import { corruptFixture } from "../../src/synthetic/corrupt.ts";
 import { normalFormFromSpec, renderGold } from "../../src/synthetic/render.ts";
 import { CanonicalPageSpecSchema, CorruptionTraceSchema } from "../../src/synthetic/types.ts";
 import { NormalFormSchema } from "../../src/schemas/normal-form.ts";
+import { analyzeCssSelectorContract, analyzeScssNestingContract } from "../../src/validation/styling-contract.ts";
 
 describe("synthetic curriculum", () => {
   test("contains all first-benchmark archetypes", () => {
@@ -22,6 +23,14 @@ describe("synthetic curriculum", () => {
     expect(rendered.css).toContain("grid-template-columns: 1fr");
     const normalForm = NormalFormSchema.parse(normalFormFromSpec(fixture));
     expect(normalForm.styles.some((style) => style.declarations.some((declaration) => declaration.condition?.media.includes("(max-width: 47.99rem)")))).toBeTrue();
+  });
+
+  test("keeps every gold archetype inside the nested BEM styling contract", () => {
+    for (const fixture of createArchetypes()) {
+      const rendered = renderGold(fixture);
+      expect(analyzeScssNestingContract(rendered.scss).violations).toEqual([]);
+      expect(analyzeCssSelectorContract(rendered.css).violations).toEqual([]);
+    }
   });
 
   test("preserves exact node lineage through composed corruption", () => {
