@@ -20,6 +20,23 @@ export type CaptureImageTargetOptions = {
   temporalProbeDelayMs?: number | undefined;
 };
 
+async function boundedStage<T>(page: import("playwright-core").Page, label: string, milliseconds: number, action: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      action(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          void page.close({ runBeforeUnload: false }).catch(() => undefined);
+          reject(new Error(`Image-only ${label} exceeded ${milliseconds}ms`));
+        }, milliseconds);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 function imageDimensions(bytes: Uint8Array): { width: number; height: number } {
   const image = PNG.sync.read(Buffer.from(bytes));
   return { width: image.width, height: image.height };
@@ -93,12 +110,12 @@ export async function captureImageTarget(options: CaptureImageTargetOptions): Pr
   let positions: number[] = [];
   let pageHeight = viewport.height;
   try {
-    await page.goto(options.url, { waitUntil: "load", timeout: 45_000 });
+    await boundedStage(page, "navigation", 60_000, () => page.goto(options.url, { waitUntil: "load", timeout: 45_000 }));
     await page.evaluate(() => Promise.race([
       new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
       new Promise<void>((resolve) => setTimeout(resolve, 1_000)),
     ]));
-    await waitForVisualAssets(page);
+    await boundedStage(page, "visual asset wait", 20_000, () => waitForVisualAssets(page));
 
     if (capturePolicy === "visual-probe-sequence") {
       const temporalFirst = join(options.outputDirectory, "temporal-1.png");
@@ -115,10 +132,10 @@ export async function captureImageTarget(options: CaptureImageTargetOptions): Pr
     frames.push(await frame(initialPath, options.outputDirectory, { frameId: "initial", kind: "initial", viewport, scrollY: 0 }));
 
     if (capturePolicy !== "still") {
-      const materialized = await materializeByScrolling(page);
+      const materialized = await boundedStage(page, "scroll materialization", 60_000, () => materializeByScrolling(page));
       positions = materialized.positions;
       pageHeight = materialized.pageHeight;
-      await waitForVisualAssets(page);
+      await boundedStage(page, "post-scroll visual asset wait", 20_000, () => waitForVisualAssets(page));
       await page.addStyleTag({ content: "*,*::before,*::after{animation-play-state:paused!important;animation-delay:0s!important;transition-duration:0s!important;caret-color:transparent!important;scroll-behavior:auto!important}" });
       const targetPath = join(options.outputDirectory, "target-full-page.png");
       await page.screenshot({ path: targetPath, fullPage: true, animations: "disabled", timeout: 45_000 });
