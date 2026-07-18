@@ -1,0 +1,34 @@
+import { describe, expect, test } from "bun:test";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { PNG } from "pngjs";
+import { sha256 } from "../../src/core/hash.ts";
+import { buildImageTarget } from "../../src/image-only/build.ts";
+
+describe("image-only build", () => {
+  test("emits semantic BEM HTML, governed SCSS, and strict provenance", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "g2p-image-build-"));
+    const image = new PNG({ width: 360, height: 600, colorType: 6 });
+    image.data.fill(255);
+    const bytes = PNG.sync.write(image);
+    const hash = sha256(bytes);
+    await Bun.write(join(directory, "target.png"), bytes);
+    await Bun.write(join(directory, "image-target.json"), JSON.stringify({ schemaVersion: "0.1.0", targetId: "sample", projectId: "sample", split: "train", acquisition: { kind: "uploaded-image", capturePolicy: "still", capturedAt: "2026-07-18T00:00:00.000Z", viewport: { width: 360, height: 600 }, deviceScaleFactor: 1, scrollPositionsVisited: 0, animations: "preserved" }, frames: [{ frameId: "initial", kind: "uploaded-mockup", path: "target.png", sha256: hash, width: 360, height: 600, viewport: { width: 360, height: 600 }, scrollY: 0 }], builderInputs: { images: ["target.png"] }, quarantinedArtifacts: [{ path: "private.html", kind: "source-html", permittedUse: "post-build-audit" }], authority: { pixels: "authoritative-for-captured-frame", visibleText: "advisory-until-reviewed", semantics: "hypothesis-only", behavior: "hypothesis-only", responsiveRules: "unknown-outside-captured-viewports", destinationsAndActions: "unknown" } }));
+    await Bun.write(join(directory, "image-analysis.json"), JSON.stringify({ schemaVersion: "0.1.0", targetId: "sample", sourceFrameHash: hash, dimensions: { width: 360, height: 600 }, palette: [{ hex: "#ffffff", proportion: 1 }], horizontalBands: [{ y: 0, height: 100, color: "#ffffff", confidence: 0.8 }, { y: 100, height: 500, color: "#ffffff", confidence: 0.8 }], regions: [{ regionId: "header", bbox: { x: 0, y: 0, width: 360, height: 100 }, background: "#ffffff", foreground: "#000000", visualRole: "header", imageDominance: 0.1, confidence: 0.8, evidence: ["top"] }, { regionId: "hero", bbox: { x: 0, y: 100, width: 360, height: 500 }, background: "#ffffff", foreground: "#000000", visualRole: "hero", imageDominance: 0.1, confidence: 0.8, evidence: ["large"] }], text: [{ observationId: "t1", text: "Brand", bbox: { x: 20, y: 30, width: 80, height: 20 }, confidence: 0.9, source: "ocr", reviewStatus: "unreviewed" }, { observationId: "t2", text: "Build from pixels", bbox: { x: 30, y: 180, width: 280, height: 48 }, confidence: 0.9, source: "ocr", reviewStatus: "unreviewed" }], extraction: { algorithm: "test", downsample: 8, ocrProvider: "test" } }));
+    const result = await buildImageTarget({ manifestPath: join(directory, "image-target.json"), outputDirectory: join(directory, "build") });
+    const html = await Bun.file(result.htmlPath).text();
+    const scss = await Bun.file(result.scssPath).text();
+    const provenance = await Bun.file(result.provenancePath).json() as { sourceUrlUsedByBuilder: boolean; quarantinedInputsUsed: unknown[] };
+    expect(html).toContain('<header class="site-header');
+    expect(html).toContain('<main class="image-page__main"');
+    expect(html).toContain('<h1 class="hero__title"');
+    expect(html).not.toContain("private.html");
+    expect(html).not.toContain("<script");
+    expect(scss).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(scss).not.toContain("url(target.png)");
+    expect(provenance.sourceUrlUsedByBuilder).toBe(false);
+    expect(provenance.quarantinedInputsUsed).toEqual([]);
+    expect(result.rasterCoverage).toBeLessThanOrEqual(0.28);
+  });
+});
