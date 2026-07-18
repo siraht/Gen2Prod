@@ -20,6 +20,10 @@ function oldClasses(node: DomNode): string[] {
   return node.attributes.find((attribute) => attribute.name === "class")?.value.split(/\s+/).filter(Boolean) ?? [];
 }
 
+function descendantClasses(node: DomNode): string[] {
+  return [...node.children.flatMap((child) => [...oldClasses(child), ...descendantClasses(child)])];
+}
+
 function semanticTag(node: DomNode, parent: DomNode | undefined, useStableNodeHints: boolean): { tag: string; confidence: "high" | "medium" | "low"; role: string } {
   const id = node.nodeId.toLowerCase();
   const attrs = attributes(node);
@@ -43,6 +47,7 @@ function semanticTag(node: DomNode, parent: DomNode | undefined, useStableNodeHi
   if (id === "contact-form") return { tag: "form", confidence: "high", role: "form" };
   if (id.includes("label")) return { tag: "label", confidence: "medium", role: "field-label" };
   if (id.includes("submit")) return { tag: "button", confidence: "medium", role: "submit" };
+  if (/(?:^|-)(?:inner|content|actions|media)$/.test(id) || oldClasses(node).some((className) => /__(?:inner|content|actions|media)$/.test(className))) return { tag: "div", confidence: "high", role: "component-container" };
   if (attrs["aria-labelledby"] || node.children.some((child) => /^h[1-6]$/.test(child.tag))) return { tag: "section", confidence: "medium", role: "titled-region" };
   return { tag: node.tag, confidence: "low", role: "generic-container" };
 }
@@ -59,6 +64,9 @@ function explicitRole(node: DomNode): string {
 
 function rootBlock(node: DomNode, semantic: { tag: string }, parentBlock: string | null, useStableNodeHints: boolean): string | null {
   const id = node.nodeId.toLowerCase();
+  if (node.tag === "body") return "page";
+  const existingBlock = oldClasses(node).find((className) => descendantClasses(node).some((candidate) => candidate.startsWith(`${className}__`)));
+  if (existingBlock) return existingBlock;
   if (useStableNodeHints && BLOCK_ALIASES[id]) return BLOCK_ALIASES[id];
   if (useStableNodeHints && /^feature-\d+$/.test(id)) return "feature-card";
   if (useStableNodeHints && /^plan-\d+$/.test(id)) return "pricing-card";
@@ -82,8 +90,12 @@ function elementName(nodeId: string, block: string): string {
     "testimonial-inner": "inner", "testimonial-title": "title",
     "contact-inner": "inner", "contact-title": "title",
     "site-header": "root", "primary-nav": "nav", "nav-list": "list",
+    "email-input": "input", "email-label": "label", "form-submit": "action", "navigation-title": "title",
   };
   if (aliases[nodeId]) return aliases[nodeId];
+  if (/^faq-summary-?\d*$/.test(nodeId)) return "question";
+  if (/^faq-answer-?\d*$/.test(nodeId)) return "answer";
+  if (nodeId === "quote-text") return "quote";
   const prefixes = [block, block.replace("-grid", "s"), "hero", "faq", "feature", "plan", "quote", "contact", "pricing", "testimonial", "nav", "site-header"];
   let result = nodeId;
   for (const prefix of prefixes) result = result.replace(new RegExp(`^${prefix}-?\\d*-?`), "");
@@ -99,10 +111,27 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
   const isNewBlock = block !== null && block !== parentBlock;
   let classes: string[] = [];
   if (node.tag === "body") classes = ["page"];
-  else if (block && isNewBlock) classes = [block];
+  else if (block && isNewBlock) classes = semantic.tag === "li" && parentBlock ? [`${parentBlock}__item`, block] : [block];
   else if (block && !["main", "html"].includes(semantic.tag)) classes = [`${block}__${elementName(node.nodeId, block)}`];
-  if (semantic.tag === "a" && (node.nodeId.includes("cta") || node.text.toLowerCase().includes("choose"))) classes = ["button", "button--primary"];
+  const existingBem = oldClasses(node).filter((className) => className.includes("__") || className.includes("--"));
+  if (existingBem.length > 0) {
+    const bases = oldClasses(node).filter((className) => existingBem.some((candidate) => candidate.startsWith(`${className}--`)) || descendantClasses(node).some((candidate) => candidate.startsWith(`${className}__`)));
+    const preserved = oldClasses(node).filter((className) => existingBem.includes(className) || bases.includes(className));
+    const missingModifierBases = existingBem.filter((className) => className.includes("--")).map((className) => className.split("--")[0]!).filter((base) => !preserved.includes(base));
+    classes = [...new Set([...missingModifierBases, ...preserved])];
+  }
+  if ((semantic.tag === "a" || semantic.tag === "button") && (node.nodeId.includes("cta") || node.nodeId.includes("submit") || node.text.toLowerCase().includes("choose"))) classes = ["button", "button--primary"];
+  if (block === "hero" && isNewBlock && plannedSourceHasId(node, "media")) classes = ["hero", "hero--split"];
   const attrs = attributes(node);
+  if (attrs["data-g2p-variants"]) {
+    classes = [...new Set([...classes, ...attrs["data-g2p-variants"].split(/\s+/).filter(Boolean)])];
+    delete attrs["data-g2p-variants"];
+  }
+  if (semantic.tag === "a" && attrs["data-g2p-destination"] && !attrs.href) {
+    attrs.href = attrs["data-g2p-destination"];
+    delete attrs["data-g2p-destination"];
+  }
+  if (["input", "select", "textarea"].includes(semantic.tag) && !attrs["aria-label"] && attrs.name) attrs["aria-label"] = attrs.name.replace(/[-_]+/g, " ").replace(/^./, (value) => value.toUpperCase());
   for (const className of oldClasses(node)) {
     if (/^(js-|qa-|e2e-)/.test(className)) attrs["data-hook"] = className;
   }
@@ -121,10 +150,39 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
   };
 }
 
+function plannedSourceHasId(node: DomNode, fragment: string): boolean {
+  return node.nodeId.includes(fragment) || node.children.some((child) => plannedSourceHasId(child, fragment));
+}
+
 export function inferSemantics(source: SourceDocument, options: { useStableNodeHints?: boolean } = {}): SemanticPlan {
   const counts = { high: 0, medium: 0, low: 0 };
   const review: SemanticPlan["review"] = [];
-  return { root: planNode(source.dom, undefined, null, counts, review, options.useStableNodeHints ?? true), confidenceSummary: counts, review };
+  const root = planNode(source.dom, undefined, null, counts, review, options.useStableNodeHints ?? true);
+  addMissingFormLabels(root, review);
+  return { root, confidenceSummary: counts, review };
+}
+
+function addMissingFormLabels(root: PlannedNode, review: SemanticPlan["review"]): void {
+  for (const form of plannedNodes(root).filter((node) => node.tag === "form")) {
+    const labelTargets = new Set(plannedNodes(form).filter((node) => node.tag === "label").map((node) => node.attributes.for).filter((value): value is string => Boolean(value)));
+    const rewrite = (parent: PlannedNode): void => {
+      const next: PlannedNode[] = [];
+      for (const child of parent.children) {
+        if (["input", "select", "textarea"].includes(child.tag) && child.attributes.id && labelTargets.has(child.attributes.id)) delete child.attributes["aria-label"];
+        if (["input", "select", "textarea"].includes(child.tag) && child.attributes.id && !labelTargets.has(child.attributes.id)) {
+          const block = form.block ?? "form";
+          const nodeId = child.nodeId.replace(/-input$/, "-label");
+          next.push({ nodeId, originalTag: "label", tag: "label", role: "field-label", block, classes: [`${block}__label`], oldClasses: [], attributes: { for: child.attributes.id }, text: (child.attributes.name ?? "Field").replace(/[-_]+/g, " ").replace(/^./, (value) => value.toUpperCase()), children: [] });
+          delete child.attributes["aria-label"];
+          review.push({ nodeId, concern: "generated visible label copy requires content-authority review", evidenceNeeded: ["approved form content"] });
+        }
+        next.push(child);
+        rewrite(child);
+      }
+      parent.children = next;
+    };
+    rewrite(form);
+  }
 }
 
 function plannedNodes(root: PlannedNode): PlannedNode[] {

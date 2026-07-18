@@ -38,7 +38,11 @@ function classDegradation(state: Mutable): void {
   const classNames = new Set([...state.html.matchAll(/class="([^"]+)"/g)].flatMap((match) => (match[1] ?? "").split(/\s+/)).filter(Boolean));
   const mapping = new Map([...classNames].map((name, index) => [name, `u-${index + 1}`]));
   const before = [...classNames].join(" ");
-  state.html = state.html.replace(/class="([^"]+)"/g, (_, names: string) => `class="${names.split(/\s+/).map((name) => mapping.get(name) ?? name).join(" ")}"`);
+  state.html = state.html.replace(/class="([^"]+)"/g, (_, names: string) => {
+    const values = names.split(/\s+/);
+    const modifiers = values.filter((name) => name.includes("--"));
+    return `class="${values.map((name) => mapping.get(name) ?? name).join(" ")}"${modifiers.length ? ` data-g2p-variants="${modifiers.join(" ")}"` : ""}`;
+  });
   for (const [from, to] of mapping) state.css = state.css.replaceAll(`.${from}`, `.${to}`);
   state.operations.push(operation("class-degradation", before, [...mapping.values()].join(" "), [], ["B"]));
 }
@@ -69,7 +73,7 @@ function componentCorruption(state: Mutable): void {
 function behaviorCorruption(state: Mutable): void {
   const anchor = state.html.match(/<a\s+([^>]*?)href="([^"]+)"([^>]*)>/);
   if (anchor?.[0]) {
-    const after = anchor[0].replace(/\s+href="[^"]+"/, "");
+    const after = anchor[0].replace(/\s+href="([^"]+)"/, ' data-g2p-destination="$1"');
     state.html = state.html.replace(anchor[0], after);
     state.operations.push(operation("behavior-corruption", anchor[0], after, [], ["E", "H"]));
     return;

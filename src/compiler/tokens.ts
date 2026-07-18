@@ -8,6 +8,8 @@ const GOVERNED = /^(color|background(?:-color)?|border(?:-.*)?|outline(?:-.*)?|p
 const STRUCTURAL_PROPERTIES = new Set(["display", "position", "inset", "top", "right", "bottom", "left", "grid-template-columns", "grid-template-rows", "grid-auto-flow", "flex-direction", "flex-wrap", "align-items", "justify-content", "inline-size", "block-size", "width", "height", "max-inline-size", "min-inline-size", "object-fit", "overflow", "list-style", "text-decoration", "cursor"]);
 
 export function classifyDeclaration(property: string, value: string): "governed-design-value" | "structural-constant" | "browser-default" | "content-dependent" | "exception-candidate" {
+  if (/^(auto|none|normal|inherit|initial|unset|revert)$/.test(value.trim())) return "structural-constant";
+  if (value.trim() === "0" && /^(margin|padding)(?:-|$)/.test(property)) return "structural-constant";
   if (STRUCTURAL_PROPERTIES.has(property)) return "structural-constant";
   if (GOVERNED.test(property)) return "governed-design-value";
   if (["content", "counter-increment", "quotes"].includes(property)) return "content-dependent";
@@ -68,7 +70,7 @@ export function resolveStyles(source: SourceDocument, root: PlannedNode, registr
   for (const node of allNodes(root)) {
     const sourceDeclarations = source.declarations.filter((declaration) => {
       const classes = selectorClasses(declaration.selector);
-      return classes.length > 0 && classes.some((className) => node.oldClasses.includes(className));
+      return classes.length > 0 && classes.some((className) => node.oldClasses.includes(className) || node.classes.includes(className));
     });
     const deduplicated = new Map<string, typeof sourceDeclarations[number]>();
     for (const declaration of sourceDeclarations) deduplicated.set(declaration.property, declaration);

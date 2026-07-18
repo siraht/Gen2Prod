@@ -33,7 +33,7 @@ describe("static compilation", () => {
     const input = await fixtureInput();
     const output = await compileStaticPage({ htmlPath: input.htmlPath, cssPath: input.cssPath, tokenRegistry: input.spec.tokens });
     expect(output.html).toContain("<main>");
-    expect(output.html).toContain('<section aria-labelledby="hero-title" class="hero">');
+    expect(output.html).toContain('<section aria-labelledby="hero-title" class="hero hero--split">');
     expect(output.html).not.toContain("u-1");
     expect(output.scss).toContain(".hero");
     expect(output.scss).toContain("var(--space-m)");
