@@ -69,6 +69,23 @@ describe("static compilation", () => {
     }
   });
 
+  test("recovers explicit dialog and trigger behavior contracts", async () => {
+    const spec = createArchetypes().find((item) => item.archetype === "dialog")!;
+    const gold = renderGold(spec);
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-dialog-contract-"));
+    const htmlPath = join(directory, "page.html");
+    const cssPath = join(directory, "page.css");
+    await Bun.write(htmlPath, gold.html);
+    await Bun.write(cssPath, gold.css);
+    const output = await compileStaticPage({ htmlPath, cssPath, tokenRegistry: spec.tokens });
+    const dialog = output.plan.interactions.find((interaction) => interaction.kind === "dialog");
+    const trigger = output.plan.interactions.find((interaction) => interaction.nodeId === "dialog-trigger");
+    expect(dialog?.stateAttributes).toContain("open");
+    expect(dialog?.focusManagement).toContain("restore");
+    expect(trigger?.stateAttributes).toContain("aria-controls");
+    expect(trigger?.keyboard[0]).toContain("opens the controlled dialog");
+  });
+
   test("lowers embedded and inline CSS into governed BEM output", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-inline-compile-"));
     const htmlPath = join(directory, "page.html");

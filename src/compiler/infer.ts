@@ -532,10 +532,14 @@ export function buildBemGraph(plan: SemanticPlan): BemGraph {
 
 export function inferInteractions(plan: SemanticPlan): InteractionContract[] {
   return plannedNodes(plan.root).flatMap((node): InteractionContract[] => {
+    if (node.tag === "dialog" || node.attributes.role === "dialog" || node.attributes.role === "alertdialog") return [{ component: node.block ?? "dialog", nodeId: node.nodeId, kind: "dialog", keyboard: ["Tab and Shift+Tab remain within a modal dialog", "Escape closes when dismissal is permitted"], focusManagement: "move focus into the dialog on open and restore it to the invoking control on close", stateAttributes: ["open", "aria-modal", "aria-labelledby", "aria-describedby"], reducedMotion: "opening and closing remain understandable without motion" }];
     if (node.tag === "details") return [{ component: node.block ?? "disclosure", nodeId: node.nodeId, kind: "disclosure", keyboard: ["Enter or Space toggles"], focusManagement: "focus remains on summary", stateAttributes: ["open"], reducedMotion: "no required motion" }];
     if (node.tag === "form") return [{ component: node.block ?? "form", nodeId: node.nodeId, kind: "form", keyboard: ["Tab follows source order", "Enter submits where valid"], focusManagement: "invalid field receives focus", stateAttributes: ["aria-invalid"], reducedMotion: "no required motion" }];
     if (node.tag === "a") return [{ component: node.block ?? "link", nodeId: node.nodeId, kind: "link", keyboard: ["Enter navigates"], focusManagement: "native focus", stateAttributes: [], reducedMotion: "no required motion" }];
-    if (node.tag === "button") return [{ component: node.block ?? "button", nodeId: node.nodeId, kind: node.attributes.type === "submit" ? "button" : "button", keyboard: ["Enter or Space activates"], focusManagement: "native focus", stateAttributes: [], reducedMotion: "no required motion" }];
+    if (node.tag === "button") {
+      const dialogTrigger = node.attributes["aria-haspopup"] === "dialog" && Boolean(node.attributes["aria-controls"]);
+      return [{ component: node.block ?? "button", nodeId: node.nodeId, kind: "button", keyboard: [dialogTrigger ? "Enter or Space opens the controlled dialog" : "Enter or Space activates"], focusManagement: dialogTrigger ? "move focus into the controlled dialog and restore it to this trigger on close" : "native focus", stateAttributes: dialogTrigger ? ["aria-haspopup", "aria-controls", "aria-expanded"] : [], reducedMotion: dialogTrigger ? "dialog state remains understandable without motion" : "no required motion" }];
+    }
     return [];
   });
 }
