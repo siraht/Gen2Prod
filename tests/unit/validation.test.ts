@@ -38,4 +38,11 @@ describe("validation gates", () => {
       expect(report.gates.find((gate) => gate.gate === mutation.expectedGate)?.passed).toBeFalse();
     }
   });
+
+  test("does not allow strict refactors to bypass paired visual evidence", async () => {
+    const compiled = await compiledHero();
+    const report = await validate({ ...contextFromCompiled(compiled, thresholds), mode: "legacy-conversion", profile: "refactor" });
+    expect(report.gates.find((gate) => gate.gate === "J")?.passed).toBeFalse();
+    expect(report.passed).toBeFalse();
+  });
 });

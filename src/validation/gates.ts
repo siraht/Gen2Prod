@@ -265,7 +265,7 @@ async function visualGate(context: ValidationContext): Promise<{ gate: GateResul
   }
   const visualIsHard = Boolean(context.visualTarget || (context.mode === "legacy-conversion" && context.profile === "refactor") || context.mode === "optimization-only");
   const result = await gate("J", "Visual target conformance", visualIsHard, async () => {
-    if (!visual && !context.visualTarget) return { assertions: [assertion("visual-evidence", true, "info", "No visual target supplied; gate not applicable")], metrics: {} };
+    if (!visual && !context.visualTarget) return { assertions: [assertion("visual-evidence", !visualIsHard, visualIsHard ? "error" : "info", visualIsHard ? "Paired browser evidence is required by this mode/profile" : "No visual target supplied; gate not applicable")], metrics: {} };
     if (!visual) return { assertions: [assertion("visual-evidence", false, "error", "Visual target exists but paired capture evidence is missing")], metrics: {} };
     return { assertions: [assertion("pixel-threshold", visual.pixelDifferenceRatio <= context.thresholds.maxVisualPixelRatio, "error", `Pixel difference ratio ${visual.pixelDifferenceRatio.toFixed(4)}`, { expected: context.thresholds.maxVisualPixelRatio, actual: visual.pixelDifferenceRatio }), assertion("critical-layout", visual.layout.criticalMax <= 0.02, "error", `Critical-region layout delta ${visual.layout.criticalMax.toFixed(4)}`), assertion("node-accounting", visual.unmatchedVisibleNodes === 0, "error", `${visual.unmatchedVisibleNodes} unmatched visible nodes`)], metrics: { pixelDifferenceRatio: visual.pixelDifferenceRatio, layoutMean: visual.layout.mean, layoutP95: visual.layout.p95, layoutMax: visual.layout.max, criticalLayoutMax: visual.layout.criticalMax, unmatchedVisibleNodes: visual.unmatchedVisibleNodes } };
   });
@@ -282,5 +282,5 @@ export async function validate(context: ValidationContext): Promise<ValidationRe
 }
 
 export function contextFromCompiled(compiled: CompiledPage, thresholds: ValidationContext["thresholds"]): ValidationContext {
-  return { html: compiled.html, scss: compiled.scss, css: compiled.css, plan: compiled.plan, thresholds, mode: "legacy-conversion", profile: "refactor" };
+  return { html: compiled.html, scss: compiled.scss, css: compiled.css, plan: compiled.plan, thresholds };
 }

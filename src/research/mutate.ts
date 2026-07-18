@@ -11,6 +11,10 @@ const POLICY_PROPOSALS: Proposal[] = [
   { field: "candidates.semantic", values: [1, 2, 3], hypothesis: (_, after) => `${after} semantic candidate(s) improve conservative candidate selection under the fixed evaluator.` },
   { field: "thresholds.semanticReview", values: [0.55, 0.65, 0.75], hypothesis: (_, after) => `A semantic review threshold of ${after} reduces either unsafe automation or avoidable review.` },
   { field: "modalities.crossPageInventory", values: [false, true], hypothesis: (_, after) => after ? "Cross-page context reduces component naming drift." : "Single-page fixtures do not justify cross-page inventory cost." },
+  { field: "modalities.accessibilityTree", values: [false, true], hypothesis: (_, after) => after ? "Accessibility-tree inference evidence resolves semantic ambiguity enough to justify its cost." : "Deterministic semantics and hard accessibility validation cover this benchmark without AX inference cost." },
+  { field: "modalities.computedStyles", values: [false, true], hypothesis: (_, after) => after ? "Computed-style inference evidence changes token or component decisions enough to justify its cost." : "Source declarations and token authority cover this benchmark without computed-style inference cost." },
+  { field: "modalities.renderedDom", values: [false, true], hypothesis: (_, after) => after ? "Rendered-DOM inference evidence resolves conditional structure enough to justify its cost." : "The static source corpus has no decision-changing rendered structure." },
+  { field: "modalities.pageIntent", values: [false, true], hypothesis: (_, after) => after ? "Page intent improves semantic contracts enough to justify its cost." : "Explicit fixture structure covers this benchmark without an extra intent inference call." },
 ];
 
 const PASS_PROPOSALS: Proposal[] = [
