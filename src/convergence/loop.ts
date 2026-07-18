@@ -35,7 +35,7 @@ export async function convergeVisualTarget(compiled: CompiledPage, target: Visua
   let currentScss = compiled.scss;
   let currentCss = incumbent.css;
   let currentCapture = incumbent.capture;
-  let currentLoss = (await imageDifference(target.path, currentCapture.captures[0]!.screenshot)).ratio;
+  let currentLoss = (await imageDifference(target.path, currentCapture.captures[0]!.screenshot, join(outputDirectory, "diff", "incumbent-vs-target.png"))).ratio;
   const initialLoss = currentLoss;
   const iterations: ConvergenceIteration[] = [];
   let stopReason = currentLoss <= options.threshold ? "approved visual threshold met" : "maximum iterations reached";
@@ -46,8 +46,9 @@ export async function convergeVisualTarget(compiled: CompiledPage, target: Visua
     for (const token of numericTokenCandidates(currentScss)) for (const factor of [0.94, 1.06]) {
       const name = `${token.name}:${factor}`;
       const candidateScss = changeToken(currentScss, token, factor);
-      const candidate = await materialize(join(outputDirectory, `iteration-${iteration + 1}`, name.replace(/[^a-z0-9_-]/gi, "-")), compiled.html, candidateScss, target.viewport.width);
-      const candidateLoss = (await imageDifference(target.path, candidate.capture.captures[0]!.screenshot)).ratio;
+      const candidateDirectory = join(outputDirectory, `iteration-${iteration + 1}`, name.replace(/[^a-z0-9_-]/gi, "-"));
+      const candidate = await materialize(candidateDirectory, compiled.html, candidateScss, target.viewport.width);
+      const candidateLoss = (await imageDifference(target.path, candidate.capture.captures[0]!.screenshot, join(candidateDirectory, "candidate-vs-target.png"))).ratio;
       const report = await validate(contextFromCompiled({ ...compiled, scss: candidateScss, css: candidate.css }, { minBemCoverage: 0.95, minTokenCoverage: 0.95, maxVisualPixelRatio: options.threshold, provisional: true }));
       const failures = report.gates.filter((gate) => gate.hard && !gate.passed).length;
       const keep = failures <= baselineFailures && candidateLoss < currentLoss && (!best || candidateLoss < best.loss);
@@ -58,6 +59,7 @@ export async function convergeVisualTarget(compiled: CompiledPage, target: Visua
     currentScss = best.scss; currentCss = best.css; currentCapture = best.capture; currentLoss = best.loss;
     if (currentLoss <= options.threshold) stopReason = "approved visual threshold met";
   }
+  await imageDifference(target.path, currentCapture.captures[0]!.screenshot, join(outputDirectory, "diff", "final-vs-target.png"));
   const result = { html: compiled.html, scss: currentScss, css: currentCss, capture: currentCapture, initialLoss, finalLoss: currentLoss, iterations, stopReason };
   await writeJsonAtomic(join(outputDirectory, "convergence-report.json"), { ...result, capture: { environment: result.capture.environment, captures: result.capture.captures.map((capture) => ({ ...capture, dom: `[${capture.dom.length} nodes]`, accessibilityTree: `[${capture.accessibilityTree.length} nodes]` })) } });
   return result;

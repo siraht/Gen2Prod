@@ -15,4 +15,4 @@ test("runs frozen keep/revert experiments and records trajectories", async () =>
   expect(summary.experiments.every((experiment) => experiment.mutationControlRecall === 1)).toBeTrue();
   expect(await Bun.file(join(directory, "work", "research", "results.tsv")).exists()).toBeTrue();
   expect((await Bun.file(join(directory, "work", "research", "trajectories.jsonl")).text()).split("\n").filter(Boolean).length).toBeGreaterThan(0);
-});
+}, 60_000);

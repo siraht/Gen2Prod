@@ -7,6 +7,7 @@ import { ExperimentResultSchema, TrajectorySchema, type ExperimentResult, type T
 import { defaultPolicy } from "./policy.ts";
 import { evaluatePolicy } from "./evaluate.ts";
 import { proposeMutation, type MutationTrack } from "./mutate.ts";
+import { openCaptureSession, type CaptureSession } from "../evidence/capture.ts";
 
 export type ResearchOptions = {
   manifestPath: string;
@@ -38,7 +39,7 @@ function trajectories(experiment: ExperimentResult, evaluation: Awaited<ReturnTy
     experimentId: experiment.experimentId,
     fixtureId: fixture.fixtureId,
     split: fixture.split,
-    observations: { semanticError: fixture.fitness.semanticContractError, bemError: fixture.fitness.bemComponentError, unaccountedDeclarations: fixture.fitness.unaccountedDeclarations, hardGateFailures: fixture.fitness.criticalGateFailures, reviewBurden: fixture.fitness.reviewBurden },
+    observations: { semanticError: fixture.fitness.semanticContractError, bemError: fixture.fitness.bemComponentError, unaccountedDeclarations: fixture.fitness.unaccountedDeclarations, hardGateFailures: fixture.fitness.criticalGateFailures, reviewBurden: fixture.fitness.reviewBurden, dirtyVisualLoss: fixture.metrics.dirtyVisualLoss ?? 0, candidateVisualLoss: fixture.metrics.candidateVisualLoss ?? fixture.fitness.visualLoss, visualRecovery: fixture.metrics.visualRecovery ?? 0, candidatePixelDifferenceRatio: fixture.metrics.candidatePixelDifferenceRatio ?? 0, markedCandidatePixelDifferenceRatio: fixture.metrics.markedCandidatePixelDifferenceRatio ?? 0, unmarkedCandidatePixelDifferenceRatio: fixture.metrics.unmarkedCandidatePixelDifferenceRatio ?? 0, unmarkedSemanticContractError: fixture.metrics.unmarkedSemanticContractError ?? 0, unmarkedBemComponentError: fixture.metrics.unmarkedBemComponentError ?? 0, observedPairUsedInFitness: fixture.metrics.observedPairUsedInFitness ?? 0, observedVisualRecovery: fixture.metrics.observedVisualRecovery ?? 1, candidateLayoutP95: fixture.metrics.candidateLayoutP95 ?? 0 },
     actions: fixture.policyActions,
     planSummary: { outputHash: fixture.outputHash, policyHash: evaluation.policyHash },
     verifierLabels: { hardGatesPass: fixture.hardGateFailures.length === 0, idempotent: fixture.outputHash === fixture.idempotenceHash, mutationControlsPass: evaluation.mutationControlRecall === 1 },
@@ -48,13 +49,13 @@ function trajectories(experiment: ExperimentResult, evaluation: Awaited<ReturnTy
   }));
 }
 
-export async function runResearch(options: ResearchOptions): Promise<ResearchSummary> {
+async function runResearchWithSession(options: ResearchOptions, captureSession: CaptureSession): Promise<ResearchSummary> {
   const root = join(options.workspace, "research");
   const experimentsDirectory = join(root, "experiments");
   await ensureDirectory(experimentsDirectory);
   const incumbentPath = join(root, `incumbent-${options.track}.json`);
   let incumbent = (await pathExists(incumbentPath)) ? TransformationPolicySchema.parse(await readJson(incumbentPath)) : defaultPolicy;
-  let incumbentEvaluation = await evaluatePolicy({ manifestPath: options.manifestPath, policy: incumbent, split: options.split, workDirectory: join(root, "baseline") });
+  let incumbentEvaluation = await evaluatePolicy({ manifestPath: options.manifestPath, policy: incumbent, split: options.split, workDirectory: join(root, "baseline"), captureSession });
   const initialFitness = incumbentEvaluation.fitness;
   const experiments: ExperimentResult[] = [];
   for (let iteration = 0; iteration < options.budget; iteration += 1) {
@@ -63,13 +64,13 @@ export async function runResearch(options: ResearchOptions): Promise<ResearchSum
     const directory = join(experimentsDirectory, experimentId);
     await ensureDirectory(directory);
     await writeJsonAtomic(join(directory, "candidate-policy.json"), mutation.candidate);
-    const candidateEvaluation = await evaluatePolicy({ manifestPath: options.manifestPath, policy: mutation.candidate, split: options.split, workDirectory: join(directory, "evaluation") });
+    const candidateEvaluation = await evaluatePolicy({ manifestPath: options.manifestPath, policy: mutation.candidate, split: options.split, workDirectory: join(directory, "evaluation"), captureSession });
     const controlsPass = candidateEvaluation.mutationControlRecall === 1;
     const improved = compareFitness(candidateEvaluation.fitness, incumbentEvaluation.fitness) < 0;
     const keep = controlsPass && improved && candidateEvaluation.frozenEvaluatorHash === incumbentEvaluation.frozenEvaluatorHash;
     let holdoutFitness: ExperimentResult["holdoutFitness"];
     if ((iteration + 1) % options.hiddenHoldoutEvery === 0) {
-      const holdout = await evaluatePolicy({ manifestPath: options.manifestPath, policy: mutation.candidate, split: "holdout", workDirectory: join(directory, "holdout") });
+      const holdout = await evaluatePolicy({ manifestPath: options.manifestPath, policy: mutation.candidate, split: "holdout", workDirectory: join(directory, "holdout"), captureSession });
       holdoutFitness = holdout.fitness;
     }
     const experiment = ExperimentResultSchema.parse({
@@ -102,4 +103,10 @@ export async function runResearch(options: ResearchOptions): Promise<ResearchSum
     }
   }
   return { incumbent, experiments, accepted: experiments.filter((item) => item.outcome === "keep").length, rejected: experiments.filter((item) => item.outcome === "revert").length, initialFitness, finalFitness: incumbentEvaluation.fitness };
+}
+
+export async function runResearch(options: ResearchOptions): Promise<ResearchSummary> {
+  const captureSession = await openCaptureSession();
+  try { return await runResearchWithSession(options, captureSession); }
+  finally { await captureSession.close(); }
 }

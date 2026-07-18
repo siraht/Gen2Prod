@@ -28,4 +28,6 @@ test("stops discrete convergence when the approved target threshold is met", asy
   expect(result.finalLoss).toBeLessThanOrEqual(0.001);
   expect(result.iterations).toHaveLength(0);
   expect(result.stopReason).toContain("threshold met");
+  expect(await Bun.file(join(directory, "converge", "diff", "incumbent-vs-target.png")).exists()).toBeTrue();
+  expect(await Bun.file(join(directory, "converge", "diff", "final-vs-target.png")).exists()).toBeTrue();
 });

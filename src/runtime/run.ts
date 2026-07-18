@@ -23,6 +23,7 @@ import type { PassEvent } from "../schemas/pass.ts";
 import { RunManifestSchema, type Mode, type Profile, type RunManifest } from "../schemas/artifacts.ts";
 import { TrajectorySchema } from "../schemas/research.ts";
 import { evaluateMutationControls, policyActions, policyCost } from "../research/evaluate.ts";
+import { compareCaptures } from "../validation/visual.ts";
 
 export type RunOptions = {
   input: string;
@@ -69,6 +70,17 @@ function emptyDelta() { return { losses: {}, gains: {}, costs: {}, risks: {}, pr
 
 function event(run: string, pass: string, policyHash: string, decision: PassEvent["decision"], rationale: string, gatesAfter: PassEvent["gatesAfter"] = []): PassEvent {
   return { eventId: crypto.randomUUID(), runId: run, timestamp: new Date().toISOString(), pass, policyHash, inputs: [], outputs: [], gatesBefore: [], gatesAfter, delta: emptyDelta(), decision, rationale, rollback: { kind: "artifact-snapshot", reference: "content-addressed artifact store" } };
+}
+
+async function writePairedVisualEvidence(baseline: CaptureResult, candidate: CaptureResult, outputDirectory: string): Promise<void> {
+  const conditions = [];
+  for (const after of candidate.captures) {
+    const before = baseline.captures.find((item) => item.viewport === after.viewport && item.theme === after.theme && item.state === after.state);
+    if (!before) continue;
+    const diffImage = join(outputDirectory, `baseline-vs-candidate-${after.viewport}-${after.theme}-${after.state}.png`);
+    conditions.push({ viewport: after.viewport, theme: after.theme, state: after.state, baselineScreenshot: before.screenshot, candidateScreenshot: after.screenshot, diffImage, metrics: await compareCaptures(before, after, diffImage) });
+  }
+  await writeJsonAtomic(join(outputDirectory, "visual-evaluation.json"), { schemaVersion: "0.1.0", conditions });
 }
 
 async function compileInput(options: RunOptions, outputDirectory: string, requiredActions: RequiredAction[]): Promise<{ compiled: CompiledPage; cssPath?: string; greenfield?: ReturnType<typeof generateGreenfield> }> {
@@ -123,6 +135,7 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
     if (convergence.finalLoss > options.config.validation.maxVisualPixelRatio) requiredActions.push({ id: "visual-target-review", summary: "Approve a design-system change or provide missing visual authority", detail: `Convergence stopped at loss ${convergence.finalLoss.toFixed(4)}: ${convergence.stopReason}. Supply the intended token/asset/content decision for the remaining gap.`, blocking: false });
     await replay.append(event(id, "visual-target-convergence", policyHash, convergence.finalLoss <= convergence.initialLoss ? "accepted" : "rejected", convergence.stopReason));
   }
+  if (baselineCapture && candidateCapture) await writePairedVisualEvidence(baselineCapture, candidateCapture, join(runDirectory, "capture", "diff"));
 
   const idempotenceDirectory = join(runDirectory, "idempotence");
   await ensureDirectory(idempotenceDirectory);

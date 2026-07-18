@@ -1,6 +1,7 @@
 import type { TransformationPolicy } from "../core/policy.ts";
 import type { EvaluationResult } from "../schemas/research.ts";
 import { evaluatePolicy } from "./evaluate.ts";
+import { openCaptureSession } from "../evidence/capture.ts";
 
 export type AblationResult = { id: "A" | "B" | "C" | "D" | "E" | "F"; evidence: string[]; evaluation: EvaluationResult };
 
@@ -15,12 +16,17 @@ const CONFIGURATIONS: { id: AblationResult["id"]; fields: (keyof TransformationP
 
 export async function evaluateModalityAblation(options: { manifestPath: string; policy: TransformationPolicy; split: "train" | "validation" | "holdout" | "all"; workDirectory: string }): Promise<AblationResult[]> {
   const results: AblationResult[] = [];
-  for (const configuration of CONFIGURATIONS) {
-    const policy = structuredClone(options.policy);
-    for (const field of Object.keys(policy.modalities) as (keyof TransformationPolicy["modalities"])[]) policy.modalities[field] = configuration.fields.includes(field);
-    policy.name = `${options.policy.name}-ablation-${configuration.id}`;
-    const evaluation = await evaluatePolicy({ manifestPath: options.manifestPath, policy, split: options.split, workDirectory: `${options.workDirectory}/ablation-${configuration.id}` });
-    results.push({ id: configuration.id, evidence: configuration.evidence, evaluation });
+  const captureSession = await openCaptureSession();
+  try {
+    for (const configuration of CONFIGURATIONS) {
+      const policy = structuredClone(options.policy);
+      for (const field of Object.keys(policy.modalities) as (keyof TransformationPolicy["modalities"])[]) policy.modalities[field] = configuration.fields.includes(field);
+      policy.name = `${options.policy.name}-ablation-${configuration.id}`;
+      const evaluation = await evaluatePolicy({ manifestPath: options.manifestPath, policy, split: options.split, workDirectory: `${options.workDirectory}/ablation-${configuration.id}`, captureSession });
+      results.push({ id: configuration.id, evidence: configuration.evidence, evaluation });
+    }
+  } finally {
+    await captureSession.close();
   }
   return results;
 }
