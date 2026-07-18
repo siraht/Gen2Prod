@@ -84,6 +84,15 @@ function unique<T extends string | number>(items: T[]): T[] {
   return [...new Set(items)].sort((left, right) => typeof left === "number" && typeof right === "number" ? left - right : String(left).localeCompare(String(right)));
 }
 
+export function captureEnvironmentFingerprint(environment: Record<string, unknown>): string {
+  const identityKeys = ["browser", "browserVersion", "os", "deviceScaleFactor", "colorProfile", "colorScheme", "locale", "timezone"];
+  const identity = Object.fromEntries(identityKeys.flatMap((key) => environment[key] === undefined ? [] : [[key, environment[key]]]));
+  const stabilization = environment.stabilization && typeof environment.stabilization === "object" && !Array.isArray(environment.stabilization)
+    ? Object.fromEntries(["animations", "reducedMotion"].flatMap((key) => (environment.stabilization as Record<string, unknown>)[key] === undefined ? [] : [[key, (environment.stabilization as Record<string, unknown>)[key]]]))
+    : undefined;
+  return hashJson({ ...identity, ...(stabilization && Object.keys(stabilization).length ? { stabilization } : {}) });
+}
+
 export function calibrateEvaluationResults(inputs: EvaluationInput[], overrides: Partial<CalibrationRequirements> = {}, rejected: { path: string; reason: string }[] = [], requested: string[] = inputs.map((input) => input.path)): CalibrationReport {
   const requirements = { ...defaultCalibrationRequirements, ...overrides };
   const evaluatorSafe = inputs.filter((input) => input.result.mutationControlRecall === 1);
@@ -104,7 +113,7 @@ export function calibrateEvaluationResults(inputs: EvaluationInput[], overrides:
     corruptionKinds: unique(samples.flatMap((sample) => sample.fixture.corruptionKinds ?? [])),
     seeds: unique(evaluatorSafe.flatMap((input) => input.result.benchmarkCoverage ? [input.result.benchmarkCoverage.seed] : [])),
     splits: unique(samples.map((sample) => sample.fixture.split)),
-    captureEnvironmentHashes: unique(evaluatorSafe.flatMap((input) => input.result.benchmarkCoverage?.captureEnvironments.map((environment) => hashJson(environment)) ?? [])),
+    captureEnvironmentHashes: unique(evaluatorSafe.flatMap((input) => input.result.benchmarkCoverage?.captureEnvironments.map(captureEnvironmentFingerprint) ?? [])),
     policyHashes: unique(evaluatorSafe.map((input) => input.result.policyHash)),
   };
   const gaps: string[] = [];

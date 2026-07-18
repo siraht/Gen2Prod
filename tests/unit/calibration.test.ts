@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { calibrateEvaluationResults } from "../../src/research/calibrate.ts";
+import { calibrateEvaluationResults, captureEnvironmentFingerprint } from "../../src/research/calibrate.ts";
 import { EvaluationResultSchema, type EvaluationResult } from "../../src/schemas/research.ts";
 
 const zeroFitness = {
@@ -47,6 +47,13 @@ function evaluation(options: { id: string; fixture: string; visual: number; bem:
 }
 
 describe("threshold calibration", () => {
+  test("does not count page-dependent font sets as independent browser environments", () => {
+    const base = { browser: "chromium", browserVersion: "150", os: "linux/x64", deviceScaleFactor: 1, fontSetHash: "font-a", stabilization: { animations: "disabled", reducedMotion: "reduce", randomSeed: 1 } };
+    const otherPage = { ...base, fontSetHash: "font-b", stabilization: { ...base.stabilization, randomSeed: 2 } };
+    expect(captureEnvironmentFingerprint(base)).toBe(captureEnvironmentFingerprint(otherPage));
+    expect(captureEnvironmentFingerprint(base)).not.toBe(captureEnvironmentFingerprint({ ...base, browser: "webkit" }));
+  });
+
   test("deduplicates correlated policy reruns and withholds sparse recommendations", () => {
     const first = evaluation({ id: "a", fixture: "fixture-a", visual: 0.01, bem: 1, token: 1, archetype: "hero", family: "generator-a", content: "saas", seed: 1, split: "train", environment: "chromium-a" });
     const duplicate = EvaluationResultSchema.parse({ ...first, evaluationId: "duplicate", policyHash: "another-policy" });
