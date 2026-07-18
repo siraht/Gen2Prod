@@ -140,8 +140,8 @@ function sampleEvenly<T>(values: T[], maximum: number): T[] {
   return [...selected].map((index) => values[index]!).filter(Boolean);
 }
 
-async function imageWidth(path: string): Promise<number | undefined> {
-  try { return PNG.sync.read(Buffer.from(await Bun.file(path).arrayBuffer())).width; }
+async function imageSize(path: string): Promise<{ width: number; height: number } | undefined> {
+  try { const image = PNG.sync.read(Buffer.from(await Bun.file(path).arrayBuffer())); return { width: image.width, height: image.height }; }
   catch { return undefined; }
 }
 
@@ -187,12 +187,13 @@ async function evaluateArtifact(input: {
     const staticHtml = await Bun.file(sourcePath).text();
     const pairedImageArtifact = artifact.pairArtifactIds.map((id) => input.manifest.artifacts.find((item) => item.artifactId === id)).find((item) => item?.kind === "mockup-image");
     const pairedImagePath = pairedImageArtifact ? resolve(pairedImageArtifact.path) : undefined;
-    const targetWidth = pairedImagePath ? await imageWidth(pairedImagePath) : undefined;
-    const viewport = options.viewport ?? (targetWidth && targetWidth >= 768 && targetWidth <= 1920 ? targetWidth : 1280);
+    const targetSize = pairedImagePath ? await imageSize(pairedImagePath) : undefined;
+    const viewport = options.viewport ?? (targetSize && targetSize.width >= 768 && targetSize.width <= 1920 ? targetSize.width : 1280);
+    const viewportHeight = targetSize && targetSize.width === viewport && targetSize.height <= targetSize.width ? targetSize.height : 1000;
     const fixtureDirectory = join(directory, "fixtures", project.projectId, artifact.artifactId);
     await ensureDirectory(fixtureDirectory);
     let baseline: CaptureResult | undefined;
-    if (options.capture && session) baseline = await session.capture({ url: pathToFileURL(sourcePath).href, outputDirectory: join(fixtureDirectory, "dirty"), viewports: [viewport], states: ["default"], themes: ["light"], browserExecutable: options.browserExecutable, collectRenderedSource: true });
+    if (options.capture && session) baseline = await session.capture({ url: pathToFileURL(sourcePath).href, outputDirectory: join(fixtureDirectory, "dirty"), viewports: [viewport], viewportHeight, states: ["default"], themes: ["light"], browserExecutable: options.browserExecutable, collectRenderedSource: true });
     const rendered = baseline?.captures[0]?.renderedSource;
     const staticTokenCount = tokens(staticHtml).length;
     const renderedTokenCount = rendered ? tokens(rendered.html).length : staticTokenCount;
@@ -216,7 +217,7 @@ async function evaluateArtifact(input: {
       writeTextAtomic(join(candidateDirectory, "page.css"), compiled.css),
     ]);
     let candidate: CaptureResult | undefined;
-    if (options.capture && session) candidate = await session.capture({ url: pathToFileURL(join(candidateDirectory, "page.html")).href, outputDirectory: join(candidateDirectory, "capture"), viewports: [viewport], states: ["default"], themes: ["light"], browserExecutable: options.browserExecutable });
+    if (options.capture && session) candidate = await session.capture({ url: pathToFileURL(join(candidateDirectory, "page.html")).href, outputDirectory: join(candidateDirectory, "capture"), viewports: [viewport], viewportHeight, states: ["default"], themes: ["light"], browserExecutable: options.browserExecutable });
     result.preservation = contentPreservation(compilerHtml, compiled.html);
     const report = await validate({ html: compiled.html, scss: compiled.scss, css: compiled.css, plan: compiled.plan, baselineCapture: baseline, candidateCapture: candidate, mode: "legacy-conversion", profile: "refactor", thresholds: { minBemCoverage: 0.95, minTokenCoverage: 0.95, maxVisualPixelRatio: 0.01, provisional: true } });
     const hardFailures = report.gates.filter((gate) => gate.hard && !gate.passed).length;

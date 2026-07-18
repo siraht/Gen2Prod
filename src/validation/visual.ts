@@ -99,7 +99,7 @@ export async function compareCaptures(baseline: CaptureResult["captures"][number
       if (before.visible) unmatchedVisibleNodes += 1;
       continue;
     }
-    const position = Math.abs(before.box.x - after.box.x) / Math.max(baseline.viewport, 1) + Math.abs(before.box.y - after.box.y) / 1000;
+    const position = Math.abs(before.box.x - after.box.x) / Math.max(baseline.viewport, 1) + Math.abs(before.box.y - after.box.y) / Math.max(baseline.viewportHeight, 1);
     const size = Math.abs(before.box.width - after.box.width) / Math.max(before.box.width, 1) + Math.abs(before.box.height - after.box.height) / Math.max(before.box.height, 1);
     const delta = 0.5 * position + 0.5 * size;
     deltas.push(delta);

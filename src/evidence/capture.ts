@@ -11,6 +11,7 @@ export type CaptureOptions = {
   themes: ("light" | "dark")[];
   browserExecutable?: string | undefined;
   collectRenderedSource?: boolean | undefined;
+  viewportHeight?: number | undefined;
 };
 
 export type RenderedSource = {
@@ -26,7 +27,7 @@ export type RenderedSource = {
 
 export type CaptureResult = {
   environment: { browser: string; browserVersion: string; os: string; deviceScaleFactor: number; timezone: string; locale: string; fontSetHash: string; colorScheme: string; colorProfile: string };
-  captures: { viewport: number; theme: string; state: string; screenshot: string; screenshotHash: string; dom: unknown[]; accessibilityTree: unknown[]; performance: Record<string, unknown>; seo: Record<string, unknown>; console: string[]; renderedSource?: RenderedSource | undefined }[];
+  captures: { viewport: number; viewportHeight: number; theme: string; state: string; screenshot: string; screenshotHash: string; dom: unknown[]; accessibilityTree: unknown[]; performance: Record<string, unknown>; seo: Record<string, unknown>; console: string[]; renderedSource?: RenderedSource | undefined }[];
 };
 
 export type CaptureSession = {
@@ -134,7 +135,8 @@ async function captureRenderedSource(page: Page): Promise<RenderedSource> {
 }
 
 async function captureOne(browser: Browser, options: CaptureOptions, viewport: number, theme: "light" | "dark", state: string): Promise<CaptureResult["captures"][number]> {
-  const context = await browser.newContext({ viewport: { width: viewport, height: 1000 }, deviceScaleFactor: 1, locale: "en-US", timezoneId: "UTC", colorScheme: theme, reducedMotion: "reduce" });
+  const viewportHeight = options.viewportHeight ?? 1000;
+  const context = await browser.newContext({ viewport: { width: viewport, height: viewportHeight }, deviceScaleFactor: 1, locale: "en-US", timezoneId: "UTC", colorScheme: theme, reducedMotion: "reduce" });
   const page = await context.newPage();
   const consoleMessages: string[] = [];
   page.on("console", (message) => consoleMessages.push(`${message.type()}: ${message.text()}`));
@@ -156,7 +158,7 @@ async function captureOne(browser: Browser, options: CaptureOptions, viewport: n
     };
   });
   const seo = await page.evaluate(() => ({ title: document.title, description: document.querySelector('meta[name="description"]')?.getAttribute("content") ?? "", h1Count: document.querySelectorAll("h1").length, canonical: document.querySelector('link[rel="canonical"]')?.getAttribute("href") ?? null, links: [...document.querySelectorAll("a")].map((anchor) => ({ text: anchor.textContent?.trim(), href: anchor.getAttribute("href") })) }));
-  const result = { viewport, theme, state, screenshot, screenshotHash: sha256(new Uint8Array(await Bun.file(screenshot).arrayBuffer())), dom: await captureDom(page), accessibilityTree: await captureAccessibility(page), performance: performanceEvidence, seo, console: consoleMessages, ...(renderedSource ? { renderedSource } : {}) };
+  const result = { viewport, viewportHeight, theme, state, screenshot, screenshotHash: sha256(new Uint8Array(await Bun.file(screenshot).arrayBuffer())), dom: await captureDom(page), accessibilityTree: await captureAccessibility(page), performance: performanceEvidence, seo, console: consoleMessages, ...(renderedSource ? { renderedSource } : {}) };
   await context.close();
   return result;
 }
