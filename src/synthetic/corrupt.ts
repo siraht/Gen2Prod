@@ -1,4 +1,5 @@
 import { sha256 } from "../core/hash.ts";
+import postcss from "postcss";
 import { Prng } from "./prng.ts";
 import type { CanonicalPageSpec, CorruptionOperation, CorruptionTrace } from "./types.ts";
 
@@ -59,6 +60,40 @@ function styleLowering(state: Mutable): void {
   if (state.css !== before) state.operations.push(operation("style-lowering", "registered spacing tokens", "raw pixel values", [], ["C"]));
 }
 
+function inlineStyleLowering(state: Mutable): void {
+  const rule = state.css.match(/(^|\n)(\.([-_a-zA-Z][\w-]*)\s*\{\s*([^{}]+?)\s*\})/);
+  if (!rule?.[2] || !rule[3] || !rule[4]) return;
+  const className = rule[3];
+  const opening = [...state.html.matchAll(/<([a-z][\w-]*)([^>]*\bclass="([^"]+)"[^>]*)>/gi)].find((match) => match[3]?.split(/\s+/).includes(className));
+  if (!opening?.[0]) return;
+  const declarations = rule[4].replace(/\s+/g, " ").trim();
+  const after = `${opening[0].slice(0, -1)} style="${declarations.replaceAll('"', "&quot;")}">`;
+  state.html = state.html.replace(opening[0], after);
+  state.css = state.css.replace(rule[2], "");
+  const nodeId = opening[0].match(/data-g2p-node="([^"]+)"/)?.[1];
+  state.operations.push(operation("inline-style-lowering", rule[2], after, nodeId ? [nodeId] : [], ["D"]));
+}
+
+function responsiveErasure(state: Mutable): void {
+  const root = postcss.parse(state.css);
+  const media = root.nodes.find((node) => node.type === "atrule" && node.name.toLowerCase() === "media");
+  if (!media || media.type !== "atrule" || !media.nodes?.length) return;
+  const before = media.toString();
+  const replacement = media.nodes.map((node) => node.clone());
+  media.replaceWith(...replacement);
+  state.css = root.toString();
+  state.operations.push(operation("responsive-erasure", before, replacement.map((node) => node.toString()).join("\n"), [], ["J"]));
+}
+
+function focusOrderDamage(state: Mutable): void {
+  const opening = state.html.match(/<(a|button|input|select|textarea|summary)\b(?![^>]*\btabindex=)([^>]*)>/i);
+  if (!opening?.[0]) return;
+  const after = opening[0].replace(/^<([a-z][\w-]*)/i, '<$1 tabindex="7"');
+  state.html = state.html.replace(opening[0], after);
+  const nodeId = opening[0].match(/data-g2p-node="([^"]+)"/)?.[1];
+  state.operations.push(operation("focus-order-damage", opening[0], after, nodeId ? [nodeId] : [], ["E"]));
+}
+
 function designDrift(state: Mutable, prng: Prng): void {
   const rawValues = [...state.css.matchAll(/\b(12|16|32|48|80)px\b/g)];
   if (rawValues.length === 0) return;
@@ -105,7 +140,7 @@ function accessibilityCorruption(state: Mutable): void {
   }
 }
 
-const CORRUPTORS = { semanticErasure, structuralNoise, classDegradation, styleLowering, designDrift, componentCorruption, behaviorCorruption, accessibilityCorruption };
+const CORRUPTORS = { semanticErasure, structuralNoise, classDegradation, styleLowering, inlineStyleLowering, designDrift, componentCorruption, behaviorCorruption, accessibilityCorruption, responsiveErasure, focusOrderDamage };
 export type CorruptorName = keyof typeof CORRUPTORS;
 
 export function corruptFixture(spec: CanonicalPageSpec, gold: { html: string; css: string }, seed: number, selected?: CorruptorName[]): CorruptedFixture {

@@ -45,4 +45,15 @@ describe("synthetic curriculum", () => {
     expect(corrupted.css).toContain("@media (max-width: 47.99rem)");
     expect(corrupted.css).not.toContain(".hero__inner");
   });
+
+  test("composes inline, responsive, and keyboard-order corruption traces", () => {
+    const fixture = createArchetypes()[0]!;
+    const gold = renderGold(fixture);
+    const corrupted = corruptFixture(fixture, gold, 23, ["inlineStyleLowering", "responsiveErasure", "focusOrderDamage"]);
+    CorruptionTraceSchema.parse(corrupted.trace);
+    expect(corrupted.trace.operations.map((item) => item.kind)).toEqual(["inline-style-lowering", "responsive-erasure", "focus-order-damage"]);
+    expect(corrupted.html).toContain("style=");
+    expect(corrupted.html).toContain('tabindex="7"');
+    expect(corrupted.css).not.toContain("@media");
+  });
 });
