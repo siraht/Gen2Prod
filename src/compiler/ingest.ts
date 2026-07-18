@@ -92,8 +92,11 @@ function domFromParse5(node: P5Element, path: string, index = 0): DomNode {
   const text = (node.childNodes ?? []).filter((child) => !isElement(child)).map(textOf).filter(Boolean).join(" ");
   const content: NonNullable<DomNode["content"]> = (node.childNodes ?? []).flatMap<NonNullable<DomNode["content"]>[number]>((child) => {
     if (isElement(child)) return [{ kind: "child" as const, nodeId: nodeIdFor(child, (node.childNodes ?? []).filter(isElement).indexOf(child)) }];
-    const value = "value" in child && typeof child.value === "string" ? child.value.replace(/\s+/g, " ") : "";
-    return value.trim() ? [{ kind: "text" as const, value }] : [];
+    const raw = "value" in child && typeof child.value === "string" ? child.value : "";
+    const value = raw.replace(/\s+/g, " ");
+    // Same-line whitespace between inline children is rendered content. Keep
+    // that separator while continuing to discard indentation/newline noise.
+    return value.trim() || (value === " " && !/[\r\n]/.test(raw)) ? [{ kind: "text" as const, value }] : [];
   });
   return {
     nodeId: nodeIdFor(node, index),

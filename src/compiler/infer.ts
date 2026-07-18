@@ -61,7 +61,9 @@ function interactiveGroup(node: DomNode): boolean {
 function testimonialPair(node: DomNode | undefined): boolean {
   if (!node || node.children.length !== 2) return false;
   const [quote, attribution] = node.children;
-  return Boolean(quote && attribution && ["div", "span"].includes(quote.tag) && ["div", "span"].includes(attribution.tag) && quote.text.trim() && /[,—–-]/.test(attribution.text));
+  const quoteText = quote?.text.trim() ?? "";
+  const quoteLike = quoteText.length >= 40 || /^["“‘']|["”’']$/.test(quoteText);
+  return Boolean(quote && attribution && ["div", "span"].includes(quote.tag) && ["div", "span"].includes(attribution.tag) && quoteLike && /[,—–-]/.test(attribution.text));
 }
 
 function semanticTag(node: DomNode, parent: DomNode | undefined, useStableNodeHints: boolean, preserveExplicitSemantics = false): { tag: string; confidence: "high" | "medium" | "low"; role: string } {

@@ -184,6 +184,25 @@ describe("static compilation", () => {
     expect(output.html).toContain("recognition</em>. Always.");
   });
 
+  test("preserves same-line separators around inline children", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-inline-space-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Inline space</title><meta name="description" content="Inline spacing fixture"></head><body><main><h1>Crafting <span>in the Heart</span> <br>of the Rockies</h1></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    expect(output.html).toContain('</span> <br');
+    expect(output.html).toContain('>of the Rockies');
+  });
+
+  test("does not reinterpret a short name and role as a testimonial quote", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-byline-pair-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Byline</title><meta name="description" content="Byline pair fixture"><style>.byline{display:flex}</style></head><body><main><h1>Team</h1><div class="byline"><span>Julian Vanhoutte</span><span>Lead Architect, Vanhoutte &amp; Partners</span></div></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    expect(output.html).toMatch(/<span[^>]*>Julian Vanhoutte<\/span>/);
+    expect(output.html).not.toContain("<blockquote");
+    expect(output.html).not.toContain("<figcaption");
+  });
+
   test("repairs heading, image, and standalone-control accessibility contracts without visual wrappers", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-static-a11y-repair-"));
     const htmlPath = join(directory, "page.html");
