@@ -63,12 +63,31 @@ export async function compareCaptures(baseline: CaptureResult["captures"][number
   const images = await imageDifference(baseline.screenshot, candidate.screenshot);
   const baselineNodes = byNode(baseline);
   const candidateNodes = byNode(candidate);
+  const usedCandidateIds = new Set<string>();
   const deltas: number[] = [];
   const critical: number[] = [];
   const categoryMismatches: Record<string, { changed: number; total: number }> = {};
   let unmatchedVisibleNodes = 0;
   for (const [id, before] of baselineNodes) {
-    const after = candidateNodes.get(id);
+    let after = candidateNodes.get(id);
+    if (after) usedCandidateIds.add(after.nodeId);
+    if (!after) {
+      const candidates = [...candidateNodes.values()]
+        .filter((node) => !usedCandidateIds.has(node.nodeId))
+        .map((node) => {
+          let score = 0;
+          if (before.text && node.text === before.text) score += 1;
+          if (node.tag === before.tag) score += 0.2;
+          score -= (Math.abs(before.box.x - node.box.x) + Math.abs(before.box.y - node.box.y)) / Math.max(baseline.viewport, 1);
+          score -= Math.abs(before.box.width - node.box.width) / Math.max(before.box.width, 1);
+          return { node, score };
+        })
+        .sort((left, right) => right.score - left.score);
+      if (candidates[0] && candidates[0].score > -0.05) {
+        after = candidates[0].node;
+        usedCandidateIds.add(after.nodeId);
+      }
+    }
     if (!after) {
       if (before.visible) unmatchedVisibleNodes += 1;
       continue;

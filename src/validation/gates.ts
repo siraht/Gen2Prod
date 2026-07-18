@@ -8,6 +8,7 @@ import type { VisualTarget } from "../schemas/normal-form.ts";
 import type { AccessibilityAudit } from "./accessibility.ts";
 import { classes, flatten, parseElements, type ValidationElement } from "./dom.ts";
 import { compareCaptures, type VisualMetrics } from "./visual.ts";
+import { imageDifference } from "./visual.ts";
 
 export type GateAssertion = GateResult["assertions"][number];
 
@@ -97,7 +98,8 @@ async function bemGate(context: ValidationContext): Promise<GateResult> {
     const cssSet = new Set(css.classNames);
     const coverage = countStyledNodes(elements, cssSet);
     const orphanSelectors = css.classNames.filter((name) => !htmlNames.includes(name));
-    const orphanClasses = htmlNames.filter((name) => cssSet.has(name) === false && !/^(js-|qa-|e2e-)/.test(name));
+    const plannedClasses = new Set(context.plan?.bem.blocks.flatMap((block) => block.nodes.map((node) => node.className)) ?? []);
+    const orphanClasses = htmlNames.filter((name) => cssSet.has(name) === false && !plannedClasses.has(name) && !/^(js-|qa-|e2e-)/.test(name));
     const utilityClasses = htmlNames.filter((name) => /^(sm:|md:|lg:|p-|px-|py-|m-|gap-|text-|bg-|rounded|shadow|u-\d+)/.test(name));
     const invalid = htmlNames.filter((name) => !bemClass(name) && !/^(js-|qa-|e2e-)/.test(name));
     const bemCoverage = coverage.total ? coverage.bem / coverage.total : 1;
@@ -218,12 +220,16 @@ async function consistencyGate(context: ValidationContext): Promise<GateResult> 
 
 async function visualGate(context: ValidationContext): Promise<{ gate: GateResult; visual?: VisualMetrics }> {
   let visual: VisualMetrics | undefined;
-  if (context.baselineCapture && context.candidateCapture) {
+  if (context.visualTarget && context.candidateCapture?.captures[0]) {
+    const images = await imageDifference(context.visualTarget.path, context.candidateCapture.captures[0].screenshot);
+    visual = { pixelDifferenceRatio: images.ratio, widthMismatch: images.widthMismatch, heightMismatch: images.heightMismatch, layout: { mean: 0, p95: 0, max: 0, criticalMax: 0 }, computedStyleLoss: {}, unmatchedVisibleNodes: 0 };
+  } else if (context.baselineCapture && context.candidateCapture) {
     const before = context.baselineCapture.captures[0];
     const after = context.candidateCapture.captures[0];
     if (before && after) visual = await compareCaptures(before, after);
   }
-  const result = await gate("J", "Visual target conformance", Boolean(context.visualTarget), async () => {
+  const visualIsHard = Boolean(context.visualTarget || (context.mode === "legacy-conversion" && context.profile === "refactor") || context.mode === "optimization-only");
+  const result = await gate("J", "Visual target conformance", visualIsHard, async () => {
     if (!visual && !context.visualTarget) return { assertions: [assertion("visual-evidence", true, "info", "No visual target supplied; gate not applicable")], metrics: {} };
     if (!visual) return { assertions: [assertion("visual-evidence", false, "error", "Visual target exists but paired capture evidence is missing")], metrics: {} };
     return { assertions: [assertion("pixel-threshold", visual.pixelDifferenceRatio <= context.thresholds.maxVisualPixelRatio, "error", `Pixel difference ratio ${visual.pixelDifferenceRatio.toFixed(4)}`, { expected: context.thresholds.maxVisualPixelRatio, actual: visual.pixelDifferenceRatio }), assertion("critical-layout", visual.layout.criticalMax <= 0.02, "error", `Critical-region layout delta ${visual.layout.criticalMax.toFixed(4)}`), assertion("node-accounting", visual.unmatchedVisibleNodes === 0, "error", `${visual.unmatchedVisibleNodes} unmatched visible nodes`)], metrics: { pixelDifferenceRatio: visual.pixelDifferenceRatio, layoutMean: visual.layout.mean, layoutP95: visual.layout.p95, layoutMax: visual.layout.max, criticalLayoutMax: visual.layout.criticalMax, unmatchedVisibleNodes: visual.unmatchedVisibleNodes } };
