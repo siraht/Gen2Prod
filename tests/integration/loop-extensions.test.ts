@@ -65,6 +65,7 @@ test("fingerprints evaluator code and the complete frozen fixture corpus", async
   const captureSession = await openCaptureSession();
   try {
     const before = await evaluatePolicy({ manifestPath, policy: defaultPolicy, split: "holdout", workDirectory: join(workspace, "before"), captureSession });
+    expect(await Bun.file(join(workspace, "before", "evaluation.json")).exists()).toBeTrue();
     const expectedPath = join(root, "form", "fixture.expected-gates.json");
     const expected = await Bun.file(expectedPath).json() as Record<string, unknown>;
     await Bun.write(expectedPath, JSON.stringify({ ...expected, fingerprintMutation: true }));

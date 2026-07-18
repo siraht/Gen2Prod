@@ -2,7 +2,7 @@ import { join, resolve } from "node:path";
 import { compileStaticPage } from "../compiler/pipeline.ts";
 import { emitHtml } from "../compiler/emit.ts";
 import type { CompiledPage, PlannedNode } from "../compiler/types.ts";
-import { ensureDirectory, pathExists, readJson } from "../core/fs.ts";
+import { ensureDirectory, pathExists, readJson, writeJsonAtomic } from "../core/fs.ts";
 import { hashFile, hashJson } from "../core/hash.ts";
 import type { FitnessVector } from "../core/fitness.ts";
 import { TransformationPolicySchema, type TransformationPolicy } from "../core/policy.ts";
@@ -435,7 +435,7 @@ export async function evaluatePolicy(options: EvaluateOptions): Promise<Evaluati
   const normalizedCost = policyCost(policy);
   const staticMutationRecall = await evaluateMutationControls(mutationBase, policy.thresholds.visualPixelRatio);
   const mutationControlRecall = (staticMutationRecall * EVALUATOR_MUTATIONS.length + (visualMutationCaught ? 1 : 0)) / (EVALUATOR_MUTATIONS.length + 1);
-  return EvaluationResultSchema.parse({
+  const evaluation = EvaluationResultSchema.parse({
     schemaVersion: "0.1.0",
     evaluationId: `eval-${crypto.randomUUID()}`,
     policyHash: hashJson(policy),
@@ -446,4 +446,6 @@ export async function evaluatePolicy(options: EvaluateOptions): Promise<Evaluati
     resourceAccounting: { fixtureCount: selected.length, wallTimeMs: performance.now() - started, normalizedCost, browserCaptures: (selected.length * 2 + 1) * VISUAL_VIEWPORTS.length, visionCalls: policy.modalities.fullScreenshot ? selected.length * 2 : 0, modelCandidates: selected.length * 2 * (policy.candidates.semantic + policy.candidates.component + policy.candidates.token) },
     frozenEvaluatorHash: evaluatorHash,
   });
+  await writeJsonAtomic(join(options.workDirectory, "evaluation.json"), evaluation);
+  return evaluation;
 }
