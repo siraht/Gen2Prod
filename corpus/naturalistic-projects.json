@@ -1,0 +1,65 @@
+{
+  "schemaVersion": "0.1.0",
+  "sourceRoot": "../userdata",
+  "projects": [
+    {
+      "id": "done-deal-digital",
+      "name": "Done Deal Digital",
+      "directory": "Done Deal Digital",
+      "domain": "trades marketing and lead generation",
+      "split": "train",
+      "liveUrl": "https://www.donedealcolorado.com/",
+      "generatorFamilies": ["Google AI Studio", "Stitch"],
+      "notes": ["Multi-page strategy and page mockups; live site is an evolved non-1-to-1 outcome."]
+    },
+    {
+      "id": "greg-radford",
+      "name": "Greg Radford Architecture",
+      "directory": "GregRadford",
+      "domain": "architecture portfolio",
+      "split": "train",
+      "liveUrl": "https://greg-radford-mockup-review.netlify.app/",
+      "generatorFamilies": ["Google AI Studio", "Gemini", "Claude Opus"],
+      "notes": ["Multiple HTML concepts, a tall image mockup, and structured project data."]
+    },
+    {
+      "id": "rockdome",
+      "name": "RockDome Defense",
+      "directory": "RockDome",
+      "domain": "counter-UAS defense",
+      "split": "validation",
+      "liveUrl": "https://rockdomedefense.com/",
+      "generatorFamilies": ["OpenAI GPT"],
+      "notes": ["Prompt, generated response, generated HTML, later exact-copy overlay, and live multi-page outcome."]
+    },
+    {
+      "id": "embodied-authority",
+      "name": "Embodied Authority",
+      "directory": "ZoeCoaching",
+      "domain": "executive and relational coaching",
+      "split": "validation",
+      "liveUrl": "https://embodied-authority.com/",
+      "generatorFamilies": ["Google AI Studio", "Gemini", "Spark"],
+      "notes": ["Rich content planning plus many iterative one-page concepts; live copy and structure evolved."]
+    },
+    {
+      "id": "geringer-construction",
+      "name": "Geringer Construction",
+      "directory": "Geringer Construction",
+      "domain": "residential construction and remodeling",
+      "split": "holdout",
+      "liveUrl": "https://www.geringerconstruction.com/",
+      "generatorFamilies": ["Stitch", "Google AI Studio"],
+      "notes": ["Held out as a full project: page specification, CMS architecture, many visual concepts, screenshots, and a live multi-page site."]
+    },
+    {
+      "id": "peptaide",
+      "name": "Peptaide",
+      "directory": "peptaide",
+      "domain": "health tracking application UI",
+      "split": "holdout",
+      "generatorFamilies": ["Google AI Studio"],
+      "notes": ["Held-out non-marketing application UI tests domain and component-family generalization without a live gold site."]
+    }
+  ]
+}

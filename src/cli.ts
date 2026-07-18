@@ -21,6 +21,7 @@ import { distill, type DistillTarget } from "./distill/train.ts";
 import { validate } from "./validation/gates.ts";
 import { findBrowserExecutable } from "./evidence/capture.ts";
 import { importNaturalisticFixture } from "./synthetic/import.ts";
+import { prepareNaturalisticCorpus } from "./corpus/prepare.ts";
 
 type GlobalOptions = { config: string; workspace: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -114,6 +115,22 @@ synth
   .action(async (canonical: string, html: string, options: { css: string; family: string; root: string; fixtureId?: string; split: "train" | "validation" | "holdout"; alignment: "exact" | "partial" | "non-1-to-1"; viewport: string; dirtyImage?: string; cleanImage?: string; cleanHtml?: string; cleanCss?: string; strategy?: string; changeManifest?: string }) => {
     const imported = await importNaturalisticFixture({ root: resolve(options.root), canonicalPath: resolve(canonical), htmlPath: resolve(html), cssPath: resolve(options.css), generatorFamily: options.family, split: options.split, fixtureId: options.fixtureId, alignment: options.alignment, viewport: Number.parseInt(options.viewport, 10), dirtyImagePath: options.dirtyImage, cleanImagePath: options.cleanImage, cleanHtmlPath: options.cleanHtml, cleanCssPath: options.cleanCss, strategyPath: options.strategy, changeManifestPath: options.changeManifest });
     emit(result("synth import", { fixtureId: imported.fixtureId, fixtureCount: imported.manifest.fixtures.length, generatorFamilies: imported.manifest.splitPolicy.generatorFamilies, alignment: options.alignment }), `Imported ${imported.fixtureId} from ${options.family} as a ${options.alignment} pair; the curriculum now contains ${imported.manifest.fixtures.length} fixtures.`);
+  });
+
+const corpus = program.command("corpus").description("prepare and evaluate project-level naturalistic corpora");
+corpus
+  .command("prepare")
+  .description("index strategies, iterative HTML/image mockups, and live outcomes without split leakage")
+  .option("--projects <path>", "project corpus configuration", "corpus/naturalistic-projects.json")
+  .option("--output <path>", "naturalistic manifest output", ".gen2prod/corpus/naturalistic/manifest.json")
+  .action(async (options: { projects: string; output: string }) => {
+    const manifest = await prepareNaturalisticCorpus(resolve(options.projects), resolve(options.output));
+    emit(result("corpus prepare", manifest), [
+      `Prepared ${manifest.coverage.projects} projects and ${manifest.coverage.artifacts} provenance-locked artifacts.`,
+      `HTML mockups: ${manifest.coverage.htmlMockups}; image mockups: ${manifest.coverage.imageMockups}; strategy/spec documents: ${manifest.coverage.strategyDocuments}.`,
+      `Project splits: train=${manifest.splitPolicy.trainProjects.length}, validation=${manifest.splitPolicy.validationProjects.length}, holdout=${manifest.splitPolicy.holdoutProjects.length}.`,
+      `Fingerprint: ${manifest.fingerprint}`,
+    ].join("\n"));
   });
 
 program

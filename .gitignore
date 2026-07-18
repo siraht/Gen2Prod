@@ -4,5 +4,8 @@ dist/
 coverage/
 *.log
 .DS_Store
+.firecrawl/
 fixtures/generated/
 results.tsv
+# User-supplied project corpora stay local; manifests carry hashes and provenance.
+userdata/
