@@ -167,9 +167,10 @@ function renderScss(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, polic
     const layout = layoutForRegion(analysis, region.regionId);
     const contentPosition = policy.layoutStrategy === "flow" ? "margin-inline: auto; text-align: left;" : layout.align === "center" ? "margin-inline: auto; text-align: center;" : `margin-left: ${Math.round(layout.left * 10000) / 100}%; text-align: left;`;
     const regionHeight = policy.preserveTargetRegionHeights ? Math.max(1, Math.round(region.bbox.height)) : Math.max(240, Math.round(region.bbox.height * 0.68));
+    const regionSize = policy.preserveTargetRegionHeights ? `height: ${regionHeight}px;` : `min-height: ${regionHeight}px;`;
     const topPadding = policy.layoutStrategy === "geometry-aware" ? Math.round(layout.top * Math.max(region.bbox.height, 1)) : 64;
     return `.${region.block}--${region.regionId} {
-  min-height: ${regionHeight}px;
+  ${regionSize}
   color: var(${variableName(evidence.foreground)});
   background: var(${variableName(evidence.background)});
   --image-heading-size: ${Math.round(layout.headingSize * policy.typographyScale)}px;
@@ -228,7 +229,7 @@ ${baseRules}
 ${regionRules}
 
 @media (max-width: 56.24rem) {
-  ${plan.regions.map((region) => `.${region.block}--${region.regionId} { min-height: min(${Math.max(320, Math.round(region.bbox.height))}px, 80rem); }`).join("\n  ")}
+  ${plan.regions.map((region) => `.${region.block}--${region.regionId} { height: auto; min-height: min(${Math.max(320, Math.round(region.bbox.height))}px, 80rem); }`).join("\n  ")}
   .site-header__navigation { display: none; }
   ${plan.regions.map((region) => `.${region.block}--${region.regionId} > .${region.block}__inner { margin-inline: auto; padding: var(--space-xl) var(--space-m); text-align: left; }`).join("\n  ")}
 }
