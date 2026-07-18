@@ -105,6 +105,7 @@ function renderDeclarations(style: StyleIntent, indent: string): string {
 
 export function emitScss(plan: CompilationPlan): string {
   const styleMap = stylesByNode(plan.styles);
+  const documentStyle = styleMap.get("g2p-document-root");
   const groups = new Map<string, { node: PlannedNode; className: string; style: StyleIntent }[]>();
   for (const node of allNodes(plan.semantics.root)) {
     const style = styleMap.get(node.nodeId);
@@ -131,7 +132,8 @@ export function emitScss(plan: CompilationPlan): string {
     const sample = token.sampledValues["default@1280"] ?? Object.values(token.sampledValues)[0];
     return sample ? [`  ${token.runtimeVariable}: ${sample};`] : [];
   }).join("\n");
-  return `/* Generated deterministically from G2P-NF. */\n:root {\n${tokenDefinitions}\n}\n\n${rendered}\n`;
+  const documentRule = documentStyle ? `html {\n${renderDeclarations(documentStyle, "  ")}\n}\n\n` : "";
+  return `/* Generated deterministically from G2P-NF. */\n:root {\n${tokenDefinitions}\n}\n\n${documentRule}${rendered}\n`;
 }
 
 export function emitHtml(plan: CompilationPlan, cssHref = "page.css", includeNodeIds = false): string {

@@ -74,6 +74,20 @@ describe("static compilation", () => {
     expect(output.scss).toContain("margin-top: 8px");
   });
 
+  test("preserves inherited document-root style foundations", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-document-root-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Root styles</title><meta name="description" content="Root style fixture"><style>html,:host{line-height:1.5;font-family:system-ui}:root{tab-size:4}body{line-height:inherit}</style></head><body><main><h1>Root styles</h1></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    expect(output.scss).toContain("html {");
+    expect(output.scss).toContain("--g2p-line-height-");
+    expect(output.scss).toContain("line-height: var(--g2p-line-height-");
+    expect(output.scss).toContain("--g2p-font-family-");
+    expect(output.scss).toContain("font-family: var(--g2p-font-family-");
+    expect(output.scss).toContain("tab-size: 4;");
+    expect(output.scss).toContain("line-height: inherit;");
+  });
+
   test("removes source important flags after resolving the winning cascade", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-important-lowering-"));
     const htmlPath = join(directory, "page.html");

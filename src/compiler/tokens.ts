@@ -380,8 +380,11 @@ function conditionKey(condition?: StyleCondition): string {
 export function resolveStyles(source: SourceDocument, root: PlannedNode, registry: TokenRegistry, relativeThreshold = 0.08): { styles: StyleIntent[]; exceptions: TokenException[] } {
   const styles: StyleIntent[] = [];
   const exceptions: TokenException[] = [];
-  const nodes = allNodes(root);
   const matching = selectorContext(source, root);
+  // The semantic output starts at <body>, while authored CSS frequently puts
+  // inherited foundations on html/:root/:host. Resolve the virtual document
+  // element too, or declarations such as Tailwind's root line-height vanish.
+  const nodes = [matching.virtualRoot, ...allNodes(root)];
   const declarationOrders = new Map(source.declarations.map((declaration, index) => [declaration, index]));
   for (const node of nodes) {
     const sourceDeclarations = source.declarations.filter((declaration) => {
