@@ -32,7 +32,7 @@ test("imports naturalistic generator output with family-aware provenance", async
     strategyPath: join(source, "fixture.strategy.json"),
     changeManifestPath,
   });
-  expect(imported.manifest.fixtures).toHaveLength(8);
+  expect(imported.manifest.fixtures).toHaveLength(11);
   expect(imported.manifest.splitPolicy.generatorFamilies).toContain("synthetic-codex-family");
   expect(imported.manifest.fixtures.find((fixture) => fixture.id === "hero-naturalistic")?.generatorFamily).toBe("synthetic-codex-family");
   const trace = await Bun.file(join(root, "hero-naturalistic", "fixture.corruption-trace.json")).json() as { operations: { kind: string }[] };

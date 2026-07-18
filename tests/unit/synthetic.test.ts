@@ -9,8 +9,20 @@ import { analyzeCssSelectorContract, analyzeScssNestingContract } from "../../sr
 describe("synthetic curriculum", () => {
   test("contains all first-benchmark archetypes", () => {
     const archetypes = createArchetypes();
-    expect(archetypes.map((item) => item.archetype)).toEqual(["hero-cta", "feature-grid", "pricing", "faq", "testimonial", "navigation", "form"]);
+    expect(archetypes.map((item) => item.archetype)).toEqual(["hero-cta", "feature-grid", "pricing", "faq", "testimonial", "navigation", "form", "dialog", "long-form", "responsive-media"]);
     for (const fixture of archetypes) CanonicalPageSpecSchema.parse(fixture);
+  });
+
+  test("encodes dynamic, long-form, and responsive-image gold contracts", () => {
+    const archetypes = createArchetypes();
+    const dialog = archetypes.find((item) => item.archetype === "dialog")!;
+    const longForm = archetypes.find((item) => item.archetype === "long-form")!;
+    const responsive = archetypes.find((item) => item.archetype === "responsive-media")!;
+    expect(renderGold(dialog).html).toContain("<dialog");
+    expect(dialog.interactions[0]?.focusManagement).toContain("restore");
+    expect(renderGold(longForm).html.match(/<section/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(renderGold(responsive).html).toContain("<picture");
+    expect(renderGold(responsive).html).toContain("srcset=");
   });
 
   test("renders canonical normal form and compilable CSS", () => {

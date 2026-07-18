@@ -12,8 +12,8 @@ import { openCaptureSession } from "../evidence/capture.ts";
 export type PrepareOptions = { root: string; seed: number; countPerArchetype: number; renderVisuals?: boolean; browserExecutable?: string; corruptionPool?: CorruptorName[] };
 
 function splitFor(archetype: string): "train" | "validation" | "holdout" {
-  if (archetype === "form") return "holdout";
-  if (archetype === "testimonial" || archetype === "navigation") return "validation";
+  if (archetype === "form" || archetype === "dialog") return "holdout";
+  if (archetype === "testimonial" || archetype === "navigation" || archetype === "responsive-media") return "validation";
   return "train";
 }
 
@@ -74,7 +74,7 @@ export async function prepareSyntheticCurriculum(options: PrepareOptions): Promi
     seed: options.seed,
     generatedAt: new Date().toISOString(),
     calibrationStatus: "provisional-seed-suite",
-    splitPolicy: { heldOutArchetypes: ["form"], heldOutCorruptionCompositions: ["accessibility-corruption+behavior-corruption"], generatorFamilies: ["procedural-canonical-v1"] },
+    splitPolicy: { heldOutArchetypes: ["form", "dialog"], heldOutCorruptionCompositions: ["accessibility-corruption+behavior-corruption"], generatorFamilies: ["procedural-canonical-v1"] },
     fixtures: fixtureEntries,
   });
   await writeJsonAtomic(join(root, "manifest.json"), manifest);

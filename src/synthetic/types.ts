@@ -36,7 +36,7 @@ export type CanonicalNode = {
 export const CanonicalPageSpecSchema = z.object({
   schemaVersion: z.literal("0.1.0"),
   id: z.string(),
-  archetype: z.enum(["hero-cta", "feature-grid", "pricing", "faq", "testimonial", "navigation", "form"]),
+  archetype: z.enum(["hero-cta", "feature-grid", "pricing", "faq", "testimonial", "navigation", "form", "dialog", "long-form", "responsive-media"]),
   domain: z.string(),
   intent: z.object({
     pageGoal: z.string(),
