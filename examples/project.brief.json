@@ -1,0 +1,25 @@
+{
+  "schemaVersion": "0.1.0",
+  "projectId": "northstar",
+  "businessName": "Northstar",
+  "businessType": "productivity software",
+  "audience": "small product teams",
+  "siteGoal": "Help teams choose and finish their most important work",
+  "conversionGoal": "start a free trial",
+  "primaryCta": {
+    "label": "Start free",
+    "href": "/start"
+  },
+  "positioning": "A calmer planning workspace for teams that value focus",
+  "trustSignals": ["customer stories", "transparent roadmap"],
+  "features": [
+    { "title": "Clear priorities", "text": "Turn competing requests into one shared order of work." },
+    { "title": "Protected focus", "text": "Keep urgent noise from displacing important progress." },
+    { "title": "Visible momentum", "text": "See meaningful work move from intent to done." }
+  ],
+  "faq": [
+    { "question": "Can we import existing projects?", "answer": "Yes. Guided imports preserve ownership and status." },
+    { "question": "Can we cancel at any time?", "answer": "Yes. Plans have no long-term lock-in." }
+  ],
+  "constraints": ["BEM", "SCSS", "ACSS runtime tokens", "WCAG 2.2 AA"]
+}

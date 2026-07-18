@@ -69,11 +69,13 @@ export function generateGreenfield(input: unknown): GreenfieldResult {
   const featureRoot = withUniquePrefix(featureTemplate.root, "generated");
   const featureMain = find(featureRoot, "main");
   const featureList = find(featureRoot, "generated-features-list");
+  find(featureRoot, "generated-features-title").tag = "h2";
   const templateCard = featureList.children[0];
   featureList.children = brief.features.map((feature, index) => {
     const card = structuredClone(templateCard!);
     for (const current of walk(card)) current.nodeId = `generated-feature-${index + 1}-${current.role}`;
     walk(card).find((current) => current.role === "card-heading")!.text = feature.title;
+    walk(card).find((current) => current.role === "card-heading")!.tag = "h3";
     walk(card).find((current) => current.role === "card-copy")!.text = feature.text;
     return card;
   });
@@ -84,6 +86,7 @@ export function generateGreenfield(input: unknown): GreenfieldResult {
     const faqRoot = withUniquePrefix(faqTemplate.root, "generated");
     const faqMain = find(faqRoot, "main");
     const faqInner = find(faqRoot, "generated-faq-inner");
+    find(faqRoot, "generated-faq-title").tag = "h2";
     const templateItem = faqInner.children.find((node) => node.tag === "details");
     faqInner.children = [faqInner.children[0]!, ...brief.faq.map((item, index) => {
       const disclosure = structuredClone(templateItem!);
