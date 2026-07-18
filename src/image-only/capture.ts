@@ -56,31 +56,29 @@ async function waitForVisualAssets(page: import("playwright-core").Page): Promis
 }
 
 async function materializeByScrolling(page: import("playwright-core").Page): Promise<{ positions: number[]; pageHeight: number }> {
-  return page.evaluate(async () => {
-    const positions: number[] = [];
-    // Some animation-heavy pages intentionally suspend requestAnimationFrame
-    // while an off-screen smooth-scroll controller owns the timeline. A
-    // timer-bounded settle keeps acquisition finite without consulting DOM
-    // semantics or source code.
-    const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 100));
-    let position = 0;
-    let stableBottomPasses = 0;
-    for (let step = 0; step < 240 && stableBottomPasses < 2; step += 1) {
-      const pageHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-      const maximum = Math.max(0, pageHeight - innerHeight);
-      position = Math.min(maximum, step === 0 ? 0 : position + Math.max(320, Math.floor(innerHeight * 0.72)));
-      scrollTo({ top: position, behavior: "instant" });
-      positions.push(position);
-      await settle();
-      const nextHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
-      const nextMaximum = Math.max(0, nextHeight - innerHeight);
-      if (position >= nextMaximum - 2) stableBottomPasses += 1;
-      else stableBottomPasses = 0;
-    }
-    scrollTo({ top: 0, behavior: "instant" });
-    await settle();
-    return { positions, pageHeight: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight) };
-  });
+  const positions: number[] = [];
+  let position = 0;
+  let stableBottomPasses = 0;
+  let pageHeight = 0;
+  for (let step = 0; step < 240 && stableBottomPasses < 2; step += 1) {
+    const metrics = await page.evaluate(() => ({ pageHeight: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight), viewportHeight: innerHeight }));
+    pageHeight = metrics.pageHeight;
+    const maximum = Math.max(0, pageHeight - metrics.viewportHeight);
+    position = Math.min(maximum, step === 0 ? 0 : position + Math.max(320, Math.floor(metrics.viewportHeight * 0.72)));
+    await page.evaluate((top) => scrollTo({ top, behavior: "instant" }), position);
+    positions.push(position);
+    // Settle in the controller process. Browser page timers can be clamped to
+    // one second or suspended entirely by animation-heavy runtimes.
+    await page.waitForTimeout(100);
+    const next = await page.evaluate(() => ({ pageHeight: Math.max(document.documentElement.scrollHeight, document.body.scrollHeight), viewportHeight: innerHeight }));
+    pageHeight = next.pageHeight;
+    const nextMaximum = Math.max(0, pageHeight - next.viewportHeight);
+    if (position >= nextMaximum - 2) stableBottomPasses += 1;
+    else stableBottomPasses = 0;
+  }
+  await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }));
+  await page.waitForTimeout(100);
+  return { positions, pageHeight };
 }
 
 export async function captureImageTarget(options: CaptureImageTargetOptions): Promise<ImageOnlyTargetManifest> {
@@ -88,7 +86,7 @@ export async function captureImageTarget(options: CaptureImageTargetOptions): Pr
   const capturePolicy = options.capturePolicy ?? "scroll-materialized";
   const executablePath = await findBrowserExecutable(options.browserExecutable);
   await ensureDirectory(options.outputDirectory);
-  const browser = await chromium.launch({ headless: true, executablePath, timeout: 15_000, args: ["--disable-dev-shm-usage", "--no-sandbox"] });
+  const browser = await chromium.launch({ headless: true, executablePath, timeout: 15_000, args: ["--disable-dev-shm-usage", "--no-sandbox", "--disable-background-timer-throttling"] });
   const context = await browser.newContext({ viewport, deviceScaleFactor: 1, locale: "en-US", timezoneId: "UTC", colorScheme: "light", reducedMotion: "reduce" });
   const page = await context.newPage();
   const frames: ImageOnlyFrame[] = [];
