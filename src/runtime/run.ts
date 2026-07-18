@@ -27,6 +27,7 @@ import { RunManifestSchema, type Mode, type Profile, type RunManifest } from "..
 import { TrajectorySchema } from "../schemas/research.ts";
 import { evaluateMutationControls, policyActions, policyCost } from "../research/evaluate.ts";
 import { compareCaptures } from "../validation/visual.ts";
+import { loadDistilledController, recommendWithController, verifyWithController } from "./controller.ts";
 
 export type RunOptions = {
   input: string;
@@ -129,6 +130,9 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
     availableRuntimeVariables: compiledInput.acss.registry.tokens.length,
   });
   let compiled = compiledInput.compiled;
+  const distilledController = await loadDistilledController(resolve(options.config.workspace));
+  const controllerRecommendation = recommendWithController(distilledController, compiled);
+  if (distilledController?.loadErrors.length) requiredActions.push({ id: "distilled-model-refresh", summary: "Refresh incompatible distilled model artifacts", detail: distilledController.loadErrors.join("; "), blocking: false });
   const experimentalSourceTokens = compiled.plan.tokens.tokens.filter((token) => token.status === "experimental" && token.source.startsWith("source-exact-value:"));
   if (experimentalSourceTokens.length) requiredActions.push({ id: "source-token-role-review", summary: "Approve source-derived project token roles", detail: `${experimentalSourceTokens.length} governed source value(s) had no compatible approved ACSS/project token. They were emitted through registered experimental aliases—not raw CSS—but still need semantic naming, consolidation, or approval.`, blocking: false });
   if (compiled.plan.source.executableScripts.length) requiredActions.push({ id: "interaction-contract-required", summary: "Reimplement source behavior from explicit interaction contracts", detail: `${compiled.plan.source.executableScripts.length} executable script(s) were intentionally excluded from deterministic output. Preserve only approved behavior through typed interaction contracts and tested modules.`, blocking: false });
@@ -144,7 +148,8 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
   if (options.capture) {
     if (options.mode !== "greenfield") baselineCapture = await capturePage({ url: pathToFileURL(resolve(options.input)).href, outputDirectory: join(runDirectory, "capture", "baseline"), viewports: options.config.capture.viewports, states: options.config.capture.states, themes: options.config.capture.themes, browserExecutable: options.config.capture.browserExecutable });
     candidateCapture = await capturePage({ url: pathToFileURL(join(outputDirectory, "page.html")).href, outputDirectory: join(runDirectory, "capture", "candidate"), viewports: options.config.capture.viewports, states: options.config.capture.states, themes: options.config.capture.themes, browserExecutable: options.config.capture.browserExecutable });
-    if (options.policy.modalities.uncertaintyTriggeredCrops && compiled.plan.semantics.review.length && candidateCapture.captures[0]) await cropUncertainRegions(candidateCapture.captures[0], compiled.plan.semantics.review.map((item) => item.nodeId), join(runDirectory, "capture", "uncertain-crops"));
+    const controllerRequestsCrops = controllerRecommendation.activeActions.includes("evidence:uncertaintyTriggeredCrops");
+    if ((options.policy.modalities.uncertaintyTriggeredCrops || controllerRequestsCrops) && compiled.plan.semantics.review.length && candidateCapture.captures[0]) await cropUncertainRegions(candidateCapture.captures[0], compiled.plan.semantics.review.map((item) => item.nodeId), join(runDirectory, "capture", "uncertain-crops"));
     await replay.append(event(id, "multimodal-evidence-capture", policyHash, "accepted", `Captured ${candidateCapture.captures.length} candidate viewport/state/theme conditions.`));
   }
 
@@ -178,13 +183,33 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
     buildGate.passed = buildGate.assertions.every((assertion) => assertion.passed || assertion.severity === "warning" || assertion.severity === "info");
   }
   validation.metrics.idempotenceError = idempotent ? 0 : 1;
+  const controllerVerification = verifyWithController(distilledController, {
+    hardGateFailures: validation.gates.filter((gate) => gate.hard && !gate.passed).length,
+    unaccountedDeclarations: validation.metrics.unaccountedDeclarations ?? Number.POSITIVE_INFINITY,
+  }, { mutationControlsPass: mutationControlRecall === 1, idempotent });
+  if (controllerVerification.available && controllerVerification.mode === "active" && !controllerVerification.passed && buildGate) {
+    buildGate.assertions.push({ id: "distilled-verifier-veto", passed: false, severity: "error", message: "The activated group-isolated distilled verifier vetoed this candidate; deterministic hard gates remain authoritative and were not weakened." });
+    buildGate.passed = false;
+    requiredActions.push({ id: "distilled-verifier-veto", summary: "Inspect the verifier veto before accepting this build", detail: "The active distilled verifier rejected the measured observation vector. Review its dataset audit and this run's deterministic gate evidence; do not bypass hard gates.", blocking: false });
+  }
   validation.passed = validation.gates.every((gate) => !gate.hard || gate.passed);
+  await replay.append(event(id, "distilled-controller", policyHash, controllerVerification.available && controllerVerification.mode === "active" ? (controllerVerification.passed ? "accepted" : "rejected") : "review", controllerVerification.available ? `${controllerVerification.mode} verifier: ${controllerVerification.reason}` : "No trusted distilled verifier was installed; deterministic policy and gates remained authoritative.", validation.gates));
   const repairs = planLocalizedRepairs(validation.gates);
   await replay.append(event(id, "validation-and-localized-repair-planning", policyHash, validation.passed ? "accepted" : "repair", validation.passed ? "All hard gates pass." : `${repairs.length} localized repair or review actions produced.`, validation.gates));
 
   const replayEvents = await replay.read();
   const reports = await generateProductReports(reportsDirectory, compiled, validation, replayEvents);
-  await Promise.all([writeJsonAtomic(join(runDirectory, "plan.json"), compiled.plan), writeJsonAtomic(join(runDirectory, "validation.json"), validation), writeJsonAtomic(join(runDirectory, "repairs.json"), repairs), ...(visualTarget ? [writeJsonAtomic(join(runDirectory, "visual-target.json"), visualTarget)] : []), ...(compiledInput.greenfield ? [writeJsonAtomic(join(runDirectory, "greenfield-artifacts.json"), compiledInput.greenfield)] : [])]);
+  const controllerTrace = {
+    schemaVersion: "0.1.0",
+    recommendation: controllerRecommendation,
+    verification: controllerVerification,
+    models: distilledController ? Object.fromEntries(["selector", "verifier", "planner"].flatMap((kind) => {
+      const value = distilledController[kind as "selector" | "verifier" | "planner"];
+      return value ? [[kind, { path: value.path, sha256: value.sha256, mode: value.mode, reason: value.reason }]] : [];
+    })) : {},
+    loadErrors: distilledController?.loadErrors ?? [],
+  };
+  await Promise.all([writeJsonAtomic(join(runDirectory, "plan.json"), compiled.plan), writeJsonAtomic(join(runDirectory, "validation.json"), validation), writeJsonAtomic(join(runDirectory, "repairs.json"), repairs), writeJsonAtomic(join(runDirectory, "distilled-controller.json"), controllerTrace), ...(visualTarget ? [writeJsonAtomic(join(runDirectory, "visual-target.json"), visualTarget)] : []), ...(compiledInput.greenfield ? [writeJsonAtomic(join(runDirectory, "greenfield-artifacts.json"), compiledInput.greenfield)] : [])]);
 
   const store = new ArtifactStore(join(runDirectory, "artifacts"));
   const inputRef = await store.putText("source-input", await Bun.file(options.input).text(), { id: "primary-input", producer: "run-intake", authorities: options.mode === "greenfield" ? ["approved-content-intent"] : ["content", "links", "forms", "behavior-hooks", "semantics-partial"] });

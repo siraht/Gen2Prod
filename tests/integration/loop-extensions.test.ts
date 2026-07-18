@@ -97,8 +97,11 @@ test("records accepted production runs as distillation trajectories", async () =
   const lines = (await Bun.file(join(workspace, "research", "trajectories.jsonl")).text()).trim().split("\n");
   const trajectory = TrajectorySchema.parse(JSON.parse(lines.at(-1)!));
   expect(trajectory.experimentId).toBe(`production-${run.runId}`);
+  expect(trajectory.sourceKind).toBe("production-html");
+  expect(trajectory.groupId).toStartWith("production:");
   expect(trajectory.verifierLabels.idempotent).toBeTrue();
   expect(trajectory.accepted).toBe(run.validation.passed);
   expect(await Bun.file(join(run.runDirectory, "capture", "diff", "visual-evaluation.json")).exists()).toBeTrue();
   expect(await Bun.file(join(run.runDirectory, "capture", "diff", "baseline-vs-candidate-360-light-default.png")).exists()).toBeTrue();
+  expect(await Bun.file(join(run.runDirectory, "distilled-controller.json")).exists()).toBeTrue();
 });
