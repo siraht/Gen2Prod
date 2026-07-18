@@ -2,7 +2,7 @@
 
 import { Command, Option } from "commander";
 import { readdir } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { stringify } from "yaml";
 import { loadConfig, type Gen2ProdConfig } from "./core/config.ts";
 import { Gen2ProdError, UsageError } from "./core/errors.ts";
@@ -28,6 +28,7 @@ import { analyzeImageTarget } from "./image-only/analyze.ts";
 import { buildImageTarget } from "./image-only/build.ts";
 import { evaluateImageBuild } from "./image-only/evaluate.ts";
 import { runImageResearch } from "./image-only/research.ts";
+import { analyzeImageStateSequence } from "./image-only/state.ts";
 
 type GlobalOptions = { config: string; workspace: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -198,8 +199,11 @@ image
   .option("--downsample <pixels>", "visual sampling stride", "8")
   .option("--no-ocr", "skip local image-text recognition")
   .action(async (manifest: string, options: { output?: string; downsample: string; ocr: boolean }) => {
-    const analysis = await analyzeImageTarget({ manifestPath: resolve(manifest), outputPath: options.output ? resolve(options.output) : undefined, downsample: Number.parseInt(options.downsample, 10), ocr: options.ocr });
-    emit(result("image analyze", analysis), `Analyzed ${analysis.targetId}\nRegions: ${analysis.regions.length}; OCR lines: ${analysis.text.length}; palette colors: ${analysis.palette.length}\nInput hash: ${analysis.sourceFrameHash}`);
+    const manifestPath = resolve(manifest);
+    const analysisPath = options.output ? resolve(options.output) : join(dirname(manifestPath), "image-analysis.json");
+    const analysis = await analyzeImageTarget({ manifestPath, outputPath: analysisPath, downsample: Number.parseInt(options.downsample, 10), ocr: options.ocr });
+    const states = await analyzeImageStateSequence(manifestPath, join(dirname(analysisPath), "image-state-analysis.json"));
+    emit(result("image analyze", { analysis, states }), `Analyzed ${analysis.targetId}\nRegions: ${analysis.regions.length}; OCR lines: ${analysis.text.length}; palette colors: ${analysis.palette.length}\nVisual state observations: ${states.observations.length}; dynamic hypotheses: ${states.hypotheses.length}\nInput hash: ${analysis.sourceFrameHash}`);
   });
 image
   .command("build <manifest>")
@@ -240,11 +244,12 @@ image
     const output = resolve(options.output);
     const analysisPath = join(output, "image-analysis.json");
     const analysis = await analyzeImageTarget({ manifestPath, outputPath: analysisPath, ocr: options.ocr });
+    const states = await analyzeImageStateSequence(manifestPath, join(output, "image-state-analysis.json"));
     const built = await buildImageTarget({ manifestPath, analysisPath, outputDirectory: output });
     const evaluation = await evaluateImageBuild({ manifestPath, buildDirectory: output, outputDirectory: join(output, "evaluation"), acceptancePixelRatio: Number.parseFloat(options.acceptancePixelRatio), browserExecutable: project.capture.browserExecutable });
-    const envelope = result("image run", { analysis: { regions: analysis.regions.length, text: analysis.text.length }, build: built, evaluation }); envelope.ok = evaluation.accepted;
+    const envelope = result("image run", { analysis: { regions: analysis.regions.length, text: analysis.text.length, stateObservations: states.observations.length, dynamicHypotheses: states.hypotheses.length }, build: built, evaluation }); envelope.ok = evaluation.accepted;
     envelope.requiredActions.push(...await Bun.file(built.requiredActionsPath).json() as ResultEnvelope<unknown>["requiredActions"]);
-    emit(envelope, `Image-only run ${evaluation.evaluationId}\nRegions: ${analysis.regions.length}; text observations: ${analysis.text.length}\nPixel loss: ${(evaluation.visual.pixelDifferenceRatio * 100).toFixed(2)}%; semantic loss: ${(evaluation.fitness.semanticLoss * 100).toFixed(2)}%\nFitness: ${evaluation.fitness.score.toFixed(4)}\nArtifacts: ${output}`);
+    emit(envelope, `Image-only run ${evaluation.evaluationId}\nRegions: ${analysis.regions.length}; text observations: ${analysis.text.length}; dynamic hypotheses: ${states.hypotheses.length}\nPixel loss: ${(evaluation.visual.pixelDifferenceRatio * 100).toFixed(2)}%; semantic loss: ${(evaluation.fitness.semanticLoss * 100).toFixed(2)}%\nFitness: ${evaluation.fitness.score.toFixed(4)}\nArtifacts: ${output}`);
     if (!evaluation.accepted) process.exitCode = 3;
   });
 image
