@@ -137,8 +137,25 @@ export const ImageOnlyBuildPlanSchema = z.object({
   }),
 });
 
+export const ImageOnlyEvaluationSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  evaluationId: z.string().min(1),
+  targetId: z.string().min(1),
+  split: ImageOnlySplitSchema,
+  sourceFrameHash: z.string().regex(/^[a-f0-9]{64}$/),
+  candidate: z.object({ html: z.string(), css: z.string(), screenshot: z.string(), screenshotHash: z.string().regex(/^[a-f0-9]{64}$/) }),
+  visual: z.object({ pixelDifferenceRatio: z.number().min(0).max(1), widthMismatch: z.number().min(0), heightMismatch: z.number().min(0), macroStructureLoss: z.number().min(0).max(1), previousPixelDifferenceRatio: z.number().min(0).max(1).optional(), recovery: z.number().optional() }),
+  semantics: z.object({ parseErrors: z.number().int().nonnegative(), h1Count: z.number().int().nonnegative(), landmarkRecall: z.number().min(0).max(1), visibleTextRecall: z.number().min(0).max(1), bemCoverage: z.number().min(0).max(1), inlineStyleCount: z.number().int().nonnegative(), scriptCount: z.number().int().nonnegative() }),
+  interactions: z.object({ hypothesisCount: z.number().int().nonnegative(), hypothesesRequiringVerification: z.number().int().nonnegative(), prohibitedClaimCoverage: z.number().min(0).max(1), safeStateCssCoverage: z.number().min(0).max(1), unresolvedConcernCoverage: z.number().min(0).max(1) }),
+  leakage: z.object({ passed: z.boolean(), sourceUrlUsedByBuilder: z.boolean(), quarantinedInputCount: z.number().int().nonnegative(), fullFrameWallpaperDetected: z.boolean(), rasterCoverage: z.number().min(0).max(1), maximumRasterCoverage: z.number().min(0).max(1) }),
+  hardFailures: z.array(z.string()),
+  fitness: z.object({ score: z.number().min(0).max(1), visualLoss: z.number().min(0).max(1), semanticLoss: z.number().min(0).max(1), interactionUncertaintyLoss: z.number().min(0).max(1), leakageLoss: z.number().min(0).max(1) }),
+  accepted: z.boolean(),
+});
+
 export type ImageOnlyFrame = z.infer<typeof ImageOnlyFrameSchema>;
 export type ImageOnlyTargetManifest = z.infer<typeof ImageOnlyTargetManifestSchema>;
 export type ImageOnlyAnalysis = z.infer<typeof ImageOnlyAnalysisSchema>;
 export type ImageOnlyBuildPlan = z.infer<typeof ImageOnlyBuildPlanSchema>;
 export type InteractionHypothesis = z.infer<typeof InteractionHypothesisSchema>;
+export type ImageOnlyEvaluation = z.infer<typeof ImageOnlyEvaluationSchema>;
