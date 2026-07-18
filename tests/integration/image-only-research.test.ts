@@ -32,8 +32,14 @@ describe("image-only recursive research", () => {
     expect(summary.baseline.train.targets.map((item) => item.projectId)).toEqual(["train-project"]);
     expect(summary.baseline.validation.targets.map((item) => item.projectId)).toEqual(["validation-project"]);
     expect(summary.final.holdout.targets.map((item) => item.projectId)).toEqual(["holdout-project"]);
+    expect(summary.final.baselineHoldout.targets.map((item) => item.projectId)).toEqual(["holdout-project"]);
     expect(summary.experiments).toHaveLength(1);
     expect(summary.final.holdout.idempotenceRate).toBe(1);
     expect(summary.trajectories.total).toBe(5);
+    expect(await Bun.file(join(directory, "research", summary.researchId, "promotion.json")).exists()).toBeTrue();
+    expect(await Bun.file(join(directory, "research", "incumbent-policy.json")).exists()).toBeTrue();
+
+    const resumed = await runImageResearch({ catalogPath, captureRoot, workspace: join(directory, "research"), budget: 0 });
+    expect(resumed.initialPolicy).toEqual(summary.productionPolicy);
   }, 30_000);
 });

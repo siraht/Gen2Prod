@@ -22,11 +22,13 @@ export type ImageResearchSummary = {
   researchId: string;
   initialPolicy: ImageOnlyPolicy;
   incumbentPolicy: ImageOnlyPolicy;
+  productionPolicy: ImageOnlyPolicy;
   accepted: number;
   rejected: number;
   experiments: { experimentId: string; mutation: string; outcome: "keep" | "revert"; trainBefore: number; trainAfter: number; validationBefore: number; validationAfter: number; reason: string }[];
   baseline: { train: PolicyResult; validation: PolicyResult };
-  final: { train: PolicyResult; validation: PolicyResult; holdout: PolicyResult };
+  final: { train: PolicyResult; validation: PolicyResult; holdout: PolicyResult; baselineHoldout: PolicyResult };
+  promotion: { promoted: boolean; reason: string; previousPolicyHash: string; candidatePolicyHash: string; productionPolicyHash: string };
   trajectories: { path: string; total: number; accepted: number; rejected: number };
 };
 
@@ -124,7 +126,10 @@ export async function runImageResearch(options: { catalogPath: string; captureRo
   const researchId = `image-research-${crypto.randomUUID()}`;
   const root = resolve(options.workspace, researchId);
   await ensureDirectory(root);
-  const initialPolicy = ImageOnlyPolicySchema.parse(conservativeImageOnlyPolicy);
+  const productionIncumbentPath = join(resolve(options.workspace), "incumbent-policy.json");
+  const initialPolicy = await pathExists(productionIncumbentPath)
+    ? ImageOnlyPolicySchema.parse(await readJson(productionIncumbentPath))
+    : ImageOnlyPolicySchema.parse(conservativeImageOnlyPolicy);
   let incumbent = initialPolicy;
   let incumbentTrain = await evaluatePolicy({ policy: incumbent, catalog, captureRoot: resolve(options.captureRoot), directory: join(root, "baseline", "train"), splits: ["train"], browserExecutable: options.browserExecutable, acss: options.acss });
   let incumbentValidation = await evaluatePolicy({ policy: incumbent, catalog, captureRoot: resolve(options.captureRoot), directory: join(root, "baseline", "validation"), splits: ["validation"], browserExecutable: options.browserExecutable, acss: options.acss });
@@ -149,19 +154,44 @@ export async function runImageResearch(options: { catalogPath: string; captureRo
     trajectories.push(...[...candidateTrain.targets, ...candidateValidation.targets].map((target) => targetTrajectory(researchId, experimentId, next.mutation, target, keep)));
     if (keep) { incumbent = next.policy; incumbentTrain = candidateTrain; incumbentValidation = candidateValidation; }
   }
-  const holdout = await evaluatePolicy({ policy: incumbent, catalog, captureRoot: resolve(options.captureRoot), directory: join(root, "final", "holdout"), splits: ["holdout"], browserExecutable: options.browserExecutable, acss: options.acss });
+  // Holdout stays sealed during search. Open it once, after the final candidate
+  // is fixed, and compare both the previous production policy and candidate.
+  const baselineHoldout = await evaluatePolicy({ policy: initialPolicy, catalog, captureRoot: resolve(options.captureRoot), directory: join(root, "final", "baseline-holdout"), splits: ["holdout"], browserExecutable: options.browserExecutable, acss: options.acss });
+  const samePolicy = hashJson({ ...initialPolicy, name: "_" }) === hashJson({ ...incumbent, name: "_" });
+  const holdout = samePolicy
+    ? baselineHoldout
+    : await evaluatePolicy({ policy: incumbent, catalog, captureRoot: resolve(options.captureRoot), directory: join(root, "final", "candidate-holdout"), splits: ["holdout"], browserExecutable: options.browserExecutable, acss: options.acss });
+  const holdoutSafe = holdout.hardFailures === 0
+    && holdout.idempotenceRate === 1
+    && holdout.meanScore >= baselineHoldout.meanScore - 0.001
+    && holdout.meanVisualLoss <= baselineHoldout.meanVisualLoss + 0.001;
+  const promoted = samePolicy || holdoutSafe;
+  const productionPolicy = promoted ? incumbent : initialPolicy;
+  const promotionReason = samePolicy
+    ? "No researched policy change survived train/validation; the production incumbent is unchanged."
+    : holdoutSafe
+      ? "Promoted after train/validation gains and a sealed holdout non-regression audit."
+      : "Candidate retained as research evidence but production promotion was rejected by the sealed holdout audit.";
   trajectories.push(...holdout.targets.map((target) => targetTrajectory(researchId, `${researchId}-hidden-holdout`, "hidden-holdout-audit", target, target.evaluation.hardFailures.length === 0 && target.idempotent)));
   const trajectoryPath = join(root, "image-trajectories.jsonl");
   await writeTextAtomic(trajectoryPath, `${trajectories.map((trajectory) => JSON.stringify(trajectory)).join("\n")}\n`);
   await writeJsonAtomic(join(root, "incumbent-policy.json"), incumbent);
+  if (promoted) await writeJsonAtomic(productionIncumbentPath, productionPolicy);
+  const promotion = {
+    promoted,
+    reason: promotionReason,
+    previousPolicyHash: hashJson(initialPolicy),
+    candidatePolicyHash: hashJson(incumbent),
+    productionPolicyHash: hashJson(productionPolicy),
+  };
+  await writeJsonAtomic(join(root, "promotion.json"), promotion);
   const summary: ImageResearchSummary = {
-    schemaVersion: "0.1.0", researchId, initialPolicy, incumbentPolicy: incumbent,
+    schemaVersion: "0.1.0", researchId, initialPolicy, incumbentPolicy: incumbent, productionPolicy,
     accepted: experiments.filter((item) => item.outcome === "keep").length,
     rejected: experiments.filter((item) => item.outcome === "revert").length,
-    experiments, baseline, final: { train: incumbentTrain, validation: incumbentValidation, holdout },
+    experiments, baseline, final: { train: incumbentTrain, validation: incumbentValidation, holdout, baselineHoldout }, promotion,
     trajectories: { path: trajectoryPath, total: trajectories.length, accepted: trajectories.filter((item) => item.accepted).length, rejected: trajectories.filter((item) => !item.accepted).length },
   };
   await writeJsonAtomic(join(root, "summary.json"), summary);
-  await writeJsonAtomic(join(resolve(options.workspace), "incumbent-policy.json"), incumbent);
   return summary;
 }
