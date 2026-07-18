@@ -230,6 +230,15 @@ describe("static compilation", () => {
     expect(rerun.scss).toBe(output.scss);
   });
 
+  test("lowers compound state specificity with a zero-specificity condition", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-compound-state-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Compound state</title><meta name="description" content="Compound state fixture"><style>.control{color:black}.control:checked:hover{color:blue}</style></head><body><main><h1>State</h1><input type="checkbox" aria-label="Toggle" class="control"></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    expect(output.scss).toContain("&:where(:checked:hover)");
+    expect(output.css).toContain(":where(:checked:hover)");
+  });
+
   test("matches escaped responsive arbitrary-value classes as class names", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-responsive-arbitrary-"));
     const htmlPath = join(directory, "page.html");

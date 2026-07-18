@@ -92,7 +92,10 @@ function renderDeclarations(style: StyleIntent, indent: string): string {
       continue;
     }
     const condition = declarations[0]!.condition!;
-    const suffix = `${condition.states.map((state) => `:${state}`).join("")}${condition.pseudo ?? ""}`;
+    const states = condition.states.length > 1
+      ? `:where(${condition.states.map((state) => `:${state}`).join("")})`
+      : condition.states.map((state) => `:${state}`).join("");
+    const suffix = `${states}${condition.pseudo ?? ""}`;
     let content = suffix
       ? `${indent}&${suffix} {\n${declarationLines(declarations, `${indent}  `)}\n${indent}}`
       : declarationLines(declarations, indent);

@@ -49,22 +49,49 @@ async function gate(id: GateId, name: string, hard: boolean, runner: () => Promi
   return { gate: id, name, hard, passed: result.assertions.every((item) => item.passed || item.severity === "warning" || item.severity === "info"), assertions: result.assertions, metrics: result.metrics ?? {}, durationMs: performance.now() - started };
 }
 
-function selectorClasses(css: string): { selectors: string[]; classNames: string[]; rawDeclarations: { property: string; value: string; selector: string }[]; maxSpecificity: number } {
+function withoutWhereArguments(selector: string): string {
+  let output = selector;
+  while (true) {
+    const start = output.indexOf(":where(");
+    if (start < 0) return output;
+    let depth = 0;
+    let end = -1;
+    for (let index = start + 6; index < output.length; index += 1) {
+      if (output[index] === "(") depth += 1;
+      else if (output[index] === ")" && --depth === 0) { end = index; break; }
+    }
+    if (end < 0) return output;
+    output = `${output.slice(0, start)}${output.slice(end + 1)}`;
+  }
+}
+
+function simplifiedSpecificity(selector: string): number {
+  const counted = withoutWhereArguments(selector);
+  return (counted.match(/#[\w-]+/g)?.length ?? 0) * 100
+    + (counted.match(/\.[\w-]+|\[[^\]]+\]|(?<!:):(?!:)[\w-]+/g)?.length ?? 0) * 10
+    + (counted.match(/(^|[\s>+~])[a-z][\w-]*/gi)?.length ?? 0);
+}
+
+function selectorClasses(css: string): { selectors: string[]; classNames: string[]; rawDeclarations: { property: string; value: string; selector: string }[]; maxSpecificity: number; maxSpecificitySelector: string } {
   const root = postcss.parse(css);
   const selectors: string[] = [];
   const classNames = new Set<string>();
   const rawDeclarations: { property: string; value: string; selector: string }[] = [];
   let maxSpecificity = 0;
+  let maxSpecificitySelector = "";
   root.walkRules((rule) => {
     selectors.push(...rule.selectors);
     for (const selector of rule.selectors) {
       for (const match of selector.matchAll(/\.([_a-zA-Z]+[\w-]*)/g)) if (match[1]) classNames.add(match[1]);
-      const specificity = (selector.match(/#[\w-]+/g)?.length ?? 0) * 100 + (selector.match(/\.[\w-]+|\[[^\]]+\]|(?<!:):(?!:)[\w-]+/g)?.length ?? 0) * 10 + (selector.match(/(^|[\s>+~])[a-z][\w-]*/gi)?.length ?? 0);
-      maxSpecificity = Math.max(maxSpecificity, specificity);
+      const specificity = simplifiedSpecificity(selector);
+      if (specificity > maxSpecificity) {
+        maxSpecificity = specificity;
+        maxSpecificitySelector = selector;
+      }
       rule.walkDecls((declaration) => { rawDeclarations.push({ property: declaration.prop, value: declaration.value, selector }); });
     }
   });
-  return { selectors, classNames: [...classNames], rawDeclarations, maxSpecificity };
+  return { selectors, classNames: [...classNames], rawDeclarations, maxSpecificity, maxSpecificitySelector };
 }
 
 function bemClass(name: string): boolean {
@@ -132,7 +159,7 @@ async function bemGate(context: ValidationContext): Promise<GateResult> {
       assertion("tailwind-eliminated", utilityClasses.length === 0, "error", utilityClasses.length ? `Utility classes remain: ${utilityClasses.join(", ")}` : "No utility classes remain"),
       assertion("orphan-selectors", orphanSelectors.length === 0, "error", orphanSelectors.length ? `Orphan selectors: ${orphanSelectors.join(", ")}` : "No orphan selectors"),
       assertion("orphan-classes", orphanClasses.length === 0, "warning", orphanClasses.length ? `Unstyled/review classes: ${orphanClasses.join(", ")}` : "No orphan HTML classes"),
-      assertion("specificity-budget", css.maxSpecificity <= 20, "error", `Maximum simplified specificity is ${css.maxSpecificity}`, { expected: "<=20", actual: css.maxSpecificity }),
+      assertion("specificity-budget", css.maxSpecificity <= 20, "error", `Maximum simplified specificity is ${css.maxSpecificity}${css.maxSpecificitySelector ? ` at ${css.maxSpecificitySelector}` : ""}`, { expected: "<=20", actual: css.maxSpecificity }),
       assertion("bem-coverage", bemCoverage >= context.thresholds.minBemCoverage, "error", `BEM coverage ${(bemCoverage * 100).toFixed(1)}%`, { expected: context.thresholds.minBemCoverage, actual: bemCoverage }),
     ], metrics: { bemCoverage, orphanSelectors: orphanSelectors.length, orphanClasses: orphanClasses.length, utilityClasses: utilityClasses.length, maxSpecificity: css.maxSpecificity } };
   });
