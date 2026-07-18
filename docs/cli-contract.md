@@ -6,6 +6,7 @@ Gen2Prod serves humans and automation. Primary results are written to stdout, di
 
 ```text
 gen2prod init [directory]
+gen2prod acss prepare [source] [--output path] [--force]
 gen2prod synth prepare [--seed N] [--count N] [--force]
 gen2prod synth import <canonical> <dirty-html> --css path --family name [--alignment exact|partial|non-1-to-1] [--dirty-image path] [--clean-image path] [--clean-html path] [--clean-css path] [--strategy path] [--change-manifest path]
 gen2prod corpus prepare [--projects path] [--output path]
@@ -29,7 +30,7 @@ gen2prod report [run]
 gen2prod doctor
 ```
 
-Global flags are `--config <path>`, `--workspace <path>`, `--json`, `--no-input`, `--verbose`, `--help`, and `--version`. Configuration precedence is flags, `GEN2PROD_*` environment variables, project config, then built-in defaults.
+Global flags are `--config <path>`, `--workspace <path>`, `--acss <plugin-zip-or-directory>`, `--json`, `--no-input`, `--verbose`, `--help`, and `--version`. Configuration precedence is flags, `GEN2PROD_*` environment variables, project config, then built-in defaults.
 
 ## Safety and idempotency
 
@@ -38,6 +39,7 @@ Global flags are `--config <path>`, `--workspace <path>`, `--json`, `--no-input`
 - Research evaluates candidates in isolated run directories and promotes only candidates that pass hard gates and improve the lexicographic fitness vector.
 - Re-running deterministic compilation from the same artifact hashes must yield the same patch and output hashes.
 - A command failure never weakens an evaluator or edits the frozen fixture manifest.
+- ACSS release defaults are hash/version/license-bound fallback authority. Project CSS overrides release defaults, and an explicit approved registry overrides both. Only referenced variables and transitive dependencies are emitted; recognized ACSS utility classes are not copied into clean BEM output.
 - Naturalistic evaluation writes a frozen evaluator hash, gate-level failures, candidate provenance, cross-page advisory metrics, and a project-split trajectory JSONL. `distill --naturalistic` blends that evidence with synthetic research trajectories while preserving the original project split labels.
 - Image-only manifests declare exactly which hash-bound frames a builder may read. URLs, source/DOM/CSS, live extraction, and link records are quarantined; a post-build `image audit` cannot alter emitted files or policy inputs.
 - Image research searches train projects, promotes only validation improvements without hard regressions, reveals holdout projects only for the final audit, and exports accepted and rejected trajectories. Multiple image JSONLs can be blended with `distill --image`.

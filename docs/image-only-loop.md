@@ -46,6 +46,12 @@ gen2prod image run \
 
 The importer copies and hashes the image and optional dirty render. A supplied strategy is usable only when the contributor declares that it belongs to or was approved for that image. Otherwise the loop writes an unreviewed image-derived strategy and asks for review.
 
+## Automatic.css bindings
+
+Every configured image build uses the same versioned Automatic.css release as dirty-HTML compilation and research. The builder keeps semantic BEM classes, uses ACSS spacing, typography, focus, radius, content-width, and palette variables, and writes `acss-image-bindings.json`. Exact image-observed palette/geometry values are represented as project ACSS override proposals so image-diff optimization stays calibrated. They are labeled `image-derived-unreviewed`: pixels can support a value observation, but not the proposed `primary`, `base`, `accent`, heading, or spacing meaning.
+
+`build-provenance.json` records the ACSS version, source hash, registry hash, and binding artifact. Release defaults never outrank project settings. A reviewed project settings/token export should replace or approve the proposal before production sign-off.
+
 ## What is inferred from still images
 
 The deterministic analyzer extracts palette proportions, horizontal bands, edge density, image dominance, OCR lines and coordinates, tentative region roles, page-type evidence, content hierarchy, conversion labels, and visual voice. The planner then proposes landmarks and sections, a BEM ownership graph, visible content placement, conservative interaction affordances, and exact unresolved concerns.

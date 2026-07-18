@@ -27,6 +27,9 @@ pnpm install
 # Verify the runtime and installed Chrome.
 bun run cli -- doctor
 
+# Compile the configured Automatic.css release into governed local artifacts.
+bun run cli -- acss prepare
+
 # Generate the frozen synthetic curriculum.
 bun run cli -- synth prepare --force
 
@@ -121,6 +124,7 @@ Global flags:
 ```text
 --config <path>       Project YAML configuration
 --workspace <path>    Override the artifact workspace
+--acss <path>         Override the Automatic.css plugin ZIP/directory
 --json                Stable machine-readable envelope
 --no-input            Disable interactive input (commands are noninteractive today)
 --verbose             Reserved diagnostic detail switch
@@ -131,6 +135,7 @@ Global flags:
 | Command | Purpose | Example |
 | --- | --- | --- |
 | `init [directory]` | Write config and export versioned JSON Schemas | `gen2prod init ./site` |
+| `acss prepare` | Compile the configured ACSS release into a DTCG registry, class catalog, defaults, and hash-bound provenance | `gen2prod acss prepare automatic.css-4.zip` |
 | `synth prepare` | Build gold/corrupt fixtures, lineage, splits, and controls | `gen2prod synth prepare --seed 1337 --count 2` |
 | `synth import` | Add exact, partial, or non-1:1 dirty/clean examples with generator-family provenance | `gen2prod synth import canonical.json messy.html --css messy.css --family codex-v1 --alignment exact` |
 | `image import/capture` | Hash an image mockup or acquire strict still/scroll/state frames from a live page | `gen2prod image import mockup.png --target home-v1 --output .gen2prod/image-only/imports/home-v1` |
@@ -155,6 +160,11 @@ mode: legacy-conversion
 profile: refactor
 workspace: .gen2prod
 
+designSystem:
+  provider: automaticcss
+  source: automatic.css-4.0.0.zip # or "auto"
+  mode: full
+
 capture:
   viewports: [360, 768, 1280, 1440]
   themes: [light]
@@ -178,6 +188,10 @@ validation:
 ```
 
 Precedence is command flags, `GEN2PROD_*` environment variables, project configuration, then built-in defaults. After research accepts an incumbent policy, `run` and `evaluate` automatically prefer `.gen2prod/research/incumbent-policy.json`; an explicit `--policy` always wins.
+
+Automatic.css is the default runtime design-system authority. `acss prepare` safely reads the plugin ZIP or directory, records version/license/source hashes, compiles the shipped Sass, and writes `.gen2prod/acss/acss.registry.json`, `acss.catalog.json`, `acss.defaults.css`, and `acss.provenance.json`. The plugin source is not copied into the repository. Token authority is, from highest to lowest: an approved `--tokens` registry, project-compiled CSS variables, then version-scoped ACSS release defaults. The release class catalog is used to recognize dirty ACSS utilities, but clean output remains conceptual BEM and emits only referenced token definitions plus their dependency closure.
+
+Image-only builds use the same release. Observed colors and typography are mapped to ACSS runtime variables in `acss-image-bindings.json` as `image-derived-unreviewed` project-override proposals. This preserves measurable pixel convergence without pretending a still image proves brand semantics; approval or correction remains a required action.
 
 Environment variables are listed in [.env.example](.env.example). The optional HTTP planner endpoint must return structured candidates; local deterministic planners remain the default.
 
@@ -294,11 +308,12 @@ export GEN2PROD_BROWSER=/absolute/path/to/google-chrome
 bun run cli -- doctor
 ```
 
-### “No runtime CSS custom properties were found”
+### “Automatic.css is missing” or no runtime variables are found
 
-Pass an authoritative ACSS/DTCG adapter registry. Without one, Gen2Prod continues safely and records expiring token exceptions.
+Place the licensed plugin ZIP in the project and configure `designSystem.source`, pass `--acss`, or provide an authoritative ACSS/DTCG adapter registry. `doctor` reports the resolved release and artifact counts.
 
 ```bash
+gen2prod acss prepare /path/to/automatic.css.zip
 gen2prod run page.html --css app.css --tokens acss.registry.json
 ```
 
