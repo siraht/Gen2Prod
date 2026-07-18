@@ -252,6 +252,21 @@ describe("static compilation", () => {
     expect(output.scss).toContain("&__content--row");
   });
 
+  test("keeps navigation link groups distinct from CTA groups", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-link-groups-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Link groups</title><meta name="description" content="Link group fixture"><style>.top-links{display:flex}.top-links a{font-size:13px}.cta-row{display:flex}.btn{padding:10px}.btn.alt{background:transparent}</style></head><body><header><nav aria-label="Primary"><div class="top-links"><a href="#one">One</a><a href="#two">Two</a></div></nav></header><main><h1>Groups</h1><div class="cta-row"><a class="btn" href="#start">Start</a><a class="btn alt" href="#learn">Learn</a></div></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    const oneTag = output.html.match(/<a[^>]*>One<\/a>/)?.[0] ?? "";
+    expect(oneTag).not.toContain("button");
+    const allNodes = [output.plan.semantics.root];
+    for (let index = 0; index < allNodes.length; index += 1) allNodes.push(...allNodes[index]!.children);
+    const ctaNodes = allNodes.filter((node) => ["Start", "Learn"].includes(node.text));
+    expect(ctaNodes.every((node) => node.classes.includes("button--primary"))).toBeTrue();
+    expect(new Set(ctaNodes.map((node) => node.classes.at(-1))).size).toBe(2);
+    expect(output.scss).toContain("&--");
+  });
+
   test("resolves full selectors, sibling combinators, and cascade precedence", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-selector-cascade-"));
     const htmlPath = join(directory, "page.html");

@@ -109,7 +109,7 @@ export function emitScss(plan: CompilationPlan): string {
   for (const node of allNodes(plan.semantics.root)) {
     const style = styleMap.get(node.nodeId);
     if (!style || node.classes.length === 0) continue;
-    const primary = node.classes.find((name) => name.includes("__") && name.includes("--"))
+    const primary = [...node.classes].reverse().find((name) => name.includes("--"))
       ?? node.classes.find((name) => name.includes("__"))
       ?? node.classes.find((name) => !name.includes("--"))
       ?? node.classes[0]!;

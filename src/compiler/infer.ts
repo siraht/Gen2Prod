@@ -46,10 +46,11 @@ function isRepeatedItem(node: DomNode, parent: DomNode | undefined): boolean {
 
 function interactiveGroup(node: DomNode): boolean {
   if (node.children.length === 0 || !node.children.every((child) => ["a", "button"].includes(child.tag))) return false;
-  if (node.children.length > 1) return true;
-  const child = node.children[0]!;
-  const attrs = attributes(child);
-  return /button--|primary|cta/i.test(`${attrs["data-g2p-variants"] ?? ""} ${attrs["data-hook"] ?? ""}`);
+  if (/actions?|cta|buttons?/i.test(`${node.nodeId} ${oldClasses(node).join(" ")}`)) return true;
+  return node.children.some((child) => {
+    const attrs = attributes(child);
+    return /(?:^|[-_])(?:btn|button|cta)(?:$|[-_])|button--|primary/i.test(`${oldClasses(child).join(" ")} ${attrs["data-g2p-variants"] ?? ""} ${attrs["data-hook"] ?? ""}`);
+  });
 }
 
 function testimonialPair(node: DomNode | undefined): boolean {
@@ -442,7 +443,7 @@ export function differentiateStyleVariants(root: PlannedNode, styles: StyleInten
       const duplicateHintIndex = hints.slice(0, index).filter((candidate) => candidate === hint).length;
       const modifier = `${base}--${hint}${duplicateHintCount > 1 ? `-${suffix(duplicateHintIndex)}` : ""}`;
       for (const node of values) {
-        if (!node.classes.some((name) => name.startsWith(`${base}--`))) node.classes.push(modifier);
+        if (!node.classes.includes(modifier)) node.classes.push(modifier);
       }
     }
   }
