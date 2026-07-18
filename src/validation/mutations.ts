@@ -15,4 +15,12 @@ export const EVALUATOR_MUTATIONS: EvaluatorMutation[] = [
   { id: "remove-alt", expectedGate: "E", apply: (input) => ({ ...input, html: input.html.replace(/\s+alt="[^"]*"/, "") }) },
   { id: "inline-event", expectedGate: "D", apply: (input) => ({ ...input, html: input.html.replace("<body", '<body onclick="alert(1)"') }) },
   { id: "leaked-secret", expectedGate: "H", apply: (input) => ({ ...input, html: `${input.html}\n<!-- api_key=sk-abcdefghijklmnopqrstuvwxyz -->` }) },
+  { id: "skip-heading-level", expectedGate: "F", apply: (input) => ({ ...input, html: input.html.replace("<h1", "<h3").replace("</h1>", "</h3>") }) },
+  { id: "suppress-focus-outline", expectedGate: "E", apply: (input) => ({ ...input, scss: `${input.scss}\n.button:focus { outline: none; }`, css: `${input.css}\n.button:focus { outline: none; }` }) },
+  { id: "duplicate-false-component", expectedGate: "I", apply: (input) => {
+    const scssDeclarations = input.scss.match(/\.button\s*\{([^{}]+)\}/)?.[1] ?? "display: inline-flex;";
+    const cssDeclarations = input.css.match(/\.button\s*\{([^{}]+)\}/)?.[1] ?? "display: inline-flex;";
+    return { ...input, html: input.html.replace('class="button button--primary"', 'class="button button--primary imposter-component"'), scss: `${input.scss}\n.imposter-component {${scssDeclarations}}`, css: `${input.css}\n.imposter-component {${cssDeclarations}}` };
+  } },
+  { id: "delete-behavior-hook", expectedGate: "E", apply: (input) => ({ ...input, html: input.html.replace(/\s+data-hook="[^"]+"/, "") }) },
 ];

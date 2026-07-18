@@ -84,7 +84,7 @@ function aggregateFitness(results: FixtureEvaluation[], normalizedCost: number):
   };
 }
 
-async function evaluateMutationControls(compiled: Awaited<ReturnType<typeof compileStaticPage>>, threshold: number): Promise<number> {
+export async function evaluateMutationControls(compiled: Awaited<ReturnType<typeof compileStaticPage>>, threshold: number): Promise<number> {
   let caught = 0;
   for (const mutation of EVALUATOR_MUTATIONS) {
     const mutated = mutation.apply(compiled);

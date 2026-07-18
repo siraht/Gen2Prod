@@ -1,7 +1,7 @@
 import { compileString } from "sass";
 import postcss from "postcss";
 import type { CaptureResult } from "../evidence/capture.ts";
-import type { CompiledPage, CompilationPlan } from "../compiler/types.ts";
+import type { CompiledPage, CompilationPlan, PlannedNode } from "../compiler/types.ts";
 import { classifyDeclaration } from "../compiler/tokens.ts";
 import type { GateId, GateResult } from "../schemas/pass.ts";
 import type { VisualTarget } from "../schemas/normal-form.ts";
@@ -74,6 +74,28 @@ function bemClass(name: string): boolean {
 
 function htmlClasses(elements: ValidationElement[]): string[] {
   return [...new Set(flatten(elements).flatMap(classes))];
+}
+
+function plannedNodes(root: PlannedNode): PlannedNode[] {
+  return [root, ...root.children.flatMap(plannedNodes)];
+}
+
+function equivalentStyleBlocks(css: string, htmlNames: Set<string>): string[][] {
+  const signatures = new Map<string, Set<string>>();
+  const root = postcss.parse(css);
+  root.walkRules((rule) => {
+    const declarations: string[] = [];
+    rule.walkDecls((declaration) => { declarations.push(`${declaration.prop}:${declaration.value}`); });
+    if (declarations.length === 0) return;
+    const signature = declarations.sort().join(";");
+    const blocks = signatures.get(signature) ?? new Set<string>();
+    for (const selector of rule.selectors) for (const match of selector.matchAll(/\.([_a-zA-Z]+[\w-]*)/g)) {
+      const className = match[1]!;
+      if (htmlNames.has(className)) blocks.add(className.split(/__|--/)[0]!);
+    }
+    signatures.set(signature, blocks);
+  });
+  return [...signatures.values()].filter((blocks) => blocks.size > 1).map((blocks) => [...blocks].sort());
 }
 
 function countStyledNodes(elements: ValidationElement[], cssClasses: Set<string>): { total: number; bem: number } {
@@ -150,12 +172,18 @@ async function accessibilityGate(context: ValidationContext): Promise<GateResult
     const controls = elements.filter((element) => ["input", "select", "textarea"].includes(element.tag));
     const labels = new Set(elements.filter((element) => element.tag === "label").map((element) => element.attributes.for).filter(Boolean));
     const divButtons = elements.filter((element) => ["div", "span"].includes(element.tag) && classes(element).some((name) => name === "button" || name.startsWith("button--")));
+    const expectedHooks = context.plan ? plannedNodes(context.plan.semantics.root).map((node) => node.attributes["data-hook"]).filter((value): value is string => Boolean(value)) : [];
+    const emittedHooks = new Set(elements.map((element) => element.attributes["data-hook"]).filter(Boolean));
+    const missingHooks = expectedHooks.filter((hook) => !emittedHooks.has(hook));
+    const focusSuppressions = selectorClasses(context.css).rawDeclarations.filter((declaration) => /:focus(?:-visible)?\b/.test(declaration.selector) && declaration.property === "outline" && /^(?:none|0(?:px)?)$/i.test(declaration.value.trim()));
     const staticIssues = [
       ...anchors.filter((element) => !element.attributes.href).map(() => "anchor missing href"),
       ...buttons.filter((element) => !element.attributes.type).map(() => "button missing explicit type"),
       ...images.filter((element) => !("alt" in element.attributes)).map(() => "image missing alt strategy"),
       ...controls.filter((element) => !element.attributes.id || (!labels.has(element.attributes.id) && !element.attributes["aria-label"] && !element.attributes["aria-labelledby"])).map(() => "form control missing label"),
       ...divButtons.map(() => "noninteractive element styled as button"),
+      ...missingHooks.map((hook) => `behavior hook removed: ${hook}`),
+      ...focusSuppressions.map(() => "focus outline suppressed without a verified replacement"),
     ];
     const axeCritical = context.accessibility?.violations.filter((violation) => violation.impact === "critical" || violation.impact === "serious") ?? [];
     const keyboardPassed = !context.accessibility || (context.accessibility.keyboard.tabStopsReached >= Math.min(context.accessibility.keyboard.focusables, 1) && context.accessibility.interactions.disclosureToggle);
@@ -165,7 +193,7 @@ async function accessibilityGate(context: ValidationContext): Promise<GateResult
       assertion("keyboard", keyboardPassed, "critical", keyboardPassed ? "Keyboard interaction smoke tests pass" : "Keyboard path or disclosure behavior failed"),
       assertion("focus-visible", !context.accessibility || context.accessibility.keyboard.focusVisibleMissing.length === 0, "error", context.accessibility?.keyboard.focusVisibleMissing.length ? `Missing visible focus: ${context.accessibility.keyboard.focusVisibleMissing.join(", ")}` : "Focus-visible evidence passes"),
       assertion("manual-review", true, "info", "Manual assistive-technology review remains explicitly required"),
-    ], metrics: { staticAccessibilityIssues: staticIssues.length, automatedViolations: context.accessibility?.violations.length ?? 0, seriousViolations: axeCritical.length, focusVisibleMissing: context.accessibility?.keyboard.focusVisibleMissing.length ?? 0 } };
+    ], metrics: { staticAccessibilityIssues: staticIssues.length, missingBehaviorHooks: missingHooks.length, focusSuppressions: focusSuppressions.length, automatedViolations: context.accessibility?.violations.length ?? 0, seriousViolations: axeCritical.length, focusVisibleMissing: context.accessibility?.keyboard.focusVisibleMissing.length ?? 0 } };
   });
 }
 
@@ -215,12 +243,13 @@ async function consistencyGate(context: ValidationContext): Promise<GateResult> 
     }
     const drifted = [...signatures.entries()].filter(([, variants]) => variants.size > 1).map(([name]) => name);
     const duplicateNames = context.plan ? context.plan.components.filter((component, index, all) => all.findIndex((other) => JSON.stringify(other.bem.elements.slice().sort()) === JSON.stringify(component.bem.elements.slice().sort())) !== index).map((component) => component.name) : [];
+    const equivalentStyles = equivalentStyleBlocks(context.css, new Set(htmlClasses(parseElements(context.html).roots)));
     const plans = [...(context.plan ? [{ page: "current", plan: context.plan }] : []), ...peers.map((peer) => ({ page: peer.id, plan: peer.plan }))];
     const entropy = slotEntropy(plans);
     const supported = entropy.filter((item) => item.support >= 3 && item.entropy !== null);
     const highEntropy = supported.filter((item) => (item.entropy ?? 0) > 0.75);
     const meanEntropy = supported.length ? supported.reduce((sum, item) => sum + (item.entropy ?? 0), 0) / supported.length : 0;
-    return { assertions: [assertion("component-contract-drift", drifted.length === 0, "error", drifted.length ? `Drifted contracts: ${drifted.join(", ")}` : "Component contracts are consistent"), assertion("slot-token-entropy", highEntropy.length === 0, "warning", highEntropy.length ? `High-entropy token slots: ${highEntropy.map((item) => item.slot).join(", ")}` : "Supported token slots are consistent"), assertion("component-equivalence", duplicateNames.length === 0, "warning", duplicateNames.length ? `Equivalent component candidates: ${duplicateNames.join(", ")}` : "No obvious duplicate components")], metrics: { driftedComponents: drifted.length, equivalentComponents: duplicateNames.length, supportedTokenSlots: supported.length, highEntropyTokenSlots: highEntropy.length, meanSlotEntropy: meanEntropy } };
+    return { assertions: [assertion("component-contract-drift", drifted.length === 0, "error", drifted.length ? `Drifted contracts: ${drifted.join(", ")}` : "Component contracts are consistent"), assertion("slot-token-entropy", highEntropy.length === 0, "warning", highEntropy.length ? `High-entropy token slots: ${highEntropy.map((item) => item.slot).join(", ")}` : "Supported token slots are consistent"), assertion("component-equivalence", duplicateNames.length === 0 && equivalentStyles.length === 0, "error", duplicateNames.length || equivalentStyles.length ? `Equivalent component candidates: ${[...duplicateNames, ...equivalentStyles.map((blocks) => blocks.join("/"))].join(", ")}` : "No obvious duplicate components")], metrics: { driftedComponents: drifted.length, equivalentComponents: duplicateNames.length + equivalentStyles.length, supportedTokenSlots: supported.length, highEntropyTokenSlots: highEntropy.length, meanSlotEntropy: meanEntropy } };
   });
 }
 

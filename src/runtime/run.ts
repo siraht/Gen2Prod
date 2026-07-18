@@ -22,7 +22,7 @@ import { generateProductReports } from "../report/generate.ts";
 import type { PassEvent } from "../schemas/pass.ts";
 import { RunManifestSchema, type Mode, type Profile, type RunManifest } from "../schemas/artifacts.ts";
 import { TrajectorySchema } from "../schemas/research.ts";
-import { policyActions, policyCost } from "../research/evaluate.ts";
+import { evaluateMutationControls, policyActions, policyCost } from "../research/evaluate.ts";
 
 export type RunOptions = {
   input: string;
@@ -135,9 +135,11 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
 
   const accessibility = options.capture ? await auditAccessibility(pathToFileURL(join(outputDirectory, "page.html")).href, options.config.capture.browserExecutable) : undefined;
   const validation = await validate({ html: compiled.html, scss: compiled.scss, css: compiled.css, plan: compiled.plan, baselineCapture, candidateCapture, accessibility, visualTarget, mode: options.mode, profile: options.profile, thresholds: { minBemCoverage: options.config.validation.minBemCoverage, minTokenCoverage: options.config.validation.minTokenCoverage, maxVisualPixelRatio: options.config.validation.maxVisualPixelRatio, provisional: options.config.validation.provisionalThresholds } });
+  const mutationControlRecall = await evaluateMutationControls(compiled, options.policy.thresholds.visualPixelRatio);
   const buildGate = validation.gates.find((gate) => gate.gate === "A");
   if (buildGate) {
     buildGate.assertions.push({ id: "idempotence", passed: idempotent, severity: "error", message: idempotent ? "Exact compiler idempotence passes" : `Output hash ${outputHash} differs from recompile ${idempotenceHash}` });
+    buildGate.assertions.push({ id: "evaluator-mutation-controls", passed: mutationControlRecall === 1, severity: "critical", message: `Evaluator caught ${(mutationControlRecall * 100).toFixed(1)}% of controlled defects` });
     buildGate.passed = buildGate.assertions.every((assertion) => assertion.passed || assertion.severity === "warning" || assertion.severity === "info");
   }
   validation.metrics.idempotenceError = idempotent ? 0 : 1;
@@ -167,10 +169,10 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
     experimentId: `production-${id}`,
     fixtureId: basename(options.input),
     split: "production",
-    observations: { mode: options.mode, profile: options.profile, capture: options.capture, semanticReview: compiled.plan.semantics.review.length, hardGateFailures: hardFailures.length },
+    observations: { mode: options.mode, profile: options.profile, capture: options.capture, semanticReview: compiled.plan.semantics.review.length, hardGateFailures: hardFailures.length, mutationControlRecall },
     actions: policyActions(options.policy),
     planSummary: { runId: id, outputHash, idempotenceHash, passes: replayEvents.map((item) => item.pass) },
-    verifierLabels: { hardGatesPass: hardFailures.length === 0, idempotent, mutationControlsPass: true },
+    verifierLabels: { hardGatesPass: hardFailures.length === 0, idempotent, mutationControlsPass: mutationControlRecall === 1 },
     fitness: {
       criticalGateFailures: hardFailures.length,
       contentBehaviorErrors: behaviorErrors,

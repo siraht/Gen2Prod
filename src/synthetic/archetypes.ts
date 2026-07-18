@@ -89,7 +89,7 @@ export function createArchetypes(): CanonicalPageSpec[] {
           node({ nodeId: "hero-title", tag: "h1", role: "primary-heading", classes: ["hero__title"], attributes: { id: "hero-title" }, text: "Ship a calmer workday", styles: sharedStyles.title }),
           node({ nodeId: "hero-lede", tag: "p", role: "supporting-copy", classes: ["hero__lede"], text: "Plan, focus, and finish meaningful work without the busywork.", styles: { margin: "0", "font-size": "1.125rem" } }),
           node({ nodeId: "hero-actions", tag: "div", role: "cta-group", classes: ["hero__actions"], styles: { display: "flex", gap: "var(--space-s)" }, children: [
-            node({ nodeId: "hero-cta", tag: "a", role: "primary-cta", classes: ["button", "button--primary"], attributes: { href: "/start" }, text: "Start free", styles: sharedStyles.button }),
+            node({ nodeId: "hero-cta", tag: "a", role: "primary-cta", classes: ["button", "button--primary"], attributes: { href: "/start", "data-hook": "analytics:primary-cta" }, text: "Start free", styles: sharedStyles.button }),
           ] }),
         ] }),
         node({ nodeId: "hero-media", tag: "div", role: "visual-proof", classes: ["hero__media"], styles: sharedStyles.card, children: [
