@@ -15,5 +15,5 @@ export const conservativeImageOnlyPolicy: ImageOnlyPolicy = {
   layoutStrategy: "flow",
   preserveTargetRegionHeights: false,
   typographyScale: 1,
-  raster: { enabled: false, maximumCoverage: 0.12, imageDominanceThreshold: 0.65, maximumTextLines: 0 },
+  raster: { enabled: true, maximumCoverage: 0.12, imageDominanceThreshold: 0.65, maximumTextLines: 0 },
 };
