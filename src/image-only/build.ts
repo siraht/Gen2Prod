@@ -56,10 +56,10 @@ const FALLBACK_ACSS_VALUES: Record<string, string> = {
   "--section-space-m": "6rem", "--gutter": "1.5rem", "--content-width": "75rem", "--radius-m": "1rem",
   "--focus-color": "currentColor", "--focus-width": "3px", "--focus-offset": "4px", "--h1": "4.5rem", "--h2": "3rem",
   "--text-m": "1.125rem", "--body-font-family": "Inter, ui-sans-serif, system-ui, sans-serif", "--heading-font-family": "Inter, ui-sans-serif, system-ui, sans-serif",
-  "--heading-font-weight": "700", "--heading-line-height": "1.2", "--text-line-height": "1.5",
+  "--heading-font-weight": "700", "--heading-line-height": "0.98", "--text-line-height": "1.5",
   "--g2p-image-heading-max-width": "18ch", "--g2p-image-copy-max-width": "64ch", "--g2p-image-page-min-width": "20rem",
   "--g2p-image-card-min-width": "16rem", "--g2p-image-visually-hidden-size": "1px", "--g2p-image-heading-letter-spacing": "-0.035em",
-  "--g2p-image-border-width": "1px", "--g2p-image-mobile-max-height": "80rem",
+  "--g2p-image-border-width": "1px", "--g2p-image-mobile-max-height": "80rem", "--g2p-image-heading-min-size": "2rem", "--g2p-image-heading-fluid-rate": "5vw",
 };
 
 const ACSS_COLOR_ROLES = ["--base", "--primary", "--secondary", "--accent", "--neutral", "--primary-light", "--secondary-light", "--accent-light", "--base-light", "--neutral-light", "--primary-dark", "--secondary-dark", "--accent-dark", "--base-dark", "--neutral-dark"];
@@ -263,9 +263,10 @@ ${indent}border: 0;`;
 }
 
 function renderScss(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, policy: ImageOnlyPolicy, acssBindings: ReturnType<typeof imageAcssBindings>, assets: Map<string, { path: string; width: number; height: number }>): string {
-  const baseBlocks = [...new Set(plan.regions.map((region) => region.block))];
+  const effectiveBlock = (region: ImageOnlyBuildPlan["regions"][number]) => assets.has(region.regionId) ? "media-panel" : region.block;
+  const baseBlocks = [...new Set(plan.regions.map(effectiveBlock))];
   const blockRules = baseBlocks.map((block) => {
-    const regions = plan.regions.filter((region) => region.block === block);
+    const regions = plan.regions.filter((region) => effectiveBlock(region) === block);
     const flowRegions = regions.filter((region) => !assets.has(region.regionId));
     const hasInner = flowRegions.length > 0;
     const hasTitle = flowRegions.some((region) => Boolean(region.heading) && !["header", "footer"].includes(region.tag));
@@ -289,7 +290,7 @@ function renderScss(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, polic
     max-width: var(--g2p-image-heading-max-width);
     margin: 0 0 var(--space-m);
     font-family: var(--heading-font-family);
-    font-size: var(--h2);
+    font-size: clamp(var(--g2p-image-heading-min-size), var(--g2p-image-heading-fluid-rate), var(--h2));
     font-weight: var(--heading-font-weight);
     line-height: var(--heading-line-height);
     letter-spacing: var(--g2p-image-heading-letter-spacing);${block === "card-grid" ? `
@@ -380,7 +381,7 @@ ${visuallyHiddenDeclarations("    ")}
   }${region.heading && !["header", "footer"].includes(region.tag) ? `
 
   &__title--${modifier} {
-    font-size: var(${acssBindings.regionTypography.get(region.regionId) ?? "--h2"});
+    font-size: clamp(var(--g2p-image-heading-min-size), var(--g2p-image-heading-fluid-rate), var(${acssBindings.regionTypography.get(region.regionId) ?? "--h2"}));
   }` : ""}`}`;
     });
     return `.${block} {
