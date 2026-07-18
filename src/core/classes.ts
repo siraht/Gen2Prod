@@ -9,3 +9,19 @@ export function isUtilityClass(className: string): boolean {
   if (candidate === "content") return false;
   return /^u-\d+$/.test(candidate) || UTILITY_FAMILY.test(candidate) || /^-?(?:m|p|inset|top|right|bottom|left|translate-[xy])-/.test(candidate);
 }
+
+/**
+ * Gen2Prod's deliberately narrow BEM dialect: one kebab-case block, one
+ * optional element, and one optional modifier.  Keeping this definition in
+ * core prevents emitters and evaluators from silently adopting different
+ * class contracts.
+ */
+export function isBemClass(className: string): boolean {
+  return /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:__[a-z0-9]+(?:-[a-z0-9]+)*)?(?:--[a-z0-9]+(?:-[a-z0-9]+)*)?$/.test(className)
+    && !/__.*__/.test(className)
+    && !/--.*__/.test(className);
+}
+
+export function bemBlock(className: string): string {
+  return className.split(/__|--/)[0]!;
+}
