@@ -40,9 +40,8 @@ export async function convergeVisualTarget(compiled: CompiledPage, target: Visua
   const iterations: ConvergenceIteration[] = [];
   let stopReason = currentLoss <= options.threshold ? "approved visual threshold met" : "maximum iterations reached";
   for (let iteration = 0; iteration < options.maxIterations && currentLoss > options.threshold; iteration += 1) {
-    const baselineValidation = await validate(contextFromCompiled({ ...compiled, scss: currentScss, css: currentCss }, { minBemCoverage: 0.95, minTokenCoverage: 0.95, maxVisualPixelRatio: options.threshold, provisional: true }));
-    const baselineFailures = baselineValidation.gates.filter((gate) => gate.hard && !gate.passed).length;
     let best: { name: string; scss: string; css: string; capture: CaptureResult; loss: number; failures: number } | undefined;
+    const attempted: Omit<ConvergenceIteration, "outcome">[] = [];
     for (const token of numericTokenCandidates(currentScss)) for (const factor of [0.94, 1.06]) {
       const name = `${token.name}:${factor}`;
       const candidateScss = changeToken(currentScss, token, factor);
@@ -51,10 +50,11 @@ export async function convergeVisualTarget(compiled: CompiledPage, target: Visua
       const candidateLoss = (await imageDifference(target.path, candidate.capture.captures[0]!.screenshot, join(candidateDirectory, "candidate-vs-target.png"))).ratio;
       const report = await validate(contextFromCompiled({ ...compiled, scss: candidateScss, css: candidate.css }, { minBemCoverage: 0.95, minTokenCoverage: 0.95, maxVisualPixelRatio: options.threshold, provisional: true }));
       const failures = report.gates.filter((gate) => gate.hard && !gate.passed).length;
-      const keep = failures <= baselineFailures && candidateLoss < currentLoss && (!best || candidateLoss < best.loss);
-      iterations.push({ iteration: iteration + 1, candidate: name, beforeLoss: currentLoss, afterLoss: candidateLoss, hardGateFailures: failures, outcome: keep ? "keep" : "revert" });
+      const keep = failures === 0 && candidateLoss < currentLoss && (!best || candidateLoss < best.loss);
+      attempted.push({ iteration: iteration + 1, candidate: name, beforeLoss: currentLoss, afterLoss: candidateLoss, hardGateFailures: failures });
       if (keep) best = { name, scss: candidateScss, css: candidate.css, capture: candidate.capture, loss: candidateLoss, failures };
     }
+    iterations.push(...attempted.map((candidate) => ({ ...candidate, outcome: candidate.candidate === best?.name ? "keep" as const : "revert" as const })));
     if (!best) { stopReason = "marginal constrained utility below threshold; next fix requires design evidence"; break; }
     currentScss = best.scss; currentCss = best.css; currentCapture = best.capture; currentLoss = best.loss;
     if (currentLoss <= options.threshold) stopReason = "approved visual threshold met";
