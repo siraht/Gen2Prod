@@ -3,12 +3,14 @@ import { writeJsonAtomic } from "../core/fs.ts";
 import { ImageDerivedContentStrategySchema, type ImageDerivedContentStrategy, type ImageOnlyAnalysis, type ImageStateSequenceAnalysis } from "../schemas/image-only.ts";
 
 function pageType(text: string): string {
-  if (/\b(?:restaurant|menu|dinner|lunch|reservation|chef|cuisine|ingredients)\b/i.test(text)) return "hospitality or restaurant landing page";
-  if (/\b(?:css|wordpress|developer|component|framework|code)\b/i.test(text)) return "developer tool or web-production product page";
-  if (/\b(?:payments|financial|revenue|billing|platform|enterprise)\b/i.test(text)) return "financial technology or platform marketing page";
-  if (/\b(?:iphone|mac|watch|shop|product)\b/i.test(text)) return "consumer product campaign and catalog page";
-  if (/\b(?:studio|design|agency|creative|work|portfolio)\b/i.test(text)) return "creative studio or portfolio page";
-  return "visual marketing landing page";
+  const categories = [
+    { label: "hospitality or restaurant landing page", pattern: /\b(?:restaurant|menu|dinner|lunch|reservation|chef|cuisine|ingredients)\b/gi },
+    { label: "developer tool or web-production product page", pattern: /\b(?:css|wordpress|developer|component|framework|code)\b/gi },
+    { label: "financial technology or platform marketing page", pattern: /\b(?:payments|financial|revenue|billing|platform|enterprise)\b/gi },
+    { label: "consumer product campaign and catalog page", pattern: /\b(?:iphone|ipad|macbook|airpods|apple watch|laptop|phone|shop|product)\b/gi },
+    { label: "creative studio or portfolio page", pattern: /\b(?:studio|design|agency|creative|portfolio|case study)\b/gi },
+  ].map((category) => ({ ...category, matches: text.match(category.pattern)?.length ?? 0 }));
+  return categories.sort((left, right) => right.matches - left.matches)[0]?.matches ? categories[0]!.label : "visual marketing landing page";
 }
 
 function audience(text: string): string {
