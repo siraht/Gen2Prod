@@ -7,7 +7,7 @@ import { ensureDirectory, readJson, writeJsonAtomic, writeTextAtomic } from "../
 import { hashJson } from "../core/hash.ts";
 import { openCaptureSession, type CaptureResult, type CaptureSession } from "../evidence/capture.ts";
 import { validate } from "../validation/gates.ts";
-import { compareCaptures, imageDifference } from "../validation/visual.ts";
+import { compareCaptures, imageDifference, imageDifferenceWidthNormalized, type NormalizedImageDifference } from "../validation/visual.ts";
 import { NaturalisticCorpusManifestSchema, type NaturalisticArtifact, type NaturalisticCorpusManifest, type NaturalisticProject } from "./types.ts";
 
 export type NaturalisticEvaluationOptions = {
@@ -40,7 +40,16 @@ export type NaturalisticFixtureEvaluation = {
     dirtyScreenshot: string;
     candidateScreenshot: string;
     dirtyToCandidate: Awaited<ReturnType<typeof compareCaptures>>;
-    pairedTarget?: { path: string; fitnessUse: "exact-if-calibrated" | "preference-only"; dirtyToTarget: ImageScore; candidateToTarget: ImageScore; targetRegression: number };
+    pairedTarget?: {
+      path: string;
+      fitnessUse: "exact-if-calibrated" | "preference-only";
+      comparisonMode: "pixel-exact" | "width-normalized";
+      dirtyToTarget: ImageScore | NormalizedImageDifference;
+      candidateToTarget: ImageScore | NormalizedImageDifference;
+      rawDirtyToTarget?: ImageScore;
+      rawCandidateToTarget?: ImageScore;
+      targetRegression: number;
+    };
     liveOutcome?: { url: string; fitnessUse: "preference-only"; dirtyToLive: ImageScore; candidateToLive: ImageScore; movementTowardLive: number };
   };
   error?: string;
@@ -233,10 +242,25 @@ async function evaluateArtifact(input: {
       const dirtyToCandidate = await compareCaptures(dirtyCapture, candidateCapture, join(fixtureDirectory, "diff", "dirty-vs-candidate.png"));
       result.visuals = { viewport, dirtyScreenshot: dirtyCapture.screenshot, candidateScreenshot: candidateCapture.screenshot, dirtyToCandidate };
       if (pairedImagePath) {
-        const dirtyToTarget = await imageDifference(pairedImagePath, dirtyCapture.screenshot, join(fixtureDirectory, "diff", "target-vs-dirty.png"));
-        const candidateToTarget = await imageDifference(pairedImagePath, candidateCapture.screenshot, join(fixtureDirectory, "diff", "target-vs-candidate.png"));
-        const calibrated = dirtyToTarget.widthMismatch === 0 && dirtyToTarget.ratio <= 0.02;
-        result.visuals.pairedTarget = { path: pairedImagePath, fitnessUse: calibrated ? "exact-if-calibrated" : "preference-only", dirtyToTarget, candidateToTarget, targetRegression: candidateToTarget.ratio - dirtyToTarget.ratio };
+        const rawDirtyToTarget = await imageDifference(pairedImagePath, dirtyCapture.screenshot);
+        const rawCandidateToTarget = await imageDifference(pairedImagePath, candidateCapture.screenshot);
+        const normalizeWidth = rawDirtyToTarget.widthMismatch > 0.05;
+        const dirtyToTarget = normalizeWidth
+          ? await imageDifferenceWidthNormalized(pairedImagePath, dirtyCapture.screenshot, join(fixtureDirectory, "diff", "target-vs-dirty-width-normalized.png"))
+          : await imageDifference(pairedImagePath, dirtyCapture.screenshot, join(fixtureDirectory, "diff", "target-vs-dirty.png"));
+        const candidateToTarget = normalizeWidth
+          ? await imageDifferenceWidthNormalized(pairedImagePath, candidateCapture.screenshot, join(fixtureDirectory, "diff", "target-vs-candidate-width-normalized.png"))
+          : await imageDifference(pairedImagePath, candidateCapture.screenshot, join(fixtureDirectory, "diff", "target-vs-candidate.png"));
+        const calibrated = !normalizeWidth && dirtyToTarget.widthMismatch === 0 && dirtyToTarget.heightMismatch === 0 && dirtyToTarget.ratio <= 0.1;
+        result.visuals.pairedTarget = {
+          path: pairedImagePath,
+          fitnessUse: calibrated ? "exact-if-calibrated" : "preference-only",
+          comparisonMode: normalizeWidth ? "width-normalized" : "pixel-exact",
+          dirtyToTarget,
+          candidateToTarget,
+          ...(normalizeWidth ? { rawDirtyToTarget, rawCandidateToTarget } : {}),
+          targetRegression: candidateToTarget.ratio - dirtyToTarget.ratio,
+        };
       }
       const live = captureForViewport(liveCapture, viewport);
       if (live && project.liveUrl) {

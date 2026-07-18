@@ -13,6 +13,14 @@ export type VisualMetrics = {
   unmatchedVisibleNodes: number;
 };
 
+export type ImageDifference = { ratio: number; widthMismatch: number; heightMismatch: number };
+export type NormalizedImageDifference = ImageDifference & {
+  normalization: "none" | "width";
+  scaleApplied: number;
+  sourceWidthMismatch: number;
+  aspectMismatch: number;
+};
+
 type CapturedNode = {
   nodeId: string;
   tag: string;
@@ -28,10 +36,33 @@ function quantile(values: number[], fraction: number): number {
   return ordered[Math.min(ordered.length - 1, Math.floor(fraction * ordered.length))] ?? 0;
 }
 
-export async function imageDifference(baselinePath: string, candidatePath: string, diffPath?: string): Promise<{ ratio: number; widthMismatch: number; heightMismatch: number }> {
-  const [baselineBuffer, candidateBuffer] = await Promise.all([Bun.file(baselinePath).arrayBuffer(), Bun.file(candidatePath).arrayBuffer()]);
-  const baseline = PNG.sync.read(Buffer.from(baselineBuffer));
-  const candidate = PNG.sync.read(Buffer.from(candidateBuffer));
+function resizeBilinear(image: PNG, width: number, height: number): PNG {
+  if (image.width === width && image.height === height) return image;
+  const output = new PNG({ width, height });
+  const scaleX = image.width / width;
+  const scaleY = image.height / height;
+  for (let y = 0; y < height; y += 1) {
+    const sourceY = Math.max(0, Math.min(image.height - 1, (y + 0.5) * scaleY - 0.5));
+    const y0 = Math.floor(sourceY);
+    const y1 = Math.min(image.height - 1, y0 + 1);
+    const yWeight = sourceY - y0;
+    for (let x = 0; x < width; x += 1) {
+      const sourceX = Math.max(0, Math.min(image.width - 1, (x + 0.5) * scaleX - 0.5));
+      const x0 = Math.floor(sourceX);
+      const x1 = Math.min(image.width - 1, x0 + 1);
+      const xWeight = sourceX - x0;
+      const outputOffset = (y * width + x) * 4;
+      for (let channel = 0; channel < 4; channel += 1) {
+        const top = image.data[(y0 * image.width + x0) * 4 + channel]! * (1 - xWeight) + image.data[(y0 * image.width + x1) * 4 + channel]! * xWeight;
+        const bottom = image.data[(y1 * image.width + x0) * 4 + channel]! * (1 - xWeight) + image.data[(y1 * image.width + x1) * 4 + channel]! * xWeight;
+        output.data[outputOffset + channel] = Math.round(top * (1 - yWeight) + bottom * yWeight);
+      }
+    }
+  }
+  return output;
+}
+
+async function compareImages(baseline: PNG, candidate: PNG, diffPath?: string): Promise<ImageDifference> {
   const width = Math.min(baseline.width, candidate.width);
   const height = Math.min(baseline.height, candidate.height);
   if (width === 0 || height === 0) return { ratio: 1, widthMismatch: 1, heightMismatch: 1 };
@@ -50,6 +81,38 @@ export async function imageDifference(baselinePath: string, candidatePath: strin
   }
   const areaPenalty = Math.abs(baseline.width * baseline.height - candidate.width * candidate.height) / Math.max(baseline.width * baseline.height, 1);
   return { ratio: Math.min(1, mismatched / (width * height) + areaPenalty), widthMismatch: Math.abs(baseline.width - candidate.width) / Math.max(baseline.width, 1), heightMismatch: Math.abs(baseline.height - candidate.height) / Math.max(baseline.height, 1) };
+}
+
+export async function imageDifference(baselinePath: string, candidatePath: string, diffPath?: string): Promise<ImageDifference> {
+  const [baselineBuffer, candidateBuffer] = await Promise.all([Bun.file(baselinePath).arrayBuffer(), Bun.file(candidatePath).arrayBuffer()]);
+  const baseline = PNG.sync.read(Buffer.from(baselineBuffer));
+  const candidate = PNG.sync.read(Buffer.from(candidateBuffer));
+  return compareImages(baseline, candidate, diffPath);
+}
+
+/**
+ * Compare a rendered full-page capture with a reference that may have been
+ * horizontally downsampled by an export tool. This is preference evidence,
+ * not a substitute for an exact same-environment pixel comparison.
+ */
+export async function imageDifferenceWidthNormalized(baselinePath: string, candidatePath: string, diffPath?: string): Promise<NormalizedImageDifference> {
+  const [baselineBuffer, candidateBuffer] = await Promise.all([Bun.file(baselinePath).arrayBuffer(), Bun.file(candidatePath).arrayBuffer()]);
+  const baseline = PNG.sync.read(Buffer.from(baselineBuffer));
+  const candidate = PNG.sync.read(Buffer.from(candidateBuffer));
+  const sourceWidthMismatch = Math.abs(baseline.width - candidate.width) / Math.max(baseline.width, 1);
+  const scaleApplied = baseline.width / Math.max(candidate.width, 1);
+  const scaledHeight = Math.max(1, Math.round(candidate.height * scaleApplied));
+  const normalized = resizeBilinear(candidate, baseline.width, scaledHeight);
+  const result = await compareImages(baseline, normalized, diffPath);
+  const baselineAspect = baseline.width / Math.max(baseline.height, 1);
+  const candidateAspect = candidate.width / Math.max(candidate.height, 1);
+  return {
+    ...result,
+    normalization: sourceWidthMismatch > 0 ? "width" : "none",
+    scaleApplied,
+    sourceWidthMismatch,
+    aspectMismatch: Math.abs(baselineAspect - candidateAspect) / Math.max(baselineAspect, Number.EPSILON),
+  };
 }
 
 const STYLE_CATEGORIES: Record<string, string[]> = {
