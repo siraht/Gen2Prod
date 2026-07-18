@@ -28,6 +28,7 @@ import { TrajectorySchema } from "../schemas/research.ts";
 import { evaluateMutationControls, policyActions, policyCost } from "../research/evaluate.ts";
 import { compareCaptures } from "../validation/visual.ts";
 import { loadDistilledController, recommendWithController, verifyWithController } from "./controller.ts";
+import { scheduleLocalizedRepair, type RepairSchedule } from "./repair-scheduler.ts";
 
 export type RunOptions = {
   input: string;
@@ -132,18 +133,19 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
   let compiled = compiledInput.compiled;
   await replay.append(event(id, options.mode === "greenfield" ? "strategy-to-normal-form" : "source-ingestion", policyHash, "accepted", "Typed input artifacts and authorities were materialized."));
   const structuralThresholds = { minBemCoverage: options.config.validation.minBemCoverage, minTokenCoverage: options.config.validation.minTokenCoverage, maxVisualPixelRatio: options.config.validation.maxVisualPixelRatio, provisional: options.config.validation.provisionalThresholds };
-  const repairHistory: { attempt: number; applied: ReturnType<typeof planLocalizedRepairs>; changedNodes: string[]; hardFailuresBefore: number; hardFailuresAfter: number; outcome: "keep" | "revert" }[] = [];
+  const repairHistory: { attempt: number; scheduler: RepairSchedule; applied: ReturnType<typeof planLocalizedRepairs>; changedNodes: string[]; hardFailuresBefore: number; hardFailuresAfter: number; outcome: "keep" | "revert" }[] = [];
   let preflight = await validate(contextFromCompiled(compiled, structuralThresholds));
   for (let attempt = 1; attempt <= options.policy.thresholds.repairEscalation; attempt += 1) {
     const proposed = planLocalizedRepairs(preflight.gates).filter((repair) => repair.automatic);
-    const repaired = applyAutomaticRepairs(compiled, proposed);
+    const scheduler = scheduleLocalizedRepair(proposed, options.policy, options.mode, 1 - repairHistory.reduce((sum, item) => sum + (item.scheduler.selectedAction?.pass.estimatedCost ?? 0), 0));
+    const repaired = applyAutomaticRepairs(compiled, scheduler.selected ? [scheduler.selected] : []);
     if (repaired.applied.length === 0) break;
     const candidateReport = await validate(contextFromCompiled(repaired.compiled, structuralThresholds));
     const before = preflight.gates.filter((gate) => gate.hard && !gate.passed).length;
     const after = candidateReport.gates.filter((gate) => gate.hard && !gate.passed).length;
     const keep = after < before;
-    repairHistory.push({ attempt, applied: repaired.applied, changedNodes: repaired.changedNodes, hardFailuresBefore: before, hardFailuresAfter: after, outcome: keep ? "keep" : "revert" });
-    await replay.append(event(id, "localized-preflight-repair", policyHash, keep ? "accepted" : "rejected", `${repaired.applied.map((repair) => repair.operation).join(", ")}: hard failures ${before} → ${after}.`, candidateReport.gates));
+    repairHistory.push({ attempt, scheduler, applied: repaired.applied, changedNodes: repaired.changedNodes, hardFailuresBefore: before, hardFailuresAfter: after, outcome: keep ? "keep" : "revert" });
+    await replay.append(event(id, "localized-preflight-repair", policyHash, keep ? "accepted" : "rejected", `${repaired.applied.map((repair) => repair.operation).join(", ")}: lower-bound utility ${scheduler.selectedAction?.lowerBound.toFixed(4) ?? "n/a"}; hard failures ${before} → ${after}.`, candidateReport.gates));
     if (!keep) break;
     compiled = repaired.compiled;
     preflight = candidateReport;
