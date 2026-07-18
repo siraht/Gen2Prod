@@ -11,6 +11,7 @@ import { result, type ResultEnvelope } from "./core/result.ts";
 import { ModeSchema, ProfileSchema } from "./schemas/artifacts.ts";
 import { exportSchemas } from "./schemas/export.ts";
 import { prepareBenchmark } from "./research/prepare.ts";
+import { evaluateModalityAblation } from "./research/ablation.ts";
 import { evaluatePolicy } from "./research/evaluate.ts";
 import { runResearch } from "./research/loop.ts";
 import { loadPolicy } from "./runtime/policy.ts";
@@ -19,6 +20,7 @@ import { createPassRegistry } from "./runtime/passes.ts";
 import { distill, type DistillTarget } from "./distill/train.ts";
 import { validate } from "./validation/gates.ts";
 import { findBrowserExecutable } from "./evidence/capture.ts";
+import { importNaturalisticFixture } from "./synthetic/import.ts";
 
 type GlobalOptions = { config: string; workspace: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -92,16 +94,35 @@ synth
     const manifest = await prepareBenchmark({ root, seed: Number.parseInt(options.seed, 10), countPerArchetype: Number.parseInt(options.count, 10) });
     emit(result("synth prepare", { root, fixtureCount: manifest.fixtures.length, splits: manifest.fixtures.reduce<Record<string, number>>((counts, fixture) => { counts[fixture.split] = (counts[fixture.split] ?? 0) + 1; return counts; }, {}) }), `Prepared ${manifest.fixtures.length} frozen fixtures in ${root}.`);
   });
+synth
+  .command("import <canonical> <html>")
+  .description("add a naturalistic model-generated implementation to the curriculum")
+  .requiredOption("--css <path>", "model-generated CSS source")
+  .requiredOption("--family <name>", "generator model or tool family")
+  .option("--root <path>", "fixture output directory", "fixtures/generated")
+  .option("--fixture-id <id>", "stable fixture identifier")
+  .addOption(new Option("--split <split>", "benchmark split").choices(["train", "validation", "holdout"]).default("validation"))
+  .action(async (canonical: string, html: string, options: { css: string; family: string; root: string; fixtureId?: string; split: "train" | "validation" | "holdout" }) => {
+    const imported = await importNaturalisticFixture({ root: resolve(options.root), canonicalPath: resolve(canonical), htmlPath: resolve(html), cssPath: resolve(options.css), generatorFamily: options.family, split: options.split, fixtureId: options.fixtureId });
+    emit(result("synth import", { fixtureId: imported.fixtureId, fixtureCount: imported.manifest.fixtures.length, generatorFamilies: imported.manifest.splitPolicy.generatorFamilies }), `Imported ${imported.fixtureId} from ${options.family}; the curriculum now contains ${imported.manifest.fixtures.length} fixtures.`);
+  });
 
 program
   .command("evaluate")
   .description("evaluate a transformation policy with the frozen evaluator")
   .option("--fixtures <path>", "synthetic manifest", "fixtures/generated/manifest.json")
   .option("--policy <path>", "TypeScript or JSON policy")
+  .option("--ablation", "run the controlled A–F evidence-modality ablation")
   .addOption(new Option("--split <split>", "benchmark split").choices(["train", "validation", "holdout", "all"]).default("validation"))
-  .action(async (options: { fixtures: string; policy?: string; split: "train" | "validation" | "holdout" | "all" }) => {
+  .action(async (options: { fixtures: string; policy?: string; ablation?: boolean; split: "train" | "validation" | "holdout" | "all" }) => {
     const project = await config();
     const policy = await currentPolicy(project, options.policy);
+    if (options.ablation) {
+      const ablations = await evaluateModalityAblation({ manifestPath: resolve(options.fixtures), policy, split: options.split, workDirectory: resolve(project.workspace, "evaluations", crypto.randomUUID()) });
+      const data = ablations.map(({ id, evidence, evaluation }) => ({ id, evidence, fitness: evaluation.fitness, mutationControlRecall: evaluation.mutationControlRecall, resources: evaluation.resourceAccounting }));
+      emit(result("evaluate --ablation", data), ["A–F modality ablation", ...data.map((entry) => `${entry.id}: semantic=${entry.fitness.semanticContractError.toFixed(4)} bem=${entry.fitness.bemComponentError.toFixed(4)} review=${entry.fitness.reviewBurden.toFixed(2)} cost=${entry.resources.normalizedCost.toFixed(3)} vision=${entry.resources.visionCalls}`)].join("\n"));
+      return;
+    }
     const evaluation = await evaluatePolicy({ manifestPath: resolve(options.fixtures), policy, split: options.split, workDirectory: resolve(project.workspace, "evaluations", crypto.randomUUID()) });
     const envelope = result("evaluate", evaluation);
     if (evaluation.mutationControlRecall < 1) envelope.warnings.push("Frozen evaluator did not catch every mutation control.");
