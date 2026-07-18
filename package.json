@@ -9,7 +9,7 @@
   "scripts": {
     "build": "bun build src/cli.ts --outdir dist --target bun --packages external --minify",
     "check": "tsc --noEmit",
-    "test": "bun test --max-concurrency 1",
+    "test": "bun test --max-concurrency 1 tests",
     "test:unit": "bun test tests/unit",
     "test:integration": "bun test --max-concurrency 1 tests/integration",
     "cli": "bun src/cli.ts",
