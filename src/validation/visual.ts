@@ -193,6 +193,12 @@ function isVisuallySubstantive(node: CapturedNode): boolean {
   return !/^(?:rgba\(0, 0, 0, 0\)|transparent)$/.test(node.styles.backgroundColor ?? "transparent") || (node.styles.boxShadow ?? "none") !== "none";
 }
 
+function surfaceIdentity(node: CapturedNode): string {
+  if (matchText(node) || !isVisuallySubstantive(node)) return "";
+  const number = (value: number) => value.toFixed(3);
+  return [number(node.box.x), number(node.box.y), number(node.box.width), number(node.box.height), node.styles.backgroundColor ?? "", node.styles.boxShadow ?? ""].join("|");
+}
+
 function matchNodes(baseline: Map<string, CapturedNode>, candidate: Map<string, CapturedNode>, viewport: number): Map<string, CapturedNode> {
   const matches = new Map<string, CapturedNode>();
   const usedCandidateIds = new Set<string>();
@@ -200,6 +206,27 @@ function matchNodes(baseline: Map<string, CapturedNode>, candidate: Map<string, 
     if (!isSourceStableNodeId(id)) continue;
     const exact = candidate.get(id);
     if (exact) { matches.set(id, exact); usedCandidateIds.add(id); }
+  }
+  // Generated capture-order IDs are not identity, but exact rendered geometry
+  // plus surface paint is strong identity for anonymous bars, swatches, and
+  // progress segments. Lock unique matches before the general greedy matcher
+  // can consume a small surface as its similarly positioned container.
+  const candidateSurfaces = new Map<string, CapturedNode[]>();
+  for (const node of candidate.values()) {
+    const key = surfaceIdentity(node);
+    if (!key) continue;
+    const values = candidateSurfaces.get(key) ?? [];
+    values.push(node);
+    candidateSurfaces.set(key, values);
+  }
+  for (const [id, node] of baseline) {
+    if (matches.has(id)) continue;
+    const key = surfaceIdentity(node);
+    if (!key) continue;
+    const candidates = (candidateSurfaces.get(key) ?? []).filter((item) => !usedCandidateIds.has(item.nodeId));
+    if (candidates.length !== 1) continue;
+    matches.set(id, candidates[0]!);
+    usedCandidateIds.add(candidates[0]!.nodeId);
   }
   const remaining = [...baseline.entries()].filter(([id]) => !matches.has(id)).sort(([, left], [, right]) => {
     const contentPriority = matchingPriority(right) - matchingPriority(left);
