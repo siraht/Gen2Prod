@@ -44,6 +44,8 @@ function mutationCandidates(policy: ImageOnlyPolicy): { mutation: string; policy
     candidate("raster-coverage-28", (next) => { next.raster.maximumCoverage = 0.28; }),
     candidate("image-threshold-55", (next) => { next.raster.imageDominanceThreshold = 0.55; }),
     candidate("image-threshold-45", (next) => { next.raster.imageDominanceThreshold = 0.45; }),
+    candidate("image-threshold-35", (next) => { next.raster.imageDominanceThreshold = 0.35; }),
+    candidate("image-threshold-25", (next) => { next.raster.imageDominanceThreshold = 0.25; }),
     candidate("one-text-line-crops", (next) => { next.raster.maximumTextLines = 1; }),
     candidate("typography-90", (next) => { next.typographyScale = 0.9; }),
     candidate("typography-110", (next) => { next.typographyScale = 1.1; }),

@@ -6,7 +6,7 @@ export const defaultImageOnlyPolicy: ImageOnlyPolicy = {
   layoutStrategy: "geometry-aware",
   preserveTargetRegionHeights: true,
   typographyScale: 1,
-  raster: { enabled: true, maximumCoverage: 0.28, imageDominanceThreshold: 0.45, maximumTextLines: 1 },
+  raster: { enabled: true, maximumCoverage: 0.28, imageDominanceThreshold: 0.25, maximumTextLines: 1 },
 };
 
 export const conservativeImageOnlyPolicy: ImageOnlyPolicy = {

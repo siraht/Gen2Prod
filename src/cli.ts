@@ -270,7 +270,7 @@ image
   .option("--catalog <path>", "project-isolated image target catalog", "fixtures/image-only/live-sites.json")
   .option("--captures <path>", "prepared capture and analysis root", ".gen2prod/image-only/live")
   .option("--workspace <path>", "image research workspace", ".gen2prod/image-only/research")
-  .option("--budget <number>", "maximum one-change experiments", "8")
+  .option("--budget <number>", "maximum one-change experiments", "10")
   .action(async (options: { catalog: string; captures: string; workspace: string; budget: string }) => {
     const project = await config();
     const summary = await runImageResearch({ catalogPath: resolve(options.catalog), captureRoot: resolve(options.captures), workspace: resolve(options.workspace), budget: Number.parseInt(options.budget, 10), browserExecutable: project.capture.browserExecutable });
