@@ -10,11 +10,21 @@ export type CaptureOptions = {
   states: string[];
   themes: ("light" | "dark")[];
   browserExecutable?: string | undefined;
+  collectRenderedSource?: boolean | undefined;
+};
+
+export type RenderedSource = {
+  html: string;
+  css: string;
+  styleSheetCount: number;
+  inaccessibleStyleSheets: string[];
+  scriptsRemoved: number;
+  inlineEventHandlers: number;
 };
 
 export type CaptureResult = {
   environment: { browser: string; browserVersion: string; os: string; deviceScaleFactor: number; timezone: string; locale: string; fontSetHash: string; colorScheme: string; colorProfile: string };
-  captures: { viewport: number; theme: string; state: string; screenshot: string; screenshotHash: string; dom: unknown[]; accessibilityTree: unknown[]; performance: Record<string, unknown>; seo: Record<string, unknown>; console: string[] }[];
+  captures: { viewport: number; theme: string; state: string; screenshot: string; screenshotHash: string; dom: unknown[]; accessibilityTree: unknown[]; performance: Record<string, unknown>; seo: Record<string, unknown>; console: string[]; renderedSource?: RenderedSource | undefined }[];
 };
 
 export type CaptureSession = {
@@ -61,12 +71,49 @@ async function captureDom(page: Page): Promise<unknown[]> {
   }));
 }
 
+async function captureRenderedSource(page: Page): Promise<RenderedSource> {
+  return page.evaluate(() => {
+    const clone = document.documentElement.cloneNode(true) as HTMLElement;
+    for (const element of [...clone.querySelectorAll("[src]")]) {
+      const value = element.getAttribute("src");
+      if (value && !/^(?:data:|blob:|#)/i.test(value)) element.setAttribute("src", new URL(value, document.baseURI).href);
+    }
+    for (const element of [...clone.querySelectorAll("[srcset]")]) {
+      const value = element.getAttribute("srcset");
+      if (value) element.setAttribute("srcset", value.split(",").map((candidate) => {
+        const [url, descriptor] = candidate.trim().split(/\s+/, 2);
+        return url ? `${new URL(url, document.baseURI).href}${descriptor ? ` ${descriptor}` : ""}` : candidate;
+      }).join(", "));
+    }
+    const scripts = [...clone.querySelectorAll("script")];
+    const inlineEventHandlers = [...clone.querySelectorAll("*")].reduce((count, element) => count + [...element.attributes].filter((attribute) => /^on/i.test(attribute.name)).length, 0);
+    scripts.forEach((script) => script.remove());
+    const css: string[] = [];
+    const inaccessibleStyleSheets: string[] = [];
+    for (const sheet of [...document.styleSheets]) {
+      try { css.push([...sheet.cssRules].map((rule) => rule.cssText).join("\n")); }
+      catch { inaccessibleStyleSheets.push(sheet.href ?? "inline-style-sheet"); }
+    }
+    return {
+      html: `<!doctype html>\n${clone.outerHTML}`,
+      css: css.join("\n"),
+      styleSheetCount: document.styleSheets.length,
+      inaccessibleStyleSheets,
+      scriptsRemoved: scripts.length,
+      inlineEventHandlers,
+    };
+  });
+}
+
 async function captureOne(browser: Browser, options: CaptureOptions, viewport: number, theme: "light" | "dark", state: string): Promise<CaptureResult["captures"][number]> {
   const context = await browser.newContext({ viewport: { width: viewport, height: 1000 }, deviceScaleFactor: 1, locale: "en-US", timezoneId: "UTC", colorScheme: theme, reducedMotion: "reduce" });
   const page = await context.newPage();
   const consoleMessages: string[] = [];
   page.on("console", (message) => consoleMessages.push(`${message.type()}: ${message.text()}`));
   await page.goto(options.url, { waitUntil: "load" });
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  await page.evaluate(() => document.fonts.ready);
+  const renderedSource = options.collectRenderedSource ? await captureRenderedSource(page) : undefined;
   await stabilize(page, theme);
   if (state === "focus-visible") await page.keyboard.press("Tab");
   if (state === "open") await page.locator("details").first().evaluate((element) => element.setAttribute("open", ""));
@@ -81,7 +128,7 @@ async function captureOne(browser: Browser, options: CaptureOptions, viewport: n
     };
   });
   const seo = await page.evaluate(() => ({ title: document.title, description: document.querySelector('meta[name="description"]')?.getAttribute("content") ?? "", h1Count: document.querySelectorAll("h1").length, canonical: document.querySelector('link[rel="canonical"]')?.getAttribute("href") ?? null, links: [...document.querySelectorAll("a")].map((anchor) => ({ text: anchor.textContent?.trim(), href: anchor.getAttribute("href") })) }));
-  const result = { viewport, theme, state, screenshot, screenshotHash: sha256(new Uint8Array(await Bun.file(screenshot).arrayBuffer())), dom: await captureDom(page), accessibilityTree: await captureAccessibility(page), performance: performanceEvidence, seo, console: consoleMessages };
+  const result = { viewport, theme, state, screenshot, screenshotHash: sha256(new Uint8Array(await Bun.file(screenshot).arrayBuffer())), dom: await captureDom(page), accessibilityTree: await captureAccessibility(page), performance: performanceEvidence, seo, console: consoleMessages, ...(renderedSource ? { renderedSource } : {}) };
   await context.close();
   return result;
 }

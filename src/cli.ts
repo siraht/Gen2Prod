@@ -22,6 +22,7 @@ import { validate } from "./validation/gates.ts";
 import { findBrowserExecutable } from "./evidence/capture.ts";
 import { importNaturalisticFixture } from "./synthetic/import.ts";
 import { prepareNaturalisticCorpus } from "./corpus/prepare.ts";
+import { evaluateNaturalisticCorpus } from "./corpus/evaluate.ts";
 
 type GlobalOptions = { config: string; workspace: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -130,6 +131,40 @@ corpus
       `HTML mockups: ${manifest.coverage.htmlMockups}; image mockups: ${manifest.coverage.imageMockups}; strategy/spec documents: ${manifest.coverage.strategyDocuments}.`,
       `Project splits: train=${manifest.splitPolicy.trainProjects.length}, validation=${manifest.splitPolicy.validationProjects.length}, holdout=${manifest.splitPolicy.holdoutProjects.length}.`,
       `Fingerprint: ${manifest.fingerprint}`,
+    ].join("\n"));
+  });
+corpus
+  .command("evaluate")
+  .description("compile real mockups and score dirty render, clean render, supplied image targets, and live outcomes")
+  .option("--manifest <path>", "naturalistic corpus manifest", ".gen2prod/corpus/naturalistic/manifest.json")
+  .option("--output <path>", "evaluation output root", ".gen2prod/corpus/evaluations")
+  .addOption(new Option("--split <split>", "project-level split").choices(["train", "validation", "holdout", "all"]).default("validation"))
+  .option("--max-per-project <number>", "evenly sampled HTML inputs per project", "3")
+  .option("--limit <number>", "optional total fixture cap")
+  .option("--viewport <pixels>", "fixed viewport; paired-image width is used when omitted")
+  .option("--no-capture", "run structural evaluation without image diffing")
+  .option("--no-live", "skip current live-outcome captures")
+  .action(async (options: { manifest: string; output: string; split: "train" | "validation" | "holdout" | "all"; maxPerProject: string; limit?: string; viewport?: string; capture: boolean; live: boolean }) => {
+    const evaluation = await evaluateNaturalisticCorpus({
+      manifestPath: resolve(options.manifest),
+      outputDirectory: resolve(options.output),
+      split: options.split,
+      maxPerProject: Number.parseInt(options.maxPerProject, 10),
+      ...(options.limit ? { limit: Number.parseInt(options.limit, 10) } : {}),
+      ...(options.viewport ? { viewport: Number.parseInt(options.viewport, 10) } : {}),
+      capture: options.capture,
+      captureLive: options.live,
+    });
+    emit(result("corpus evaluate", evaluation), [
+      `Naturalistic evaluation ${evaluation.evaluationId}`,
+      `Projects: ${evaluation.projectIds.join(", ")}`,
+      `Evaluated: ${evaluation.aggregate.evaluated}; failed: ${evaluation.aggregate.failed}`,
+      `Mean hard failures: ${evaluation.aggregate.meanHardFailures.toFixed(2)}`,
+      `Content/URL/form recall: ${(evaluation.aggregate.meanTextRecall * 100).toFixed(1)}% / ${(evaluation.aggregate.meanUrlRecall * 100).toFixed(1)}% / ${(evaluation.aggregate.meanFormRecall * 100).toFixed(1)}%`,
+      `Dirty → clean pixel loss: ${(evaluation.aggregate.meanDirtyToCandidatePixelLoss * 100).toFixed(2)}%`,
+      `Exact image non-regressions: ${evaluation.aggregate.exactTargetNonRegressions}/${evaluation.aggregate.exactTargetComparisons}`,
+      `Advisory movement toward live outcomes: ${evaluation.aggregate.livePreferenceImprovements}/${evaluation.aggregate.livePreferenceComparisons}`,
+      `Idempotence: ${(evaluation.aggregate.idempotenceRate * 100).toFixed(1)}%`,
     ].join("\n"));
   });
 
