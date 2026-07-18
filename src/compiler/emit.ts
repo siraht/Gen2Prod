@@ -59,7 +59,11 @@ export function emitScss(plan: CompilationPlan): string {
 
 export function emitHtml(plan: CompilationPlan, cssHref = "page.css"): string {
   const body = renderNode(plan.semantics.root);
-  if (plan.semantics.root.tag === "body") return `<!doctype html>\n<html lang="en">\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <title>${escapeHtml(plan.source.dom.text || "Production page")}</title>\n  <link rel="stylesheet" href="${escapeHtml(cssHref)}">\n</head>\n${body}\n</html>\n`;
+  const sourceTitle = plan.source.html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() || "Production page";
+  const sourceDescription = plan.source.html.match(/<meta\s+[^>]*name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i)?.[1]
+    ?? plan.source.html.match(/<meta\s+[^>]*content=["']([^"']*)["'][^>]*name=["']description["'][^>]*>/i)?.[1]
+    ?? "";
+  if (plan.semantics.root.tag === "body") return `<!doctype html>\n<html lang="en">\n<head>\n  <meta charset="utf-8">\n  <meta name="viewport" content="width=device-width, initial-scale=1">\n  <title>${escapeHtml(sourceTitle)}</title>\n  <meta name="description" content="${escapeHtml(sourceDescription)}">\n  <link rel="stylesheet" href="${escapeHtml(cssHref)}">\n</head>\n${body}\n</html>\n`;
   return body;
 }
 
