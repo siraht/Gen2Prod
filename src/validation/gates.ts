@@ -59,7 +59,7 @@ function selectorClasses(css: string): { selectors: string[]; classNames: string
     selectors.push(...rule.selectors);
     for (const selector of rule.selectors) {
       for (const match of selector.matchAll(/\.([_a-zA-Z]+[\w-]*)/g)) if (match[1]) classNames.add(match[1]);
-      const specificity = (selector.match(/#[\w-]+/g)?.length ?? 0) * 100 + (selector.match(/\.[\w-]+|\[[^\]]+\]|:(?!:)[\w-]+/g)?.length ?? 0) * 10 + (selector.match(/(^|[\s>+~])[a-z][\w-]*/gi)?.length ?? 0);
+      const specificity = (selector.match(/#[\w-]+/g)?.length ?? 0) * 100 + (selector.match(/\.[\w-]+|\[[^\]]+\]|(?<!:):(?!:)[\w-]+/g)?.length ?? 0) * 10 + (selector.match(/(^|[\s>+~])[a-z][\w-]*/gi)?.length ?? 0);
       maxSpecificity = Math.max(maxSpecificity, specificity);
       rule.walkDecls((declaration) => { rawDeclarations.push({ property: declaration.prop, value: declaration.value, selector }); });
     }
@@ -259,7 +259,7 @@ async function visualGate(context: ValidationContext): Promise<{ gate: GateResul
   let visual: VisualMetrics | undefined;
   if (context.visualTarget && context.candidateCapture?.captures[0]) {
     const images = await imageDifference(context.visualTarget.path, context.candidateCapture.captures[0].screenshot);
-    visual = { pixelDifferenceRatio: images.ratio, widthMismatch: images.widthMismatch, heightMismatch: images.heightMismatch, layout: { mean: 0, p95: 0, max: 0, criticalMax: 0 }, computedStyleLoss: {}, unmatchedVisibleNodes: 0 };
+    visual = { pixelDifferenceRatio: images.ratio, widthMismatch: images.widthMismatch, heightMismatch: images.heightMismatch, layout: { mean: 0, p95: 0, max: 0, criticalMax: 0 }, computedStyleLoss: {}, unmatchedVisibleNodes: 0, unmatchedVisibleNodeDetails: [] };
   } else if (context.baselineCapture && context.candidateCapture) {
     const before = context.baselineCapture.captures[0];
     const after = context.candidateCapture.captures[0];
@@ -269,7 +269,8 @@ async function visualGate(context: ValidationContext): Promise<{ gate: GateResul
   const result = await gate("J", "Visual target conformance", visualIsHard, async () => {
     if (!visual && !context.visualTarget) return { assertions: [assertion("visual-evidence", !visualIsHard, visualIsHard ? "error" : "info", visualIsHard ? "Paired browser evidence is required by this mode/profile" : "No visual target supplied; gate not applicable")], metrics: {} };
     if (!visual) return { assertions: [assertion("visual-evidence", false, "error", "Visual target exists but paired capture evidence is missing")], metrics: {} };
-    return { assertions: [assertion("pixel-threshold", visual.pixelDifferenceRatio <= context.thresholds.maxVisualPixelRatio, "error", `Pixel difference ratio ${visual.pixelDifferenceRatio.toFixed(4)}`, { expected: context.thresholds.maxVisualPixelRatio, actual: visual.pixelDifferenceRatio }), assertion("critical-layout", visual.layout.criticalMax <= 0.02, "error", `Critical-region layout delta ${visual.layout.criticalMax.toFixed(4)}`), assertion("node-accounting", visual.unmatchedVisibleNodes === 0, "error", `${visual.unmatchedVisibleNodes} unmatched visible nodes`)], metrics: { pixelDifferenceRatio: visual.pixelDifferenceRatio, layoutMean: visual.layout.mean, layoutP95: visual.layout.p95, layoutMax: visual.layout.max, criticalLayoutMax: visual.layout.criticalMax, unmatchedVisibleNodes: visual.unmatchedVisibleNodes } };
+    const unmatchedSummary = visual.unmatchedVisibleNodeDetails.map((node) => `${node.tag}${node.text ? ` “${node.text}”` : ""}`).join(", ");
+    return { assertions: [assertion("pixel-threshold", visual.pixelDifferenceRatio <= context.thresholds.maxVisualPixelRatio, "error", `Pixel difference ratio ${visual.pixelDifferenceRatio.toFixed(4)}`, { expected: context.thresholds.maxVisualPixelRatio, actual: visual.pixelDifferenceRatio }), assertion("critical-layout", visual.layout.criticalMax <= 0.02, "error", `Critical-region layout delta ${visual.layout.criticalMax.toFixed(4)}`), assertion("node-accounting", visual.unmatchedVisibleNodes === 0, "error", `${visual.unmatchedVisibleNodes} unmatched visible nodes${unmatchedSummary ? `: ${unmatchedSummary}` : ""}`)], metrics: { pixelDifferenceRatio: visual.pixelDifferenceRatio, layoutMean: visual.layout.mean, layoutP95: visual.layout.p95, layoutMax: visual.layout.max, criticalLayoutMax: visual.layout.criticalMax, unmatchedVisibleNodes: visual.unmatchedVisibleNodes } };
   });
   return visual ? { gate: result, visual } : { gate: result };
 }

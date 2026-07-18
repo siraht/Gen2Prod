@@ -11,6 +11,7 @@ export type VisualMetrics = {
   layout: { mean: number; p95: number; max: number; criticalMax: number };
   computedStyleLoss: Record<string, number>;
   unmatchedVisibleNodes: number;
+  unmatchedVisibleNodeDetails: { nodeId: string; tag: string; text: string }[];
 };
 
 export type ImageDifference = { ratio: number; widthMismatch: number; heightMismatch: number };
@@ -129,6 +130,10 @@ function byNode(capture: CaptureResult["captures"][number]): Map<string, Capture
   return new Map((capture.dom as CapturedNode[]).filter((node) => node.nodeId).map((node) => [node.nodeId, node]));
 }
 
+function isSourceStableNodeId(nodeId: string): boolean {
+  return !/^rendered-\d+$/.test(nodeId);
+}
+
 export async function compareCaptures(baseline: CaptureResult["captures"][number], candidate: CaptureResult["captures"][number], diffPath?: string): Promise<VisualMetrics> {
   const images = await imageDifference(baseline.screenshot, candidate.screenshot, diffPath);
   const baselineNodes = byNode(baseline);
@@ -138,8 +143,11 @@ export async function compareCaptures(baseline: CaptureResult["captures"][number
   const critical: number[] = [];
   const categoryMismatches: Record<string, { changed: number; total: number }> = {};
   let unmatchedVisibleNodes = 0;
+  const unmatchedVisibleNodeDetails: VisualMetrics["unmatchedVisibleNodeDetails"] = [];
   for (const [id, before] of baselineNodes) {
-    let after = candidateNodes.get(id);
+    // Capture-order locators shift when head metadata or semantic tags change;
+    // only source-authored IDs are safe to use as cross-build identity.
+    let after = isSourceStableNodeId(id) ? candidateNodes.get(id) : undefined;
     if (after) usedCandidateIds.add(after.nodeId);
     if (!after) {
       const candidates = [...candidateNodes.values()]
@@ -159,7 +167,10 @@ export async function compareCaptures(baseline: CaptureResult["captures"][number
       }
     }
     if (!after) {
-      if (before.visible) unmatchedVisibleNodes += 1;
+      if (before.visible) {
+        unmatchedVisibleNodes += 1;
+        unmatchedVisibleNodeDetails.push({ nodeId: before.nodeId, tag: before.tag, text: before.text.slice(0, 120) });
+      }
       continue;
     }
     const position = Math.abs(before.box.x - after.box.x) / Math.max(baseline.viewport, 1) + Math.abs(before.box.y - after.box.y) / Math.max(baseline.viewportHeight, 1);
@@ -183,5 +194,6 @@ export async function compareCaptures(baseline: CaptureResult["captures"][number
     layout: { mean: deltas.reduce((sum, value) => sum + value, 0) / Math.max(deltas.length, 1), p95: quantile(deltas, 0.95), max: Math.max(0, ...deltas), criticalMax: Math.max(0, ...critical) },
     computedStyleLoss: Object.fromEntries(Object.entries(categoryMismatches).map(([name, bucket]) => [name, bucket.changed / Math.max(bucket.total, 1)])),
     unmatchedVisibleNodes,
+    unmatchedVisibleNodeDetails,
   };
 }

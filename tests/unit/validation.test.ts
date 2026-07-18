@@ -8,7 +8,7 @@ import { renderGold } from "../../src/synthetic/render.ts";
 import { compileStaticPage } from "../../src/compiler/pipeline.ts";
 import { EVALUATOR_MUTATIONS } from "../../src/validation/mutations.ts";
 import { contextFromCompiled, validate } from "../../src/validation/gates.ts";
-import { imageDifference, imageDifferenceWidthNormalized } from "../../src/validation/visual.ts";
+import { compareCaptures, imageDifference, imageDifferenceWidthNormalized } from "../../src/validation/visual.ts";
 
 const thresholds = { minBemCoverage: 0.95, minTokenCoverage: 0.5, maxVisualPixelRatio: 0.01, provisional: true };
 
@@ -50,6 +50,22 @@ describe("validation gates", () => {
 });
 
 describe("image comparison calibration", () => {
+  test("does not treat generated capture-order locators as cross-build node identity", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-node-match-"));
+    const screenshot = join(directory, "solid.png");
+    const image = new PNG({ width: 10, height: 10 });
+    image.data.fill(255);
+    await Bun.write(screenshot, PNG.sync.write(image));
+    const styles = { display: "block", position: "static" };
+    const node = (nodeId: string, tag: string, text: string, y: number) => ({ nodeId, tag, text, visible: true, box: { x: 0, y, width: 10, height: 10 }, styles });
+    const capture = (dom: unknown[]) => ({ viewport: 10, viewportHeight: 20, theme: "light", state: "default", screenshot, screenshotHash: "hash", dom, accessibilityTree: [], performance: {}, seo: {}, console: [] });
+    const baseline = capture([node("rendered-0", "main", "", 0), node("rendered-1", "h1", "Alpha", 10)]);
+    const candidate = capture([node("rendered-0", "html", "", 0), node("rendered-1", "main", "", 0), node("rendered-2", "h1", "Alpha", 10)]);
+    const metrics = await compareCaptures(baseline, candidate);
+    expect(metrics.unmatchedVisibleNodes).toBe(0);
+    expect(metrics.layout.max).toBe(0);
+  });
+
   test("normalizes downsampled full-page references by width without calling them pixel-exact", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-image-scale-"));
     const writeSolid = async (path: string, width: number, height: number) => {
