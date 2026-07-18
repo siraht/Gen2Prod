@@ -95,6 +95,18 @@ function rootElement(document: DefaultTreeAdapterMap["document"]): P5Element {
   return body && isElement(body) ? body : html;
 }
 
+function documentMetadata(document: DefaultTreeAdapterMap["document"]): SourceDocument["metadata"] {
+  const html = documentElement(document);
+  const head = html.childNodes.find((node) => isElement(node) && node.tagName === "head");
+  if (!head || !isElement(head)) return { title: "", description: "" };
+  const title = head.childNodes.find((node) => isElement(node) && node.tagName === "title");
+  const description = head.childNodes.find((node) => isElement(node) && node.tagName === "meta" && node.attrs.some((attribute) => attribute.name === "name" && attribute.value.toLowerCase() === "description"));
+  return {
+    title: title && isElement(title) ? textOf(title) : "",
+    description: description && isElement(description) ? description.attrs.find((attribute) => attribute.name === "content")?.value ?? "" : "",
+  };
+}
+
 function classesFromDom(root: DomNode): string[] {
   const here = root.attributes.find((attribute) => attribute.name === "class")?.value.split(/\s+/).filter(Boolean) ?? [];
   return [...here, ...root.children.flatMap(classesFromDom)];
@@ -138,6 +150,7 @@ export async function ingestStaticHtml(htmlPath: string, cssPath?: string): Prom
     css: sourceCss.css,
     dom,
     documentAttributes,
+    metadata: documentMetadata(document),
     classInventory,
     declarations,
     styleSources: [

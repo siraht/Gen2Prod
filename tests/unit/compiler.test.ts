@@ -92,6 +92,17 @@ describe("static compilation", () => {
     expect(output.html).toContain('content="This approved source sentence explains the page clearly enough to become its deterministic metadata summary."');
   });
 
+  test("repairs heading, image, and standalone-control accessibility contracts without visual wrappers", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-static-a11y-repair-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>A11y</title><meta name="description" content="A description with an apostrophe\'s stable parsing."></head><body><main><h1>A11y</h1><h4>Skipped heading</h4><img src="decoration.png"><select><option>Project status</option></select></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    expect(output.html).toContain("<h2");
+    expect(output.html).toContain('alt=""');
+    expect(output.html).toContain('aria-label="Project status"');
+    expect(output.html).toContain('content="A description with an apostrophe\'s stable parsing."');
+  });
+
   test("snaps only complete CSS atoms inside compound values", () => {
     const registry = inputTokens();
     const untouched = bindValue("gap", "clamp(1.5rem, 4vw, 4rem)", registry);

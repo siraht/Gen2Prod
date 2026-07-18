@@ -4,6 +4,7 @@ import type { CompilationPlan, CompiledPage, PlannedNode } from "./types.ts";
 import { matchPlannedNodes } from "./correspondence.ts";
 
 const VOID_TAGS = new Set(["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]);
+const BOOLEAN_ATTRIBUTES = new Set(["allowfullscreen", "async", "autofocus", "autoplay", "checked", "controls", "default", "defer", "disabled", "formnovalidate", "hidden", "inert", "ismap", "itemscope", "loop", "multiple", "muted", "nomodule", "novalidate", "open", "playsinline", "readonly", "required", "reversed", "selected"]);
 
 function escapeHtml(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
@@ -20,7 +21,8 @@ function metadataSummary(plan: CompilationPlan): string {
   const nodes = allNodes(plan.semantics.root);
   const candidate = nodes.find((node) => ["supporting-copy", "body-copy"].includes(node.role) && node.text.trim().length >= 30)
     ?? nodes.find((node) => node.tag === "p" && node.text.trim().length >= 30);
-  const text = candidate?.text.replace(/\s+/g, " ").trim() ?? "";
+  const fallback = [...new Set(nodes.filter((node) => !["script", "style", "option"].includes(node.tag) && node.text.trim().length >= 3).map((node) => node.text.replace(/\s+/g, " ").trim()))].join(" — ");
+  const text = candidate?.text.replace(/\s+/g, " ").trim() || fallback;
   if (text.length <= 160) return text;
   const shortened = text.slice(0, 157).replace(/\s+\S*$/, "").trim();
   return `${shortened}…`;
@@ -29,7 +31,7 @@ function metadataSummary(plan: CompilationPlan): string {
 function renderNode(node: PlannedNode, depth = 0, includeNodeIds = false): string {
   const indent = "  ".repeat(depth);
   const attributes = { ...node.attributes, ...(node.classes.length ? { class: node.classes.join(" ") } : {}), ...(includeNodeIds ? { "data-g2p-node": node.nodeId } : {}) };
-  const attributeText = Object.entries(attributes).filter(([name]) => name !== "data-g2p-node" && name !== "data-gen2prod-id").map(([name, value]) => value === "" ? name : `${name}="${escapeHtml(value)}"`).join(" ");
+  const attributeText = Object.entries(attributes).filter(([name]) => name !== "data-g2p-node" && name !== "data-gen2prod-id").map(([name, value]) => value === "" && BOOLEAN_ATTRIBUTES.has(name) ? name : `${name}="${escapeHtml(value)}"`).join(" ");
   const opening = `${indent}<${node.tag}${attributeText ? ` ${attributeText}` : ""}>`;
   if (VOID_TAGS.has(node.tag)) return opening;
   if (node.children.length === 0) return `${opening}${escapeHtml(node.text)}</${node.tag}>`;
@@ -84,10 +86,8 @@ export function emitScss(plan: CompilationPlan): string {
 export function emitHtml(plan: CompilationPlan, cssHref = "page.css", includeNodeIds = false): string {
   const body = renderNode(plan.semantics.root, 0, includeNodeIds);
   const inferredTitle = allNodes(plan.semantics.root).find((node) => node.tag === "h1")?.text.trim() || "Production page";
-  const sourceTitle = decodeHtmlText(plan.source.html.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1]?.trim() || inferredTitle);
-  const sourceDescription = plan.source.html.match(/<meta\s+[^>]*name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i)?.[1]
-    ?? plan.source.html.match(/<meta\s+[^>]*content=["']([^"']*)["'][^>]*name=["']description["'][^>]*>/i)?.[1]
-    ?? metadataSummary(plan);
+  const sourceTitle = decodeHtmlText(plan.source.metadata.title || inferredTitle);
+  const sourceDescription = plan.source.metadata.description.trim() || metadataSummary(plan);
   if (plan.semantics.root.tag === "body") {
     const sourceDocumentAttributes = plan.source.documentAttributes;
     const stateClasses = (sourceDocumentAttributes.class ?? "").split(/\s+/).filter((name) => /^(?:dark|light|no-js|js|theme-[a-z0-9-]+)$/.test(name));

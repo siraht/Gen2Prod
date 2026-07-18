@@ -28,6 +28,7 @@ export type SourceDocument = {
   css: string;
   dom: DomNode;
   documentAttributes: Record<string, string>;
+  metadata: { title: string; description: string };
   classInventory: ClassInventoryItem[];
   declarations: CssDeclaration[];
   styleSources: { origin: "external" | "embedded" | "inline" | "rendered"; label: string; bytes: number }[];

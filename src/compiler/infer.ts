@@ -226,6 +226,11 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
     delete attrs["data-g2p-destination"];
   }
   if (["input", "select", "textarea"].includes(semantic.tag) && !attrs["aria-label"] && attrs.name) attrs["aria-label"] = attrs.name.replace(/[-_]+/g, " ").replace(/^./, (value) => value.toUpperCase());
+  if (semantic.tag === "img" && !("alt" in attrs)) {
+    attrs.alt = "";
+    semantic.role = "decorative-image";
+    review.push({ nodeId: node.nodeId, concern: "missing image text alternative was conservatively treated as decorative", evidenceNeeded: ["approved image purpose or alt copy"] });
+  }
   for (const className of oldClasses(node)) {
     if (/^(js-|qa-|e2e-)/.test(className)) attrs["data-hook"] = className;
   }
@@ -254,7 +259,9 @@ export function inferSemantics(source: SourceDocument, options: { useStableNodeH
   const classRoles = new Map(source.classInventory.map((item) => [item.name, item.role]));
   const root = planNode(source.dom, undefined, null, counts, review, options.useStableNodeHints ?? true, options.preserveExplicitSemantics ?? false, classRoles);
   normalizeListValidity(root);
+  normalizeHeadingOrder(root, review);
   addMissingFormLabels(root, review);
+  addMissingControlNames(root, review);
   return { root, confidenceSummary: counts, review };
 }
 
@@ -291,6 +298,57 @@ function addMissingFormLabels(root: PlannedNode, review: SemanticPlan["review"])
     };
     rewrite(form);
   }
+}
+
+function normalizeHeadingOrder(root: PlannedNode, review: SemanticPlan["review"]): void {
+  const headings = plannedNodes(root).filter((node) => /^h[1-6]$/.test(node.tag));
+  let previous = 0;
+  let h1Seen = false;
+  for (const heading of headings) {
+    const original = Number(heading.tag[1]);
+    let level = original;
+    if (level === 1) {
+      if (h1Seen) level = 2;
+      else h1Seen = true;
+    }
+    if (previous > 0 && level > previous + 1) level = previous + 1;
+    if (level !== original) {
+      heading.tag = `h${level}`;
+      review.push({ nodeId: heading.nodeId, concern: `heading level normalized from h${original} to h${level}`, evidenceNeeded: ["approved content hierarchy"] });
+    }
+    previous = level;
+  }
+}
+
+function accessibleNameHint(node: PlannedNode, parent: PlannedNode, index: number): string | undefined {
+  for (const value of [node.attributes.title, node.attributes.placeholder, node.attributes.name, node.attributes.id]) {
+    if (value && !/^n-[a-f0-9]+$/.test(value)) return value.replace(/[-_]+/g, " ").trim();
+  }
+  if (node.tag === "select") {
+    const option = plannedNodes(node).find((candidate) => candidate.tag === "option" && candidate.text.trim());
+    if (option) return option.text.trim();
+  }
+  for (const sibling of parent.children.slice(0, index).reverse()) {
+    const text = sibling.text.replace(/\s+/g, " ").trim();
+    if (text && text.length <= 80) return text;
+  }
+  return undefined;
+}
+
+function addMissingControlNames(root: PlannedNode, review: SemanticPlan["review"]): void {
+  let unnamed = 0;
+  const labels = new Set(plannedNodes(root).filter((node) => node.tag === "label").map((node) => node.attributes.for).filter((value): value is string => Boolean(value)));
+  const visit = (parent: PlannedNode): void => {
+    parent.children.forEach((child, index) => {
+      if (["input", "select", "textarea"].includes(child.tag) && !child.attributes["aria-label"] && !child.attributes["aria-labelledby"] && (!child.attributes.id || !labels.has(child.attributes.id))) {
+        const hint = accessibleNameHint(child, parent, index);
+        child.attributes["aria-label"] = hint || `${child.tag === "select" ? "Selection" : "Input"} field ${++unnamed}`;
+        review.push({ nodeId: child.nodeId, concern: hint ? "accessible name derived from adjacent source copy" : "fallback accessible name requires content-authority review", evidenceNeeded: ["approved visible label or aria-label"] });
+      }
+      visit(child);
+    });
+  };
+  visit(root);
 }
 
 function plannedNodes(root: PlannedNode): PlannedNode[] {
