@@ -22,10 +22,10 @@ export type CaptureSession = {
   close: () => Promise<void>;
 };
 
-let pooledBrowser: Browser | undefined;
-let pooledBrowserLaunch: Promise<Browser> | undefined;
-let pooledBrowserReferences = 0;
-let pooledBrowserCloseTimer: ReturnType<typeof setTimeout> | undefined;
+let sharedBrowser: Browser | undefined;
+let sharedBrowserLaunch: Promise<Browser> | undefined;
+let sharedBrowserReferences = 0;
+let sharedBrowserCloseTimer: ReturnType<typeof setTimeout> | undefined;
 
 export async function findBrowserExecutable(preferred?: string): Promise<string> {
   const candidates = [preferred, process.env.GEN2PROD_BROWSER, "/usr/bin/google-chrome", "/usr/bin/chromium", "/usr/bin/chromium-browser"].filter((value): value is string => Boolean(value && value !== "auto"));
@@ -96,24 +96,30 @@ async function captureWithBrowser(browser: Browser, options: CaptureOptions): Pr
 }
 
 export async function openCaptureSession(preferred?: string): Promise<CaptureSession> {
-  if (pooledBrowserCloseTimer) {
-    clearTimeout(pooledBrowserCloseTimer);
-    pooledBrowserCloseTimer = undefined;
+  if (sharedBrowserCloseTimer) {
+    clearTimeout(sharedBrowserCloseTimer);
+    sharedBrowserCloseTimer = undefined;
   }
-  if (!pooledBrowserLaunch) {
-    pooledBrowserLaunch = (async () => {
+  if (!sharedBrowserLaunch) {
+    sharedBrowserLaunch = (async () => {
       const executablePath = await findBrowserExecutable(preferred);
       const browser = await chromium.launch({ headless: true, executablePath, timeout: 15_000, args: ["--disable-dev-shm-usage", "--no-sandbox"] });
-      pooledBrowser = browser;
+      sharedBrowser = browser;
+      browser.once("disconnected", () => {
+        if (sharedBrowser === browser) {
+          sharedBrowser = undefined;
+          sharedBrowserLaunch = undefined;
+        }
+      });
       return browser;
     })().catch((error) => {
-      pooledBrowserLaunch = undefined;
-      pooledBrowser = undefined;
+      sharedBrowser = undefined;
+      sharedBrowserLaunch = undefined;
       throw error;
     });
   }
-  const browser = await pooledBrowserLaunch;
-  pooledBrowserReferences += 1;
+  const browser = await sharedBrowserLaunch;
+  sharedBrowserReferences += 1;
   let closed = false;
   return {
     capture: (options) => {
@@ -123,16 +129,16 @@ export async function openCaptureSession(preferred?: string): Promise<CaptureSes
     close: async () => {
       if (closed) return;
       closed = true;
-      pooledBrowserReferences = Math.max(0, pooledBrowserReferences - 1);
-      if (pooledBrowserReferences > 0 || pooledBrowserCloseTimer) return;
-      pooledBrowserCloseTimer = setTimeout(() => {
-        if (pooledBrowserReferences > 0) return;
-        const closing = pooledBrowser;
-        pooledBrowser = undefined;
-        pooledBrowserLaunch = undefined;
-        pooledBrowserCloseTimer = undefined;
+      sharedBrowserReferences = Math.max(0, sharedBrowserReferences - 1);
+      if (sharedBrowserReferences > 0 || sharedBrowserCloseTimer) return;
+      sharedBrowserCloseTimer = setTimeout(() => {
+        if (sharedBrowserReferences > 0) return;
+        const closing = sharedBrowser;
+        sharedBrowser = undefined;
+        sharedBrowserLaunch = undefined;
+        sharedBrowserCloseTimer = undefined;
         void closing?.close();
-      }, 750);
+      }, 5_000);
     },
   };
 }
