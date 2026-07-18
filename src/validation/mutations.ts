@@ -11,6 +11,7 @@ export const EVALUATOR_MUTATIONS: EvaluatorMutation[] = [
     return { ...input, html: input.html.replace(/<a\b([^>]*class="[^"]*\bbutton\b[^"]*"[^>]*)>/, "<div$1>").replace("</a>", "</div>") };
   } },
   { id: "raw-governed-color", expectedGate: "C", apply: (input) => ({ ...input, scss: `${input.scss}\n.mutation { color: #123456; }`, css: `${input.css}\n.mutation { color: #123456; }` }) },
+  { id: "unregistered-token", expectedGate: "C", apply: (input) => ({ ...input, scss: `${input.scss}\n.mutation { color: var(--unregistered-color); }`, css: `${input.css}\n.mutation { color: var(--unregistered-color); }` }) },
   { id: "orphan-selector", expectedGate: "B", apply: (input) => ({ ...input, scss: `${input.scss}\n.orphan-component { display: block; }`, css: `${input.css}\n.orphan-component { display: block; }` }) },
   { id: "element-selector", expectedGate: "B", apply: (input) => ({ ...input, scss: `${input.scss}\nbutton { color: var(--primary); }`, css: `${input.css}\nbutton { color: var(--primary); }` }) },
   { id: "flat-bem-element", expectedGate: "B", apply: (input) => ({ ...input, scss: `${input.scss}\n.page__main { display: block; }`, css: `${input.css}\n.page__main { display: block; }` }) },

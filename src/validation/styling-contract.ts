@@ -41,6 +41,14 @@ export type StylingContractReport = {
   };
 };
 
+export type TokenReferenceContractReport = {
+  passed: boolean;
+  declaredTokens: string[];
+  referencedTokens: string[];
+  unresolvedReferences: string[];
+  localDefinitions: { token: string; selector: string }[];
+};
+
 const CLASS = /\.([_a-zA-Z]+[\w-]*)/g;
 
 function classesIn(selector: string): string[] {
@@ -197,4 +205,22 @@ export function analyzeScssNestingContract(source: string): StylingContractRepor
     }
   });
   return { passed: violations.length === 0, violations, metrics };
+}
+
+/** Require runtime variables to come from the document token registry. */
+export function analyzeTokenReferenceContract(css: string): TokenReferenceContractReport {
+  const root = postcss.parse(css);
+  const declared = new Set<string>();
+  const referenced = new Set<string>();
+  const localDefinitions: { token: string; selector: string }[] = [];
+  root.walkDecls((declaration) => {
+    if (declaration.prop.startsWith("--")) {
+      declared.add(declaration.prop);
+      const rule = declaration.parent?.type === "rule" ? declaration.parent : undefined;
+      if (rule?.selector !== ":root") localDefinitions.push({ token: declaration.prop, selector: rule?.selector ?? "<root>" });
+    }
+    for (const match of declaration.value.matchAll(/var\((--[a-z0-9-]+)/gi)) if (match[1]) referenced.add(match[1]);
+  });
+  const unresolvedReferences = [...referenced].filter((token) => !declared.has(token)).sort();
+  return { passed: unresolvedReferences.length === 0 && localDefinitions.length === 0, declaredTokens: [...declared].sort(), referencedTokens: [...referenced].sort(), unresolvedReferences, localDefinitions };
 }

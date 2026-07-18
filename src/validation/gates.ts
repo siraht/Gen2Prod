@@ -11,7 +11,7 @@ import { compareCaptures, type VisualMetrics } from "./visual.ts";
 import { imageDifference } from "./visual.ts";
 import { isBemClass, isUtilityClass } from "../core/classes.ts";
 import { slotEntropy } from "../report/consistency.ts";
-import { analyzeCssSelectorContract, analyzeScssNestingContract } from "./styling-contract.ts";
+import { analyzeCssSelectorContract, analyzeScssNestingContract, analyzeTokenReferenceContract } from "./styling-contract.ts";
 
 export type GateAssertion = GateResult["assertions"][number];
 
@@ -190,11 +190,14 @@ async function tokenGate(context: ValidationContext): Promise<GateResult> {
     const unaccounted = governed.filter((item) => !tokenized.includes(item) && !excepted.includes(item));
     const directTokenCoverage = governed.length ? tokenized.length / governed.length : 1;
     const coverage = governed.length ? (tokenized.length + excepted.length) / governed.length : 1;
+    const references = analyzeTokenReferenceContract(context.css);
     return { assertions: [
       assertion("governed-accounting", unaccounted.length === 0, "error", unaccounted.length ? `${unaccounted.length} unaccounted governed declarations` : "All governed declarations are tokenized or excepted"),
       assertion("token-coverage", coverage >= context.thresholds.minTokenCoverage, "error", `Token coverage ${(coverage * 100).toFixed(1)}%`, { expected: context.thresholds.minTokenCoverage, actual: coverage }),
+      assertion("registered-token-references", references.unresolvedReferences.length === 0, "error", references.unresolvedReferences.length ? `Unregistered token references: ${references.unresolvedReferences.join(", ")}` : "Every runtime variable resolves through the token registry"),
+      assertion("root-token-registry", references.localDefinitions.length === 0, "error", references.localDefinitions.length ? `Ad hoc local variables: ${references.localDefinitions.map((item) => `${item.token} at ${item.selector}`).join(", ")}` : "Runtime tokens are registered at :root"),
       assertion("important", !context.scss.includes("!important"), "error", context.scss.includes("!important") ? "Unapproved !important found" : "No !important overrides"),
-    ], metrics: { governedDeclarations: governed.length, tokenizedDeclarations: tokenized.length, exceptionDeclarations: excepted.length, unaccountedDeclarations: unaccounted.length, directTokenCoverage, tokenCoverage: coverage } };
+    ], metrics: { governedDeclarations: governed.length, tokenizedDeclarations: tokenized.length, exceptionDeclarations: excepted.length, unaccountedDeclarations: unaccounted.length, directTokenCoverage, tokenCoverage: coverage, unresolvedTokenReferences: references.unresolvedReferences.length, localTokenDefinitions: references.localDefinitions.length } };
   });
 }
 
