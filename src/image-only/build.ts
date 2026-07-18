@@ -6,6 +6,7 @@ import { hashFile } from "../core/hash.ts";
 import { ImageOnlyAnalysisSchema, ImageOnlyBuildPlanSchema, ImageOnlyPolicySchema, ImageOnlyTargetManifestSchema, type ImageOnlyAnalysis, type ImageOnlyBuildPlan, type ImageOnlyPolicy } from "../schemas/image-only.ts";
 import { planImageOnlyBuild } from "./plan.ts";
 import { defaultImageOnlyPolicy } from "./policy.ts";
+import type { AutomaticCssBundle } from "../acss/schema.ts";
 
 export type BuildImageTargetOptions = {
   manifestPath: string;
@@ -14,6 +15,7 @@ export type BuildImageTargetOptions = {
   outputDirectory: string;
   maxRasterCoverage?: number | undefined;
   policy?: ImageOnlyPolicy | undefined;
+  acss?: AutomaticCssBundle | undefined;
 };
 
 export type ImageOnlyBuildResult = {
@@ -23,6 +25,7 @@ export type ImageOnlyBuildResult = {
   planPath: string;
   provenancePath: string;
   requiredActionsPath: string;
+  acssBindingsPath: string;
   rasterCoverage: number;
   assetCount: number;
 };
@@ -31,8 +34,74 @@ function escapeHtml(value: string): string {
   return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
 }
 
-function variableName(color: string): string {
-  return `--image-color-${color.slice(1)}`;
+type AcssImageBinding = {
+  runtimeVariable: string;
+  observedValue: string;
+  proposedRole: string;
+  evidence: string;
+  status: "image-derived-unreviewed";
+};
+
+type AcssImageBindings = {
+  schemaVersion: "0.1.0";
+  provider: "automaticcss";
+  release: { version: string; sourceHash: string; registryHash: string } | null;
+  authority: "image-derived-project-override-proposal";
+  bindings: AcssImageBinding[];
+};
+
+const FALLBACK_ACSS_VALUES: Record<string, string> = {
+  "--space-xs": "0.5rem", "--space-s": "0.75rem", "--space-m": "1rem", "--space-l": "2rem", "--space-xl": "4rem",
+  "--section-space-m": "6rem", "--gutter": "1.5rem", "--content-width": "75rem", "--radius-m": "1rem",
+  "--focus-color": "currentColor", "--focus-width": "3px", "--focus-offset": "4px", "--h1": "4.5rem", "--h2": "3rem",
+  "--text-m": "1.125rem", "--body-font-family": "Inter, ui-sans-serif, system-ui, sans-serif", "--heading-font-family": "Inter, ui-sans-serif, system-ui, sans-serif",
+};
+
+const ACSS_COLOR_ROLES = ["--base", "--primary", "--secondary", "--accent", "--neutral", "--primary-light", "--secondary-light", "--accent-light", "--base-light", "--neutral-light", "--primary-dark", "--secondary-dark", "--accent-dark", "--base-dark", "--neutral-dark"];
+
+function normalizedColor(color: string): string { return color.toLowerCase(); }
+
+function imageAcssBindings(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, policy: ImageOnlyPolicy, acss?: AutomaticCssBundle): { artifact: AcssImageBindings; colors: Map<string, string>; declarations: string[] } {
+  const available = new Set(acss?.registry.tokens.map((token) => token.runtimeVariable) ?? [...Object.keys(FALLBACK_ACSS_VALUES), "--black", "--white", ...ACSS_COLOR_ROLES]);
+  const observed = [...new Set([...analysis.palette.map((item) => normalizedColor(item.hex)), ...analysis.regions.flatMap((region) => [normalizedColor(region.background), normalizedColor(region.foreground)])])];
+  const colors = new Map<string, string>();
+  const used = new Set<string>();
+  const preferred = ACSS_COLOR_ROLES.filter((name) => available.has(name));
+  for (const color of observed) {
+    const exact = color === "#fff" || color === "#ffffff" ? "--white" : color === "#000" || color === "#000000" ? "--black" : undefined;
+    const runtimeVariable = exact && available.has(exact) && !used.has(exact) ? exact : preferred.find((name) => !used.has(name));
+    if (!runtimeVariable) throw new Error(`Automatic.css does not expose enough palette variables for observed color ${color}`);
+    colors.set(color, runtimeVariable);
+    used.add(runtimeVariable);
+  }
+  const bindings: AcssImageBinding[] = [...colors].map(([observedValue, runtimeVariable], index) => ({ runtimeVariable, observedValue, proposedRole: runtimeVariable.slice(2), evidence: `image palette/region observation ${index + 1}; semantic role requires review`, status: "image-derived-unreviewed" }));
+  const headingSizes = plan.regions.map((region) => layoutForRegion(analysis, region.regionId).headingSize * policy.typographyScale).sort((left, right) => right - left);
+  if (headingSizes[0]) bindings.push({ runtimeVariable: "--h1", observedValue: `${Math.round(headingSizes[0])}px`, proposedRole: "primary-page-heading", evidence: "largest observed text geometry", status: "image-derived-unreviewed" });
+  if (headingSizes[1]) bindings.push({ runtimeVariable: "--h2", observedValue: `${Math.round(headingSizes[Math.min(1, headingSizes.length - 1)]!)}px`, proposedRole: "section-heading", evidence: "secondary observed text geometry", status: "image-derived-unreviewed" });
+  const artifact: AcssImageBindings = { schemaVersion: "0.1.0", provider: "automaticcss", release: acss ? { version: acss.provenance.version, sourceHash: acss.provenance.sourceHash, registryHash: acss.provenance.registryHash } : null, authority: "image-derived-project-override-proposal", bindings };
+  const overrides = new Map(bindings.map((binding) => [binding.runtimeVariable, binding.observedValue]));
+  const values = new Map<string, string>(Object.entries(FALLBACK_ACSS_VALUES));
+  for (const token of acss?.registry.tokens ?? []) {
+    const sample = Object.values(token.sampledValues)[0];
+    if (sample) values.set(token.runtimeVariable, sample);
+    else if (typeof token.value === "string" || typeof token.value === "number") values.set(token.runtimeVariable, String(token.value));
+    else if (token.value && !Array.isArray(token.value) && typeof token.value === "object" && "value" in token.value && "unit" in token.value) values.set(token.runtimeVariable, `${String(token.value.value)}${String(token.value.unit)}`);
+  }
+  const required = new Set([...Object.keys(FALLBACK_ACSS_VALUES), ...overrides.keys()]);
+  const visit = (variable: string) => {
+    const value = overrides.get(variable) ?? values.get(variable);
+    if (!value) return;
+    for (const dependency of value.match(/var\((--[\w-]+)/g) ?? []) {
+      const name = dependency.slice(4);
+      if (!required.has(name)) { required.add(name); visit(name); }
+    }
+  };
+  for (const variable of [...required]) visit(variable);
+  const declarations = [...required].sort().flatMap((variable) => {
+    const value = overrides.get(variable) ?? values.get(variable);
+    return value ? [`  ${variable}: ${value};`] : [];
+  });
+  return { artifact, colors, declarations };
 }
 
 function textForRegion(analysis: ImageOnlyAnalysis, regionId: string) {
@@ -132,9 +201,7 @@ async function createRasterAssets(options: {
   return { assets, coverage: usedArea / Math.max(1, image.width * image.height), manifest };
 }
 
-function renderScss(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, policy: ImageOnlyPolicy): string {
-  const colors = [...new Set([...analysis.palette.map((item) => item.hex), ...analysis.regions.flatMap((region) => [region.background, region.foreground])])];
-  const tokenLines = colors.map((color) => `  ${variableName(color)}: ${color};`).join("\n");
+function renderScss(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, policy: ImageOnlyPolicy, acssBindings: ReturnType<typeof imageAcssBindings>): string {
   const baseBlocks = [...new Set(plan.regions.map((region) => region.block))];
   const baseRules = baseBlocks.map((block) => `.${block} {
   position: relative;
@@ -143,7 +210,7 @@ function renderScss(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, polic
 
   &__inner {
     box-sizing: border-box;
-    width: min(calc(100% - 2rem), 75rem);
+    width: min(calc(100% - (var(--gutter) * 2)), var(--content-width));
     margin-inline: auto;
     padding: var(--space-xl) var(--space-m);
   }
@@ -151,14 +218,17 @@ function renderScss(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, polic
   &__title {
     max-width: 18ch;
     margin: 0 0 var(--space-m);
-    font: 700 clamp(2rem, 5vw, var(--image-heading-size, 4.5rem))/0.98 var(--font-display);
+    font-family: var(--heading-font-family);
+    font-size: var(--g2p-region-heading-size, var(--h2));
+    font-weight: 700;
+    line-height: 0.98;
     letter-spacing: -0.035em;
   }
 
   &__copy {
     max-width: 64ch;
     margin: 0 0 var(--space-s);
-    font-size: clamp(1rem, 1.5vw, 1.25rem);
+    font-size: var(--text-m);
     line-height: 1.5;
   }
 }`).join("\n\n");
@@ -171,34 +241,27 @@ function renderScss(analysis: ImageOnlyAnalysis, plan: ImageOnlyBuildPlan, polic
     const topPadding = policy.layoutStrategy === "geometry-aware" ? Math.round(layout.top * Math.max(region.bbox.height, 1)) : 64;
     return `.${region.block}--${region.regionId} {
   ${regionSize}
-  color: var(${variableName(evidence.foreground)});
-  background: var(${variableName(evidence.background)});
-  --image-heading-size: ${Math.round(layout.headingSize * policy.typographyScale)}px;
+  color: var(${acssBindings.colors.get(normalizedColor(evidence.foreground))});
+  background: var(${acssBindings.colors.get(normalizedColor(evidence.background))});
 
   > .${region.block}__inner {
     max-width: ${Math.round(layout.width + 64)}px;
-    padding-top: ${topPadding}px;
+    padding-top: ${topPadding <= 48 ? "var(--space-xl)" : "var(--section-space-m)"};
     ${contentPosition}
   }
 }`;
   }).join("\n\n");
   return `/* Deterministically emitted from image-only observations. */
 :root {
-${tokenLines}
-  --space-xs: 0.5rem;
-  --space-s: 0.75rem;
-  --space-m: 1rem;
-  --space-l: 2rem;
-  --space-xl: 4rem;
-  --font-display: Inter, ui-sans-serif, system-ui, sans-serif;
+${acssBindings.declarations.join("\n")}
 }
 
 *, *::before, *::after { box-sizing: border-box; }
 html { color-scheme: light dark; scroll-behavior: smooth; }
-body.image-page { margin: 0; min-width: 20rem; font-family: var(--font-display); background: var(${variableName(analysis.regions[0]?.background ?? "#ffffff")}); }
+body.image-page { margin: 0; min-width: 20rem; font-family: var(--body-font-family); background: var(${acssBindings.colors.get(normalizedColor(analysis.regions[0]?.background ?? "#ffffff")) ?? "--white"}); }
 img { display: block; max-width: 100%; }
 a, button { font: inherit; }
-a:focus-visible, button:focus-visible { outline: 3px solid currentColor; outline-offset: 4px; }
+a:focus-visible, button:focus-visible { outline: var(--focus-width) solid var(--focus-color); outline-offset: var(--focus-offset); }
 a:hover, button:hover { opacity: 0.82; }
 a:active, button:active { transform: translateY(1px); }
 
@@ -221,7 +284,9 @@ ${baseRules}
 .site-header__brand { font-weight: 750; }
 .card-grid__inner { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: var(--space-l); }
 .card-grid__title { grid-column: 1 / -1; }
-.card-grid__item { padding: var(--space-l); border: 1px solid currentColor; border-radius: 1rem; }
+.card-grid__item { padding: var(--space-l); border: 1px solid currentColor; border-radius: var(--radius-m); }
+.image-page h1 { --g2p-region-heading-size: var(--h1); }
+.image-page h2, .image-page h3 { --g2p-region-heading-size: var(--h2); }
 .card-grid__item-title { margin-top: 0; }
 .media-panel { margin: 0; }
 .media-panel__image { width: 100%; height: 100%; object-fit: cover; }
@@ -289,7 +354,8 @@ export async function buildImageTarget(options: BuildImageTargetOptions): Promis
   const sourcePath = resolve(dirname(manifestPath), builderFrame.path);
   const maximumCoverage = options.maxRasterCoverage ?? policy.raster.maximumCoverage;
   const raster = await createRasterAssets({ sourcePath, outputDirectory, analysis, plan, maximumCoverage: policy.raster.enabled ? maximumCoverage : 0, dominanceThreshold: policy.raster.imageDominanceThreshold, maximumTextLines: policy.raster.maximumTextLines });
-  const scss = renderScss(analysis, plan, policy);
+  const bindings = imageAcssBindings(analysis, plan, policy, options.acss);
+  const scss = renderScss(analysis, plan, policy, bindings);
   const css = compileString(scss, { style: "expanded" }).css;
   const html = renderHtml(plan, raster.assets);
   const htmlPath = join(outputDirectory, "page.html");
@@ -298,6 +364,11 @@ export async function buildImageTarget(options: BuildImageTargetOptions): Promis
   const planOutputPath = join(outputDirectory, "image-build-plan.json");
   const provenancePath = join(outputDirectory, "build-provenance.json");
   const requiredActionsPath = join(outputDirectory, "required-actions.json");
+  const acssBindingsPath = join(outputDirectory, "acss-image-bindings.json");
+  const requiredActions = [
+    ...plan.unresolved.map((item, index) => ({ id: `image-review-${index + 1}`, summary: item.concern, detail: item.reason, requiredEvidence: item.requiredEvidence, blocking: false })),
+    { id: "acss-image-role-review", summary: "Review image-derived Automatic.css role assignments", detail: `${bindings.artifact.bindings.length} observed color/typography values were bound to ACSS runtime variables for measurable reconstruction. Approve or correct their semantic roles before treating them as project settings.`, requiredEvidence: "content strategy, brand palette, or approved ACSS settings export", blocking: false },
+  ];
   await Promise.all([
     writeTextAtomic(htmlPath, html),
     writeTextAtomic(scssPath, scss),
@@ -305,12 +376,15 @@ export async function buildImageTarget(options: BuildImageTargetOptions): Promis
     writeJsonAtomic(planOutputPath, plan),
     writeJsonAtomic(join(outputDirectory, "crop-manifest.json"), { sourceFrameHash: plan.sourceFrameHash, maximumCoverage, actualCoverage: raster.coverage, assets: raster.manifest }),
     writeJsonAtomic(join(outputDirectory, "image-policy.json"), policy),
-    writeJsonAtomic(requiredActionsPath, plan.unresolved.map((item, index) => ({ id: `image-review-${index + 1}`, summary: item.concern, detail: item.reason, requiredEvidence: item.requiredEvidence, blocking: false }))),
+    writeJsonAtomic(requiredActionsPath, requiredActions),
+    writeJsonAtomic(acssBindingsPath, bindings.artifact),
   ]);
   await writeJsonAtomic(provenancePath, {
     schemaVersion: "0.1.0", targetId: plan.targetId, builderMode: "strict-image-only", sourceFrameHash: plan.sourceFrameHash,
     allowedInputs: [{ kind: "image", hash: builderFrame.sha256, basename: basename(builderFrame.path) }, { kind: "image-analysis", hash: await hashFile(analysisPath), basename: basename(analysisPath) }],
-    quarantinedInputsUsed: [], sourceUrlUsedByBuilder: false, outputHashes: { html: await hashFile(htmlPath), scss: await hashFile(scssPath), css: await hashFile(cssPath) },
+    quarantinedInputsUsed: [], sourceUrlUsedByBuilder: false,
+    designSystem: { provider: "automaticcss", release: bindings.artifact.release, bindings: basename(acssBindingsPath), authority: bindings.artifact.authority },
+    outputHashes: { html: await hashFile(htmlPath), scss: await hashFile(scssPath), css: await hashFile(cssPath) },
   });
-  return { htmlPath, scssPath, cssPath, planPath: planOutputPath, provenancePath, requiredActionsPath, rasterCoverage: raster.coverage, assetCount: raster.assets.size };
+  return { htmlPath, scssPath, cssPath, planPath: planOutputPath, provenancePath, requiredActionsPath, acssBindingsPath, rasterCoverage: raster.coverage, assetCount: raster.assets.size };
 }

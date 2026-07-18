@@ -8,6 +8,7 @@ import { buildImageTarget } from "./build.ts";
 import { evaluateImageBuild } from "./evaluate.ts";
 import { analyzeImageStateSequence } from "./state.ts";
 import { writeImageContentStrategy } from "./strategy.ts";
+import type { AutomaticCssBundle } from "../acss/schema.ts";
 
 const CurriculumSchema = z.object({
   schemaVersion: z.literal("0.1.0"),
@@ -24,7 +25,7 @@ export type SyntheticImageCurriculumEvaluation = {
   trajectories: { path: string; count: number };
 };
 
-export async function evaluateSyntheticImageCurriculum(options: { curriculumPath: string; outputDirectory: string; split?: "train" | "validation" | "holdout" | "all" | undefined; browserExecutable?: string | undefined }): Promise<SyntheticImageCurriculumEvaluation> {
+export async function evaluateSyntheticImageCurriculum(options: { curriculumPath: string; outputDirectory: string; split?: "train" | "validation" | "holdout" | "all" | undefined; browserExecutable?: string | undefined; acss?: AutomaticCssBundle | undefined }): Promise<SyntheticImageCurriculumEvaluation> {
   const curriculumPath = resolve(options.curriculumPath);
   const outputDirectory = resolve(options.outputDirectory);
   const curriculum = CurriculumSchema.parse(await readJson(curriculumPath));
@@ -40,10 +41,10 @@ export async function evaluateSyntheticImageCurriculum(options: { curriculumPath
     const analysis = await analyzeImageTarget({ manifestPath, outputPath: analysisPath });
     const states = await analyzeImageStateSequence(manifestPath, join(directory, "image-state-analysis.json"));
     await writeImageContentStrategy(analysis, directory, states);
-    await buildImageTarget({ manifestPath, analysisPath, outputDirectory: directory });
+    await buildImageTarget({ manifestPath, analysisPath, outputDirectory: directory, acss: options.acss });
     const evaluation = await evaluateImageBuild({ manifestPath, buildDirectory: directory, outputDirectory: join(directory, "evaluation"), acceptancePixelRatio: 1, browserExecutable: options.browserExecutable });
     const replay = join(directory, "replay");
-    await buildImageTarget({ manifestPath, analysisPath, outputDirectory: replay });
+    await buildImageTarget({ manifestPath, analysisPath, outputDirectory: replay, acss: options.acss });
     const outputHash = hashJson({ html: await hashFile(join(directory, "page.html")), scss: await hashFile(join(directory, "page.scss")), css: await hashFile(join(directory, "page.css")) });
     const replayHash = hashJson({ html: await hashFile(join(replay, "page.html")), scss: await hashFile(join(replay, "page.scss")), css: await hashFile(join(replay, "page.css")) });
     const idempotent = outputHash === replayHash;

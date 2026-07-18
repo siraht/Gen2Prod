@@ -1,5 +1,6 @@
 import { join, resolve } from "node:path";
 import { z } from "zod";
+import type { AutomaticCssBundle } from "../acss/schema.ts";
 import { ensureDirectory, pathExists, readJson, writeJsonAtomic, writeTextAtomic } from "../core/fs.ts";
 import { hashFile, hashJson } from "../core/hash.ts";
 import { TrajectorySchema, type Trajectory } from "../schemas/research.ts";
@@ -52,7 +53,7 @@ function mutationCandidates(policy: ImageOnlyPolicy): { mutation: string; policy
   ].filter((item) => hashJson({ ...item.policy, name: "_" }) !== hashJson({ ...policy, name: "_" }));
 }
 
-async function evaluatePolicy(options: { policy: ImageOnlyPolicy; catalog: z.infer<typeof CatalogSchema>; captureRoot: string; directory: string; splits: ("train" | "validation" | "holdout")[]; browserExecutable?: string | undefined }): Promise<PolicyResult> {
+async function evaluatePolicy(options: { policy: ImageOnlyPolicy; catalog: z.infer<typeof CatalogSchema>; captureRoot: string; directory: string; splits: ("train" | "validation" | "holdout")[]; browserExecutable?: string | undefined; acss?: AutomaticCssBundle | undefined }): Promise<PolicyResult> {
   const targets: TargetResult[] = [];
   for (const target of options.catalog.targets.filter((item) => options.splits.includes(item.split))) {
     const targetDirectory = join(options.captureRoot, target.targetId);
@@ -61,9 +62,9 @@ async function evaluatePolicy(options: { policy: ImageOnlyPolicy; catalog: z.inf
     if (!await pathExists(manifestPath) || !await pathExists(analysisPath)) throw new Error(`Target ${target.targetId} is not prepared; capture and analyze it before image research`);
     const outputDirectory = join(options.directory, target.targetId, "build");
     const replayDirectory = join(options.directory, target.targetId, "replay");
-    await buildImageTarget({ manifestPath, analysisPath, outputDirectory, policy: options.policy });
+    await buildImageTarget({ manifestPath, analysisPath, outputDirectory, policy: options.policy, acss: options.acss });
     const evaluation = await evaluateImageBuild({ manifestPath, buildDirectory: outputDirectory, outputDirectory: join(options.directory, target.targetId, "evaluation"), acceptancePixelRatio: 1, browserExecutable: options.browserExecutable });
-    await buildImageTarget({ manifestPath, analysisPath, outputDirectory: replayDirectory, policy: options.policy });
+    await buildImageTarget({ manifestPath, analysisPath, outputDirectory: replayDirectory, policy: options.policy, acss: options.acss });
     const outputHash = hashJson({ html: await hashFile(join(outputDirectory, "page.html")), scss: await hashFile(join(outputDirectory, "page.scss")), css: await hashFile(join(outputDirectory, "page.css")) });
     const replayHash = hashJson({ html: await hashFile(join(replayDirectory, "page.html")), scss: await hashFile(join(replayDirectory, "page.scss")), css: await hashFile(join(replayDirectory, "page.css")) });
     targets.push({ targetId: target.targetId, projectId: target.projectId, split: target.split, evaluation, idempotent: outputHash === replayHash, outputHash, replayHash });
@@ -118,15 +119,15 @@ function targetTrajectory(researchId: string, experimentId: string, mutation: st
   });
 }
 
-export async function runImageResearch(options: { catalogPath: string; captureRoot: string; workspace: string; budget: number; browserExecutable?: string | undefined }): Promise<ImageResearchSummary> {
+export async function runImageResearch(options: { catalogPath: string; captureRoot: string; workspace: string; budget: number; browserExecutable?: string | undefined; acss?: AutomaticCssBundle | undefined }): Promise<ImageResearchSummary> {
   const catalog = CatalogSchema.parse(await readJson(resolve(options.catalogPath)));
   const researchId = `image-research-${crypto.randomUUID()}`;
   const root = resolve(options.workspace, researchId);
   await ensureDirectory(root);
   const initialPolicy = ImageOnlyPolicySchema.parse(conservativeImageOnlyPolicy);
   let incumbent = initialPolicy;
-  let incumbentTrain = await evaluatePolicy({ policy: incumbent, catalog, captureRoot: resolve(options.captureRoot), directory: join(root, "baseline", "train"), splits: ["train"], browserExecutable: options.browserExecutable });
-  let incumbentValidation = await evaluatePolicy({ policy: incumbent, catalog, captureRoot: resolve(options.captureRoot), directory: join(root, "baseline", "validation"), splits: ["validation"], browserExecutable: options.browserExecutable });
+  let incumbentTrain = await evaluatePolicy({ policy: incumbent, catalog, captureRoot: resolve(options.captureRoot), directory: join(root, "baseline", "train"), splits: ["train"], browserExecutable: options.browserExecutable, acss: options.acss });
+  let incumbentValidation = await evaluatePolicy({ policy: incumbent, catalog, captureRoot: resolve(options.captureRoot), directory: join(root, "baseline", "validation"), splits: ["validation"], browserExecutable: options.browserExecutable, acss: options.acss });
   const baseline = { train: incumbentTrain, validation: incumbentValidation };
   const experiments: ImageResearchSummary["experiments"] = [];
   const trajectories: Trajectory[] = [...incumbentTrain.targets, ...incumbentValidation.targets].map((target) => targetTrajectory(researchId, `${researchId}-baseline`, "conservative-baseline", target, true));
@@ -137,8 +138,8 @@ export async function runImageResearch(options: { catalogPath: string; captureRo
     const candidateHash = hashJson({ ...next.policy, name: "_" });
     seen.add(candidateHash);
     const experimentId = `${researchId}-${String(index + 1).padStart(2, "0")}-${next.mutation}`;
-    const candidateTrain = await evaluatePolicy({ policy: next.policy, catalog, captureRoot: resolve(options.captureRoot), directory: join(root, "experiments", experimentId, "train"), splits: ["train"], browserExecutable: options.browserExecutable });
-    const candidateValidation = await evaluatePolicy({ policy: next.policy, catalog, captureRoot: resolve(options.captureRoot), directory: join(root, "experiments", experimentId, "validation"), splits: ["validation"], browserExecutable: options.browserExecutable });
+    const candidateTrain = await evaluatePolicy({ policy: next.policy, catalog, captureRoot: resolve(options.captureRoot), directory: join(root, "experiments", experimentId, "train"), splits: ["train"], browserExecutable: options.browserExecutable, acss: options.acss });
+    const candidateValidation = await evaluatePolicy({ policy: next.policy, catalog, captureRoot: resolve(options.captureRoot), directory: join(root, "experiments", experimentId, "validation"), splits: ["validation"], browserExecutable: options.browserExecutable, acss: options.acss });
     const noHardRegression = candidateTrain.hardFailures === 0 && candidateValidation.hardFailures === 0 && candidateTrain.idempotenceRate === 1 && candidateValidation.idempotenceRate === 1;
     const trainDelta = candidateTrain.meanScore - incumbentTrain.meanScore;
     const validationDelta = candidateValidation.meanScore - incumbentValidation.meanScore;
@@ -148,7 +149,7 @@ export async function runImageResearch(options: { catalogPath: string; captureRo
     trajectories.push(...[...candidateTrain.targets, ...candidateValidation.targets].map((target) => targetTrajectory(researchId, experimentId, next.mutation, target, keep)));
     if (keep) { incumbent = next.policy; incumbentTrain = candidateTrain; incumbentValidation = candidateValidation; }
   }
-  const holdout = await evaluatePolicy({ policy: incumbent, catalog, captureRoot: resolve(options.captureRoot), directory: join(root, "final", "holdout"), splits: ["holdout"], browserExecutable: options.browserExecutable });
+  const holdout = await evaluatePolicy({ policy: incumbent, catalog, captureRoot: resolve(options.captureRoot), directory: join(root, "final", "holdout"), splits: ["holdout"], browserExecutable: options.browserExecutable, acss: options.acss });
   trajectories.push(...holdout.targets.map((target) => targetTrajectory(researchId, `${researchId}-hidden-holdout`, "hidden-holdout-audit", target, target.evaluation.hardFailures.length === 0 && target.idempotent)));
   const trajectoryPath = join(root, "image-trajectories.jsonl");
   await writeTextAtomic(trajectoryPath, `${trajectories.map((trajectory) => JSON.stringify(trajectory)).join("\n")}\n`);
