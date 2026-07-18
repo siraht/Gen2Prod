@@ -29,6 +29,8 @@ import { evaluateMutationControls, policyActions, policyCost } from "../research
 import { compareCaptures } from "../validation/visual.ts";
 import { loadDistilledController, recommendWithController, verifyWithController } from "./controller.ts";
 import { scheduleLocalizedRepair, type RepairSchedule } from "./repair-scheduler.ts";
+import { HttpStructuredProvider } from "../models/provider.ts";
+import { exploreSemanticRepairs, type SemanticRepairExploration } from "../models/semantic-repair.ts";
 
 export type RunOptions = {
   input: string;
@@ -150,6 +152,23 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
     compiled = repaired.compiled;
     preflight = candidateReport;
   }
+  let modelExploration: SemanticRepairExploration | undefined;
+  let modelCandidateArtifact: unknown = { schemaVersion: "0.1.0", enabled: false, reason: "GEN2PROD_MODEL_ENDPOINT is not configured; deterministic inference and gates remained authoritative." };
+  const modelEndpoint = process.env.GEN2PROD_MODEL_ENDPOINT;
+  if (modelEndpoint) {
+    try {
+      const provider = new HttpStructuredProvider(modelEndpoint, process.env.GEN2PROD_MODEL_TOKEN, options.policy.modelAssignments.semantic ?? "http-semantic-planner");
+      modelExploration = await exploreSemanticRepairs(compiled, provider, options.policy, structuralThresholds);
+      modelCandidateArtifact = { schemaVersion: "0.1.0", enabled: true, ...modelExploration, compiled: undefined };
+      compiled = modelExploration.compiled;
+      await replay.append(event(id, "model-assisted-semantic-repair", policyHash, modelExploration.accepted ? "accepted" : "rejected", `${modelExploration.model}: ${modelExploration.reason}`));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      modelCandidateArtifact = { schemaVersion: "0.1.0", enabled: true, error: detail };
+      requiredActions.push({ id: "model-provider-unavailable", summary: "Restore or disable the configured semantic planner", detail: `The bounded model-candidate pass failed: ${detail}. Deterministic compilation continued and no hard gate was bypassed.`, blocking: false });
+      await replay.append(event(id, "model-assisted-semantic-repair", policyHash, "rejected", `Provider failure: ${detail}`));
+    }
+  }
   const distilledController = await loadDistilledController(resolve(options.config.workspace));
   const controllerRecommendation = recommendWithController(distilledController, compiled);
   if (distilledController?.loadErrors.length) requiredActions.push({ id: "distilled-model-refresh", summary: "Refresh incompatible distilled model artifacts", detail: distilledController.loadErrors.join("; "), blocking: false });
@@ -228,7 +247,7 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
     })) : {},
     loadErrors: distilledController?.loadErrors ?? [],
   };
-  await Promise.all([writeJsonAtomic(join(runDirectory, "plan.json"), compiled.plan), writeJsonAtomic(join(runDirectory, "validation.json"), validation), writeJsonAtomic(join(runDirectory, "repairs.json"), repairs), writeJsonAtomic(join(runDirectory, "distilled-controller.json"), controllerTrace), ...(visualTarget ? [writeJsonAtomic(join(runDirectory, "visual-target.json"), visualTarget)] : []), ...(compiledInput.greenfield ? [writeJsonAtomic(join(runDirectory, "greenfield-artifacts.json"), compiledInput.greenfield)] : [])]);
+  await Promise.all([writeJsonAtomic(join(runDirectory, "plan.json"), compiled.plan), writeJsonAtomic(join(runDirectory, "validation.json"), validation), writeJsonAtomic(join(runDirectory, "repairs.json"), repairs), writeJsonAtomic(join(runDirectory, "distilled-controller.json"), controllerTrace), writeJsonAtomic(join(runDirectory, "model-candidate-history.json"), modelCandidateArtifact), ...(visualTarget ? [writeJsonAtomic(join(runDirectory, "visual-target.json"), visualTarget)] : []), ...(compiledInput.greenfield ? [writeJsonAtomic(join(runDirectory, "greenfield-artifacts.json"), compiledInput.greenfield)] : [])]);
 
   const store = new ArtifactStore(join(runDirectory, "artifacts"));
   const inputRef = await store.putText("source-input", await Bun.file(options.input).text(), { id: "primary-input", producer: "run-intake", authorities: options.mode === "greenfield" ? ["approved-content-intent"] : ["content", "links", "forms", "behavior-hooks", "semantics-partial"] });
@@ -237,7 +256,8 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
     store.putJson("validation-report", validation, { id: "validation-report", producer: "gates-a-j", inputs: [inputRef.id] }),
     store.putJson("transformation-report", reports, { id: "product-reports", producer: "report-generator", inputs: [inputRef.id] }),
   ]);
-  const manifest = RunManifestSchema.parse({ schemaVersion: "0.1.0", projectId: basename(options.input).replace(/\.[^.]+$/, ""), runId: id, createdAt: new Date().toISOString(), mode: options.mode, profile: options.profile, inputs: [inputRef], artifacts: artifactRefs, inputAuthorities: { [options.input]: options.mode === "greenfield" ? ["approved-content-intent"] : ["content", "links", "forms", "behavior-hooks", "semantics-partial"] }, acceptanceProfile: { lockedViewports: options.config.capture.viewports, lockedRegions: visualTarget?.regions.filter((region) => region.regionId && region.locked).map((region) => region.regionId) ?? [], requiresHumanApproval: Boolean(visualTarget), thresholdsProvisional: options.config.validation.provisionalThresholds }, schemaVersions: { manifest: "0.1.0", normalForm: "0.1.0", tokenRegistryAdapter: compiled.plan.tokens.schemaVersion }, ...(candidateCapture ? { captureEnvironment: candidateCapture.environment } : {}), toolVersions: { gen2prod: "0.1.0", bun: Bun.version, sass: "1.x", ...(compiledInput.acss ? { automaticcss: compiledInput.acss.provenance.version } : {}) }, modelRuns: [], requiredActions });
+  const modelRuns = modelExploration && modelExploration.receivedCandidates > 0 ? [{ pass: "semantic-repair", model: modelExploration.model, promptHash: modelExploration.promptHash ?? "provider-returned-no-prompt-hash", schema: "semantic-repair-patch-0.1.0", samplingSettings: modelExploration.sampling, candidateCount: modelExploration.receivedCandidates, selectedCandidate: modelExploration.selectedCandidate, outputHash: hashJson(modelExploration.candidates), selectionRationale: modelExploration.reason }] : [];
+  const manifest = RunManifestSchema.parse({ schemaVersion: "0.1.0", projectId: basename(options.input).replace(/\.[^.]+$/, ""), runId: id, createdAt: new Date().toISOString(), mode: options.mode, profile: options.profile, inputs: [inputRef], artifacts: artifactRefs, inputAuthorities: { [options.input]: options.mode === "greenfield" ? ["approved-content-intent"] : ["content", "links", "forms", "behavior-hooks", "semantics-partial"] }, acceptanceProfile: { lockedViewports: options.config.capture.viewports, lockedRegions: visualTarget?.regions.filter((region) => region.regionId && region.locked).map((region) => region.regionId) ?? [], requiresHumanApproval: Boolean(visualTarget), thresholdsProvisional: options.config.validation.provisionalThresholds }, schemaVersions: { manifest: "0.1.0", normalForm: "0.1.0", tokenRegistryAdapter: compiled.plan.tokens.schemaVersion }, ...(candidateCapture ? { captureEnvironment: candidateCapture.environment } : {}), toolVersions: { gen2prod: "0.1.0", bun: Bun.version, sass: "1.x", ...(compiledInput.acss ? { automaticcss: compiledInput.acss.provenance.version } : {}) }, modelRuns, requiredActions });
   await writeJsonAtomic(join(runDirectory, "manifest.json"), manifest);
   const hardFailures = validation.gates.filter((gate) => gate.hard && !gate.passed);
   const accessibilityErrors = validation.gates.find((gate) => gate.gate === "E")?.assertions.filter((assertion) => !assertion.passed && (assertion.severity === "error" || assertion.severity === "critical")).length ?? 0;

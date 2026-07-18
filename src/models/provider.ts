@@ -39,12 +39,16 @@ export class HttpStructuredProvider implements StructuredPlannerProvider {
   constructor(private readonly endpoint: string, private readonly token?: string, name = "http-structured-provider") { this.name = name; }
 
   async plan<T>(request: PlannerRequest<T>): Promise<PlannerCandidate<T>[]> {
-    const response = await fetch(this.endpoint, { method: "POST", headers: { "content-type": "application/json", ...(this.token ? { authorization: `Bearer ${this.token}` } : {}) }, body: JSON.stringify({ pass: request.pass, promptVersion: request.promptVersion, observations: request.observations, candidates: request.candidates }) });
+    const response = await fetch(this.endpoint, { method: "POST", headers: { "content-type": "application/json", ...(this.token ? { authorization: `Bearer ${this.token}` } : {}) }, body: JSON.stringify({ pass: request.pass, promptVersion: request.promptVersion, observations: request.observations, candidates: request.candidates }), signal: AbortSignal.timeout(30_000) });
     if (!response.ok) throw new Error(`Planner provider returned ${response.status}`);
     const body = await response.json() as { candidates: unknown[]; model?: string; sampling?: Record<string, unknown> };
-    return body.candidates.map((candidate) => {
-      const value = request.schema.parse(candidate);
-      return { value, model: body.model ?? this.name, promptHash: hashJson({ pass: request.pass, version: request.promptVersion, observations: request.observations }), outputHash: hashJson(value), sampling: body.sampling ?? {} };
+    if (!Array.isArray(body.candidates)) throw new Error("Planner provider response is missing a candidates array");
+    const candidates = body.candidates.flatMap((candidate) => {
+      const parsed = request.schema.safeParse(candidate);
+      if (!parsed.success) return [];
+      return [{ value: parsed.data, model: body.model ?? this.name, promptHash: hashJson({ pass: request.pass, version: request.promptVersion, observations: request.observations }), outputHash: hashJson(parsed.data), sampling: body.sampling ?? {} }];
     });
+    if (candidates.length === 0) throw new Error("Planner provider returned no schema-valid candidates");
+    return candidates;
   }
 }

@@ -104,6 +104,7 @@ test("records accepted production runs as distillation trajectories", async () =
   expect(await Bun.file(join(run.runDirectory, "capture", "diff", "visual-evaluation.json")).exists()).toBeTrue();
   expect(await Bun.file(join(run.runDirectory, "capture", "diff", "baseline-vs-candidate-360-light-default.png")).exists()).toBeTrue();
   expect(await Bun.file(join(run.runDirectory, "distilled-controller.json")).exists()).toBeTrue();
+  expect(await Bun.file(join(run.runDirectory, "model-candidate-history.json")).exists()).toBeTrue();
 });
 
 test("keeps a gate-improving localized repair in the production run", async () => {

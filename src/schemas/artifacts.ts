@@ -102,7 +102,7 @@ export const ModelRunSchema = z.object({
   schema: z.string(),
   samplingSettings: z.record(z.string(), z.unknown()),
   candidateCount: z.number().int().positive(),
-  selectedCandidate: z.number().int().nonnegative(),
+  selectedCandidate: z.number().int().nonnegative().nullable(),
   outputHash: z.string(),
   selectionRationale: z.string(),
 });
