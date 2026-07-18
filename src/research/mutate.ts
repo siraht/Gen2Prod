@@ -19,7 +19,7 @@ const POLICY_PROPOSALS: Proposal[] = [
 
 const PASS_PROPOSALS: Proposal[] = [
   { field: "compiler.useStableNodeHints", values: [true, false], hypothesis: (_, after) => after ? "Stable lineage hints materially improve semantic recovery." : "Content and accessibility evidence can replace synthetic lineage hints." },
-  { field: "thresholds.tokenSnapRelative", values: [0.02, 0.08, 0.12, 0.18], hypothesis: (_, after) => `A ${(Number(after) * 100).toFixed(0)}% token snap band improves governed coverage without hard regressions.` },
+  { field: "thresholds.tokenSnapRelative", values: [0, 0.02, 0.05, 0.08, 0.12], hypothesis: (_, after) => `A ${(Number(after) * 100).toFixed(0)}% token snap band improves governed coverage without hard regressions.` },
   { field: "compiler.preserveUnknownClasses", values: [true, false], hypothesis: (_, after) => after ? "Preserving unknown classes prevents behavior loss." : "Removing unknown classes reduces review burden without losing governed behavior." },
 ];
 

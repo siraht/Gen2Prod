@@ -9,7 +9,7 @@ export const defaultPolicy: TransformationPolicy = {
   passOrder: ["ingest", "capture", "component-detection", "semantic-inference", "bem-inference", "token-binding", "emit", "validate", "localized-repair", "idempotence"],
   evidenceOrder: ["source-ast", "rendered-dom", "computed-styles", "page-intent", "accessibility-tree", "full-screenshot", "section-crops", "cross-page-inventory"],
   modalities: { sourceAst: true, renderedDom: true, accessibilityTree: true, computedStyles: true, pageIntent: true, fullScreenshot: true, uncertaintyTriggeredCrops: true, crossPageInventory: false },
-  thresholds: { semanticReview: 0.65, componentCandidate: 0.65, tokenSnapRelative: 0.08, visualPixelRatio: 0.01, repairEscalation: 2 },
+  thresholds: { semanticReview: 0.65, componentCandidate: 0.65, tokenSnapRelative: 0.02, visualPixelRatio: 0.01, repairEscalation: 2 },
   candidates: { semantic: 1, component: 1, token: 1 },
   compiler: { useStableNodeHints: true, preserveUnknownClasses: true, inferMissingBehavior: false },
   verifier: { componentSimilarityThreshold: 0.88, requireAllMutationControls: true },

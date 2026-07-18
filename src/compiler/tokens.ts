@@ -126,7 +126,7 @@ export function bindValue(property: string, rawValue: string, registry: TokenReg
       const rawNumber = numeric(comparableRaw);
       const tokenNumber = numeric(comparableSample);
       if (rawNumber && tokenNumber && rawNumber.unit === tokenNumber.unit) {
-        const error = Math.abs(rawNumber.number - tokenNumber.number) / Math.max(Math.abs(rawNumber.number), 1);
+        const error = Math.abs(rawNumber.number - tokenNumber.number) / Math.max(Math.abs(rawNumber.number), Math.abs(tokenNumber.number), Number.EPSILON);
         if (error <= relativeThreshold && error < selectedError) {
           value = token.runtimeExpression;
           selected = token;

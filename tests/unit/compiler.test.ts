@@ -152,6 +152,12 @@ describe("static compilation", () => {
     expect(replaced.value).toBe("clamp(var(--space-m), 4vw, 4rem)");
   });
 
+  test("measures token snap error relative to sub-unit CSS values", () => {
+    const registry = { ...inputTokens(), tokens: [{ ...inputTokens().tokens[0]!, id: "space.compact", name: "space.compact", type: "dimension" as const, category: "space", value: "0.78rem", runtimeVariable: "--space-compact", runtimeExpression: "var(--space-compact)", semanticRole: "space-compact", allowedProperties: ["gap"], sampledValues: { "default@1280": "0.78rem" } }] };
+    expect(bindValue("gap", "0.85rem", registry, 0.08).token).toBeUndefined();
+    expect(bindValue("gap", "0.8rem", registry, 0.08).token?.id).toBe("space.compact");
+  });
+
   test("canonicalizes nested calc serialization before the idempotence pass", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-calc-canonical-"));
     const htmlPath = join(directory, "page.html");
