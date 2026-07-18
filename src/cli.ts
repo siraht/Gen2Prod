@@ -29,6 +29,7 @@ import { buildImageTarget } from "./image-only/build.ts";
 import { evaluateImageBuild } from "./image-only/evaluate.ts";
 import { runImageResearch } from "./image-only/research.ts";
 import { analyzeImageStateSequence } from "./image-only/state.ts";
+import { prepareSyntheticImageCurriculum } from "./image-only/synthetic.ts";
 
 type GlobalOptions = { config: string; workspace: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -176,6 +177,17 @@ corpus
   });
 
 const image = program.command("image").description("capture, reconstruct, and evaluate strict image-only targets");
+image
+  .command("synth-prepare")
+  .description("convert gold/dirty synthetic renders into strict image-only targets with answers quarantined")
+  .option("--fixtures <path>", "synthetic fixture manifest", "fixtures/generated/manifest.json")
+  .option("--output <path>", "image-only curriculum output", ".gen2prod/image-only/synthetic")
+  .option("--viewport <pixels>", "paired gold/dirty viewport", "1280")
+  .action(async (options: { fixtures: string; output: string; viewport: string }) => {
+    const curriculum = await prepareSyntheticImageCurriculum(resolve(options.fixtures), resolve(options.output), Number.parseInt(options.viewport, 10));
+    const splitCounts = curriculum.targets.reduce<Record<string, number>>((counts, target) => { counts[target.split] = (counts[target.split] ?? 0) + 1; return counts; }, {});
+    emit(result("image synth-prepare", curriculum), `Prepared ${curriculum.targets.length} strict image-only gold/dirty pairs.\nSplits: train=${splitCounts.train ?? 0}, validation=${splitCounts.validation ?? 0}, holdout=${splitCounts.holdout ?? 0}\nSemantic/source answers are post-build audit only.\nCurriculum: ${join(resolve(options.output), "curriculum.json")}`);
+  });
 image
   .command("capture <url>")
   .description("capture a live page as still and scroll-materialized image evidence without DOM/source builder inputs")
