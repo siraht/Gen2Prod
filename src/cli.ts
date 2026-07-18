@@ -6,9 +6,10 @@ import { dirname, join, resolve } from "node:path";
 import { stringify } from "yaml";
 import { loadConfig, type Gen2ProdConfig } from "./core/config.ts";
 import { Gen2ProdError, UsageError } from "./core/errors.ts";
-import { ensureDirectory, pathExists, writeTextAtomic } from "./core/fs.ts";
+import { ensureDirectory, pathExists, readJson, writeTextAtomic } from "./core/fs.ts";
 import { result, type ResultEnvelope } from "./core/result.ts";
 import { ModeSchema, ProfileSchema } from "./schemas/artifacts.ts";
+import { ImageOnlyPolicySchema } from "./schemas/image-only.ts";
 import { exportSchemas } from "./schemas/export.ts";
 import { prepareBenchmark } from "./research/prepare.ts";
 import { evaluateModalityAblation } from "./research/ablation.ts";
@@ -62,6 +63,11 @@ async function currentPolicy(project: Gen2ProdConfig, explicit?: string): Promis
   if (explicit) return loadPolicy(explicit);
   const incumbent = resolve(project.workspace, "research", "incumbent-policy.json");
   return loadPolicy((await pathExists(incumbent)) ? incumbent : project.policy.file);
+}
+
+async function currentImagePolicy(project: Gen2ProdConfig, explicit?: string) {
+  const path = explicit ? resolve(explicit) : resolve(project.workspace, "image-only", "research", "incumbent-policy.json");
+  return await pathExists(path) ? ImageOnlyPolicySchema.parse(await readJson(path)) : undefined;
 }
 
 function emit<T>(envelope: ResultEnvelope<T>, human: string): void {
@@ -253,9 +259,12 @@ image
   .requiredOption("--output <path>", "build output directory")
   .option("--analysis <path>", "image analysis JSON; defaults beside manifest")
   .option("--plan <path>", "reviewed image-derived build plan")
-  .option("--max-raster-coverage <ratio>", "maximum target pixels reusable as image-region crops", "0.28")
-  .action(async (manifest: string, options: { output: string; analysis?: string; plan?: string; maxRasterCoverage: string }) => {
-    const built = await buildImageTarget({ manifestPath: resolve(manifest), outputDirectory: resolve(options.output), analysisPath: options.analysis ? resolve(options.analysis) : undefined, planPath: options.plan ? resolve(options.plan) : undefined, maxRasterCoverage: Number.parseFloat(options.maxRasterCoverage) });
+  .option("--policy <path>", "image reconstruction policy; defaults to the researched incumbent")
+  .option("--max-raster-coverage <ratio>", "explicit maximum target pixels reusable as image-region crops")
+  .action(async (manifest: string, options: { output: string; analysis?: string; plan?: string; policy?: string; maxRasterCoverage?: string }) => {
+    const project = await config();
+    const policy = await currentImagePolicy(project, options.policy);
+    const built = await buildImageTarget({ manifestPath: resolve(manifest), outputDirectory: resolve(options.output), analysisPath: options.analysis ? resolve(options.analysis) : undefined, planPath: options.plan ? resolve(options.plan) : undefined, policy, maxRasterCoverage: options.maxRasterCoverage ? Number.parseFloat(options.maxRasterCoverage) : undefined });
     const actions = await Bun.file(built.requiredActionsPath).json() as ResultEnvelope<unknown>["requiredActions"];
     const envelope = result("image build", built); envelope.requiredActions.push(...actions);
     emit(envelope, `Built strict image-only reconstruction\nHTML: ${built.htmlPath}\nSCSS: ${built.scssPath}\nRaster crop coverage: ${(built.rasterCoverage * 100).toFixed(1)}% across ${built.assetCount} asset(s)\nProvenance: ${built.provenancePath}`);
@@ -289,8 +298,9 @@ image
   .description("run strict analysis → semantic BEM build → image evaluation end to end")
   .requiredOption("--output <path>", "build and evaluation output directory")
   .option("--no-ocr", "skip local image-text recognition")
+  .option("--policy <path>", "image reconstruction policy; defaults to the researched incumbent")
   .option("--acceptance-pixel-ratio <ratio>", "provisional full-pixel acceptance threshold", "0.72")
-  .action(async (manifest: string, options: { output: string; ocr: boolean; acceptancePixelRatio: string }) => {
+  .action(async (manifest: string, options: { output: string; ocr: boolean; policy?: string; acceptancePixelRatio: string }) => {
     const project = await config();
     const manifestPath = resolve(manifest);
     const output = resolve(options.output);
@@ -298,7 +308,7 @@ image
     const analysis = await analyzeImageTarget({ manifestPath, outputPath: analysisPath, ocr: options.ocr });
     const states = await analyzeImageStateSequence(manifestPath, join(output, "image-state-analysis.json"));
     const strategy = await writeImageContentStrategy(analysis, output, states);
-    const built = await buildImageTarget({ manifestPath, analysisPath, outputDirectory: output });
+    const built = await buildImageTarget({ manifestPath, analysisPath, outputDirectory: output, policy: await currentImagePolicy(project, options.policy) });
     const evaluation = await evaluateImageBuild({ manifestPath, buildDirectory: output, outputDirectory: join(output, "evaluation"), acceptancePixelRatio: Number.parseFloat(options.acceptancePixelRatio), browserExecutable: project.capture.browserExecutable });
     const envelope = result("image run", { analysis: { regions: analysis.regions.length, text: analysis.text.length, stateObservations: states.observations.length, dynamicHypotheses: states.hypotheses.length, pageType: strategy.pageTypeHypothesis }, build: built, evaluation }); envelope.ok = evaluation.accepted;
     envelope.requiredActions.push(...await Bun.file(built.requiredActionsPath).json() as ResultEnvelope<unknown>["requiredActions"]);
