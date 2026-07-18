@@ -102,6 +102,7 @@ export async function evaluateImageBuild(options: EvaluateImageBuildOptions): Pr
   if (semantics.h1Count !== 1) hardFailures.push("heading-contract");
   if (semantics.bemCoverage < 0.95) hardFailures.push("bem-contract");
   if (semantics.inlineStyleCount > 0 || semantics.scriptCount > 0) hardFailures.push("unsafe-image-build-output");
+  if (dirtyDifference && difference.ratio > dirtyDifference.ratio + 0.002) hardFailures.push("dirty-to-clean-image-regression");
   if (previous && difference.ratio > previous.ratio + 0.002) hardFailures.push("visual-regression-from-incumbent");
   const threshold = options.acceptancePixelRatio ?? 0.72;
   const accepted = hardFailures.length === 0 && difference.ratio <= threshold;
