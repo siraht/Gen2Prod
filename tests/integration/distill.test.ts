@@ -29,3 +29,25 @@ test("exports training datasets and reloadable distilled models", async () => {
   expect(verifyCandidate(verifier, { hardGateFailures: 0, unaccountedDeclarations: 0 }, { mutationControlsPass: true, idempotent: true })).toBeTrue();
   expect(planner.vocabulary.passes).toContain("pass:semantic-inference");
 });
+
+test("selector ranks accepted evidence above cheaper never-kept evidence", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "gen2prod-selector-lcb-"));
+  const path = join(directory, "trajectories.jsonl");
+  const rows = Array.from({ length: 40 }, (_, index): Trajectory => {
+    const accepted = index % 2 === 0;
+    return {
+      ...trajectory(index + 100, accepted),
+      trajectoryId: `${accepted ? "accepted" : "rejected"}-${index}`,
+      actions: [accepted ? "evidence:reviewed" : "evidence:cheap-unproven"],
+      verifierLabels: { hardGatesPass: true, idempotent: true, mutationControlsPass: true },
+      fitness,
+      accepted,
+      cost: accepted ? 0.5 : 0.1,
+    };
+  });
+  await Bun.write(path, `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`);
+  await distill(path, join(directory, "models"), "selector");
+  const selector = await loadSelector(join(directory, "models", "selector.model.json"));
+  expect(selector.defaultRanking.indexOf("evidence:reviewed")).toBeLessThan(selector.defaultRanking.indexOf("evidence:cheap-unproven"));
+  expect(selector.actions["evidence:cheap-unproven"]!.acceptanceLowerBound).toBe(0);
+});

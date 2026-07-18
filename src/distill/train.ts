@@ -27,6 +27,13 @@ function utility(trajectory: Trajectory): number {
   return -(trajectory.fitness.criticalGateFailures * 100 + trajectory.fitness.contentBehaviorErrors * 50 + trajectory.fitness.semanticContractError * 10 + trajectory.fitness.accessibilityError * 30 + trajectory.fitness.visualLoss * 5 + trajectory.fitness.bemComponentError * 5 + trajectory.cost);
 }
 
+function wilsonLowerBound(successes: number, total: number, z = 1.96): number {
+  if (total <= 0) return 0;
+  const rate = successes / total;
+  const z2 = z * z;
+  return (rate + z2 / (2 * total) - z * Math.sqrt((rate * (1 - rate) + z2 / (4 * total)) / total)) / (1 + z2 / total);
+}
+
 function trainSelector(trajectories: Trajectory[]): SelectorModel {
   const parts = split(trajectories);
   const actionRows = new Map<string, Trajectory[]>();
@@ -35,8 +42,18 @@ function trainSelector(trajectories: Trajectory[]): SelectorModel {
     values.push(trajectory);
     actionRows.set(action, values);
   }
-  const actions = Object.fromEntries([...actionRows.entries()].map(([action, rows]) => [action, { support: rows.length, acceptanceRate: rows.filter((row) => row.accepted).length / rows.length, meanCost: rows.reduce((sum, row) => sum + row.cost, 0) / rows.length, meanHardGateFailures: rows.reduce((sum, row) => sum + row.fitness.criticalGateFailures, 0) / rows.length, score: rows.reduce((sum, row) => sum + utility(row), 0) / rows.length }]));
-  const defaultRanking = Object.entries(actions).sort(([, left], [, right]) => right.score - left.score).map(([action]) => action);
+  const actions = Object.fromEntries([...actionRows.entries()].map(([action, rows]) => {
+    const successes = rows.filter((row) => row.accepted).length;
+    return [action, { support: rows.length, acceptanceRate: successes / rows.length, acceptanceLowerBound: wilsonLowerBound(successes, rows.length), meanCost: rows.reduce((sum, row) => sum + row.cost, 0) / rows.length, meanHardGateFailures: rows.reduce((sum, row) => sum + row.fitness.criticalGateFailures, 0) / rows.length, score: rows.reduce((sum, row) => sum + utility(row), 0) / rows.length }];
+  }));
+  // Selection is safety-lexicographic: observed hard failures dominate, then
+  // conservative acceptance evidence, then bounded utility/cost. A cheap
+  // action that was never kept must not outrank a repeatedly accepted action.
+  const defaultRanking = Object.entries(actions).sort(([leftName, left], [rightName, right]) => left.meanHardGateFailures - right.meanHardGateFailures
+    || right.acceptanceLowerBound - left.acceptanceLowerBound
+    || right.score - left.score
+    || right.support - left.support
+    || leftName.localeCompare(rightName)).map(([action]) => action);
   const mean = (rows: Trajectory[]) => rows.reduce((sum, row) => sum + utility(row), 0) / Math.max(rows.length, 1);
   return SelectorModelSchema.parse({ schemaVersion: "0.1.0", kind: "pass-selector", trainedAt: new Date().toISOString(), examples: trajectories.length, actions, defaultRanking, evaluation: { trainUtility: mean(parts.train), holdoutUtility: mean(parts.holdout), holdoutExamples: parts.holdout.length } });
 }

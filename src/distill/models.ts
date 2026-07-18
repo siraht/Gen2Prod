@@ -5,7 +5,7 @@ export const SelectorModelSchema = z.object({
   kind: z.literal("pass-selector"),
   trainedAt: z.string().datetime(),
   examples: z.number().int(),
-  actions: z.record(z.string(), z.object({ support: z.number().int(), acceptanceRate: z.number(), meanCost: z.number(), meanHardGateFailures: z.number(), score: z.number() })),
+  actions: z.record(z.string(), z.object({ support: z.number().int(), acceptanceRate: z.number(), acceptanceLowerBound: z.number(), meanCost: z.number(), meanHardGateFailures: z.number(), score: z.number() })),
   defaultRanking: z.array(z.string()),
   evaluation: z.object({ trainUtility: z.number(), holdoutUtility: z.number(), holdoutExamples: z.number().int() }),
 });
