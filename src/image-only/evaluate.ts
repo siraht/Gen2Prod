@@ -1,7 +1,7 @@
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { PNG } from "pngjs";
-import { ensureDirectory, readJson, writeJsonAtomic } from "../core/fs.ts";
+import { ensureDirectory, pathExists, readJson, writeJsonAtomic } from "../core/fs.ts";
 import { hashFile } from "../core/hash.ts";
 import { capturePage } from "../evidence/capture.ts";
 import { ImageOnlyBuildPlanSchema, ImageOnlyEvaluationSchema, ImageOnlyTargetManifestSchema, type ImageOnlyEvaluation } from "../schemas/image-only.ts";
@@ -67,7 +67,8 @@ export async function evaluateImageBuild(options: EvaluateImageBuildOptions): Pr
   const authoredClasses = classNames.filter((name) => !/^(?:dark|light|js|no-js)$/.test(name));
   const bemClasses = authoredClasses.filter((name) => /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:(?:__|--)[a-z0-9]+(?:-[a-z0-9]+)*)?$/.test(name));
   const visibleWords = new Set(normalizedWords(elements.map((element) => element.text).join(" ")));
-  const analysis = await readJson<{ text: { text: string }[] }>(join(dirname(manifestPath), "image-analysis.json"));
+  const colocatedAnalysis = join(buildDirectory, "image-analysis.json");
+  const analysis = await readJson<{ text: { text: string }[] }>(await pathExists(colocatedAnalysis) ? colocatedAnalysis : join(dirname(manifestPath), "image-analysis.json"));
   const observedWords = [...new Set(analysis.text.flatMap((item) => normalizedWords(item.text)))];
   const visibleTextRecall = observedWords.length ? observedWords.filter((word) => visibleWords.has(word)).length / observedWords.length : 1;
   const expectedLandmarks = [...new Set(plan.regions.map((region) => region.tag).filter((tag) => ["header", "nav", "footer"].includes(tag))), "main"];
