@@ -31,6 +31,7 @@ import { runImageResearch } from "./image-only/research.ts";
 import { analyzeImageStateSequence } from "./image-only/state.ts";
 import { prepareSyntheticImageCurriculum } from "./image-only/synthetic.ts";
 import { writeImageContentStrategy } from "./image-only/strategy.ts";
+import { importImageTarget } from "./image-only/import.ts";
 
 type GlobalOptions = { config: string; workspace: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -178,6 +179,20 @@ corpus
   });
 
 const image = program.command("image").description("capture, reconstruct, and evaluate strict image-only targets");
+image
+  .command("import <image>")
+  .description("ingest an uploaded/generated mockup as a hash-bound strict image-only target")
+  .requiredOption("--target <id>", "stable target identifier")
+  .option("--project <id>", "project identity; defaults to target identifier")
+  .addOption(new Option("--split <split>", "project-isolated benchmark split").choices(["train", "validation", "holdout"]).default("train"))
+  .requiredOption("--output <path>", "target output directory")
+  .option("--dirty-image <path>", "optional dirty render for measured recovery")
+  .option("--strategy <path>", "optional strategy explicitly derived from/approved for the image")
+  .option("--viewport-height <pixels>", "captured viewport height when the image is full-page")
+  .action(async (imagePath: string, options: { target: string; project?: string; split: "train" | "validation" | "holdout"; output: string; dirtyImage?: string; strategy?: string; viewportHeight?: string }) => {
+    const manifest = await importImageTarget({ imagePath: resolve(imagePath), outputDirectory: resolve(options.output), targetId: options.target, projectId: options.project, split: options.split, dirtyImagePath: options.dirtyImage ? resolve(options.dirtyImage) : undefined, imageDerivedStrategyPath: options.strategy ? resolve(options.strategy) : undefined, viewportHeight: options.viewportHeight ? Number.parseInt(options.viewportHeight, 10) : undefined });
+    emit(result("image import", manifest), `Imported ${manifest.targetId} as a strict image-only target.\nBuilder image: ${manifest.builderInputs.images[0]} (${manifest.frames[0]!.width}×${manifest.frames[0]!.height})\nManifest: ${join(resolve(options.output), "image-target.json")}`);
+  });
 image
   .command("synth-prepare")
   .description("convert gold/dirty synthetic renders into strict image-only targets with answers quarantined")
