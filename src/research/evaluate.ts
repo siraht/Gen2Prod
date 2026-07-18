@@ -111,7 +111,56 @@ function recoverCorrespondence(gold: NormalForm, candidate: PlannedNode): Map<st
   return matches;
 }
 
-function semanticAndBemError(gold: NormalForm, candidate: PlannedNode): { semantic: number; bem: number } {
+const BEM_CLASS = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*(?:__[a-z0-9]+(?:-[a-z0-9]+)*)?(?:--[a-z0-9]+(?:-[a-z0-9]+)*)?$/;
+
+function primaryConceptualClass(classes: string[]): string | undefined {
+  const valid = classes.filter((name) => BEM_CLASS.test(name) && !/^(?:js-|is-|has-|qa-|e2e-)/.test(name));
+  return valid.find((name) => name.includes("__") && !name.includes("--"))
+    ?? valid.find((name) => !name.includes("--"))
+    ?? valid[0];
+}
+
+/**
+ * Measure whether an alternative BEM graph preserves the canonical component
+ * partition, without requiring the same literal class strings. A nav may be a
+ * `site-header__nav` element or a valid `primary-nav` child block; repeated
+ * canonical roles must still share one output concept and distinct roles must
+ * not collapse onto the same class.
+ */
+function bemContractError(goldClasses: Map<string, Set<string>>, candidateNodes: Map<string, PlannedNode>): number {
+  const groups = new Map<string, { nodeId: string; actual?: string }[]>();
+  let missingOrInvalid = 0;
+  for (const [nodeId, expected] of goldClasses) {
+    const signature = [...expected].sort().join(" ");
+    const actual = primaryConceptualClass(candidateNodes.get(nodeId)?.classes ?? []);
+    if (!actual) missingOrInvalid += 1;
+    const members = groups.get(signature) ?? [];
+    members.push({ nodeId, ...(actual ? { actual } : {}) });
+    groups.set(signature, members);
+  }
+
+  let inconsistentRepeats = 0;
+  const representativeBySignature = new Map<string, string>();
+  for (const [signature, members] of groups) {
+    const counts = new Map<string, number>();
+    for (const member of members) if (member.actual) counts.set(member.actual, (counts.get(member.actual) ?? 0) + 1);
+    const representative = [...counts.entries()].sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0];
+    if (!representative) continue;
+    representativeBySignature.set(signature, representative[0]);
+    inconsistentRepeats += members.filter((member) => member.actual && member.actual !== representative[0]).length;
+  }
+
+  const signaturesByActual = new Map<string, string[]>();
+  for (const [signature, actual] of representativeBySignature) {
+    const signatures = signaturesByActual.get(actual) ?? [];
+    signatures.push(signature);
+    signaturesByActual.set(actual, signatures);
+  }
+  const collapsedConcepts = [...signaturesByActual.values()].reduce((sum, signatures) => sum + Math.max(0, signatures.length - 1), 0);
+  return (missingOrInvalid + inconsistentRepeats + collapsedConcepts) / Math.max(goldClasses.size + groups.size, 1);
+}
+
+export function semanticAndBemError(gold: NormalForm, candidate: PlannedNode): { semantic: number; bem: number } {
   const candidateNodes = recoverCorrespondence(gold, candidate);
   const goldNodes = flattenDom(gold.dom);
   let semanticErrors = 0;
@@ -137,7 +186,14 @@ function semanticAndBemError(gold: NormalForm, candidate: PlannedNode): { semant
     bemLoss += union.size ? 1 - intersection / union.size : 0;
     bemNodes += 1;
   }
-  return { semantic: semanticErrors / Math.max(comparableSemantic, 1), bem: bemLoss / Math.max(bemNodes, 1) };
+  const literalBemError = bemLoss / Math.max(bemNodes, 1);
+  return {
+    semantic: semanticErrors / Math.max(comparableSemantic, 1),
+    // Canonical names are useful preference evidence, but a structurally
+    // equivalent BEM partition is also correct. Keep the better of the exact
+    // and contract-aware comparisons so the evaluator does not overfit names.
+    bem: Math.min(literalBemError, bemContractError(goldClasses, candidateNodes)),
+  };
 }
 
 export function policyActions(policy: TransformationPolicy): string[] {
