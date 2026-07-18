@@ -25,7 +25,7 @@ function classifyClass(name: string, selectors: string[]): { role: ClassRole; ev
 }
 
 function specificity(selector: string): [number, number, number] {
-  const classPattern = /\.((?:\\.|[_a-zA-Z])(?:\\.|[\w-])*)/g;
+  const classPattern = /\.((?:\\.|[-_a-zA-Z])(?:\\.|[\w-])*)/g;
   const classCount = selector.match(classPattern)?.length ?? 0;
   const withoutClasses = selector.replace(classPattern, "");
   const ids = withoutClasses.match(/(?<!\\)#[a-zA-Z0-9_-]+/g)?.length ?? 0;

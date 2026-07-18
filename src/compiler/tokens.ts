@@ -143,7 +143,7 @@ function allNodes(root: PlannedNode): PlannedNode[] {
 }
 
 function selectorClasses(selector: string): string[] {
-  return [...selector.matchAll(/\.((?:\\.|[_a-zA-Z])(?:\\.|[\w-])*)/g)].flatMap((match) => match[1] ? [match[1].replace(/\\(.)/g, "$1")] : []);
+  return [...selector.matchAll(/\.((?:\\.|[-_a-zA-Z])(?:\\.|[\w-])*)/g)].flatMap((match) => match[1] ? [match[1].replace(/\\(.)/g, "$1")] : []);
 }
 
 type SelectorContext = {
@@ -291,7 +291,7 @@ function simpleMatches(simple: string, node: PlannedNode, context: SelectorConte
   rest = rest.replace(attributePattern, "");
   const classNames = new Set([...node.oldClasses, ...node.classes]);
   if (selectorClasses(rest).some((name) => !classNames.has(name))) return false;
-  rest = rest.replace(/\.((?:\\.|[_a-zA-Z])(?:\\.|[\w-])*)/g, "");
+  rest = rest.replace(/\.((?:\\.|[-_a-zA-Z])(?:\\.|[\w-])*)/g, "");
   for (const id of rest.matchAll(/#([a-zA-Z0-9_-]+)/g)) if (node.attributes.id !== id[1]) return false;
   rest = rest.replace(/#[a-zA-Z0-9_-]+/g, "");
   const tag = rest.trim().match(/^(\*|[a-z][a-z0-9-]*)/i)?.[1]?.toLowerCase();

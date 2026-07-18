@@ -262,6 +262,19 @@ describe("static compilation", () => {
     expect(output.scss).toContain("font-size: 7rem;");
   });
 
+  test("matches leading-negative utility class selectors", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-negative-utility-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Negative utility</title><meta name="description" content="Negative utility fixture"><style>.-mx-4{margin-left:-1rem;margin-right:-1rem}.-right-12{right:-3rem}</style></head><body><main><section class="-mx-4"><h1>Full bleed</h1><span class="-right-12">Offset</span></section></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    const declarations = output.plan.styles.flatMap((style) => style.declarations);
+    expect(declarations.some((item) => item.property === "margin-left" && item.value === "-1rem")).toBeTrue();
+    expect(declarations.some((item) => item.property === "margin-right" && item.value === "-1rem")).toBeTrue();
+    expect(declarations.some((item) => item.property === "right" && item.value === "-3rem")).toBeTrue();
+    expect(output.scss).toContain("margin-left: -1rem;");
+    expect(output.scss).toContain("right: -3rem;");
+  });
+
   test("creates exact project aliases only for repeated governed values", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-project-tokens-"));
     const htmlPath = join(directory, "page.html");
