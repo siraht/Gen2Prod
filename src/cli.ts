@@ -35,8 +35,11 @@ import { writeImageContentStrategy } from "./image-only/strategy.ts";
 import { importImageTarget } from "./image-only/import.ts";
 import { auditLiveImageBuild } from "./image-only/audit.ts";
 import { evaluateSyntheticImageCurriculum } from "./image-only/curriculum.ts";
+import { prepareConfiguredAutomaticCss } from "./acss/configured.ts";
+import { prepareAutomaticCss } from "./acss/adapter.ts";
+import { discoverAutomaticCssSource } from "./acss/archive.ts";
 
-type GlobalOptions = { config: string; workspace: string; json?: boolean; input: boolean; verbose?: boolean };
+type GlobalOptions = { config: string; workspace: string; acss?: string; json?: boolean; input: boolean; verbose?: boolean };
 
 const program = new Command();
 
@@ -46,6 +49,7 @@ program
   .version("0.1.0")
   .option("--config <path>", "project configuration", "gen2prod.config.yaml")
   .option("--workspace <path>", "artifact workspace override")
+  .option("--acss <path>", "Automatic.css plugin ZIP/directory override")
   .option("--json", "emit a machine-readable result envelope")
   .option("--no-input", "disable interactive input")
   .option("--verbose", "emit diagnostic detail");
@@ -89,6 +93,7 @@ program
     if (await pathExists(configPath) && !options.force) throw new UsageError(`${configPath} already exists; pass --force to replace it`);
     const initial = {
       schemaVersion: "0.1.0", mode: "legacy-conversion", profile: "refactor", workspace: ".gen2prod",
+      designSystem: { provider: "automaticcss", source: "auto", mode: "full" },
       capture: { viewports: [360, 768, 1280, 1440], themes: ["light"], states: ["default", "focus-visible"], browserExecutable: "auto" },
       policy: { file: "src/research/policy.ts" }, research: { budget: 12, split: "validation", hiddenHoldoutEvery: 5 },
       validation: { wcag: "WCAG2AA", provisionalThresholds: true, maxVisualPixelRatio: 0.01, minBemCoverage: 0.95, minTokenCoverage: 0.95 },
@@ -97,6 +102,22 @@ program
     await writeTextAtomic(configPath, stringify(initial));
     const schemaPaths = await exportSchemas(join(target, ".gen2prod", "schemas"));
     emit(result("init", { directory: target, config: configPath, schemas: schemaPaths }), `Initialized Gen2Prod in ${target}\nExported ${schemaPaths.length} versioned schemas.`);
+  });
+
+const acssCommand = program.command("acss").description("prepare and inspect the configured Automatic.css release authority");
+acssCommand
+  .command("prepare [source]")
+  .description("compile the shipped ACSS Sass and generate registry, class catalog, and provenance artifacts")
+  .option("--output <path>", "adapter artifact directory")
+  .option("--force", "rebuild even when the release hash is unchanged")
+  .action(async (source: string | undefined, options: { output?: string; force?: boolean }) => {
+    const project = await config();
+    const configured = source ?? globals().acss ?? project.designSystem?.source;
+    if (!configured) throw new UsageError("No Automatic.css source is configured; pass a plugin ZIP/directory or set designSystem.source");
+    const sourcePath = configured === "auto" ? await discoverAutomaticCssSource() : resolve(configured);
+    if (!sourcePath) throw new UsageError("No Automatic.css plugin ZIP was discovered in the project directory");
+    const bundle = await prepareAutomaticCss({ sourcePath, outputDirectory: resolve(options.output ?? join(project.workspace, "acss")), force: options.force });
+    emit(result("acss prepare", { version: bundle.provenance.version, source: bundle.provenance.source, sourceHash: bundle.provenance.sourceHash, variables: bundle.registry.tokens.length, utilityClasses: bundle.catalog.utilityClasses.length, settings: Object.keys(bundle.catalog.settingsDefaults).length, files: bundle.files }), `Prepared Automatic.css ${bundle.provenance.version}\nRuntime variables: ${bundle.registry.tokens.length}; utility classes: ${bundle.catalog.utilityClasses.length}; settings defaults: ${Object.keys(bundle.catalog.settingsDefaults).length}\nRegistry: ${bundle.files.registry}\nCatalog: ${bundle.files.catalog}\nProvenance: ${bundle.files.provenance}`);
   });
 
 const synth = program.command("synth").description("manage the frozen synthetic curriculum");
@@ -220,7 +241,8 @@ image
   .addOption(new Option("--split <split>", "project-isolated split").choices(["train", "validation", "holdout", "all"]).default("all"))
   .action(async (options: { curriculum: string; output: string; split: "train" | "validation" | "holdout" | "all" }) => {
     const project = await config();
-    const evaluation = await evaluateSyntheticImageCurriculum({ curriculumPath: resolve(options.curriculum), outputDirectory: resolve(options.output), split: options.split, browserExecutable: project.capture.browserExecutable });
+    const acss = await prepareConfiguredAutomaticCss(project, globals().acss);
+    const evaluation = await evaluateSyntheticImageCurriculum({ curriculumPath: resolve(options.curriculum), outputDirectory: resolve(options.output), split: options.split, browserExecutable: project.capture.browserExecutable, acss });
     emit(result("image synth-evaluate", evaluation), `Synthetic image evaluation ${evaluation.evaluationId}\nAccepted: ${evaluation.aggregate.accepted}/${evaluation.aggregate.targets}; idempotence: ${(evaluation.aggregate.idempotenceRate * 100).toFixed(1)}%\nDirty pixel loss: ${(evaluation.aggregate.meanDirtyPixelLoss * 100).toFixed(2)}%; candidate pixel loss: ${(evaluation.aggregate.meanPixelLoss * 100).toFixed(2)}%\nMean recovery from dirty: ${(evaluation.aggregate.meanRecoveryFromDirty * 100).toFixed(1)}%\nText recall: ${(evaluation.aggregate.meanTextRecall * 100).toFixed(1)}%; BEM: ${(evaluation.aggregate.meanBemCoverage * 100).toFixed(1)}%\nTrajectories: ${evaluation.trajectories.path}`);
   });
 image
@@ -264,7 +286,8 @@ image
   .action(async (manifest: string, options: { output: string; analysis?: string; plan?: string; policy?: string; maxRasterCoverage?: string }) => {
     const project = await config();
     const policy = await currentImagePolicy(project, options.policy);
-    const built = await buildImageTarget({ manifestPath: resolve(manifest), outputDirectory: resolve(options.output), analysisPath: options.analysis ? resolve(options.analysis) : undefined, planPath: options.plan ? resolve(options.plan) : undefined, policy, maxRasterCoverage: options.maxRasterCoverage ? Number.parseFloat(options.maxRasterCoverage) : undefined });
+    const acss = await prepareConfiguredAutomaticCss(project, globals().acss);
+    const built = await buildImageTarget({ manifestPath: resolve(manifest), outputDirectory: resolve(options.output), analysisPath: options.analysis ? resolve(options.analysis) : undefined, planPath: options.plan ? resolve(options.plan) : undefined, policy, maxRasterCoverage: options.maxRasterCoverage ? Number.parseFloat(options.maxRasterCoverage) : undefined, acss });
     const actions = await Bun.file(built.requiredActionsPath).json() as ResultEnvelope<unknown>["requiredActions"];
     const envelope = result("image build", built); envelope.requiredActions.push(...actions);
     emit(envelope, `Built strict image-only reconstruction\nHTML: ${built.htmlPath}\nSCSS: ${built.scssPath}\nRaster crop coverage: ${(built.rasterCoverage * 100).toFixed(1)}% across ${built.assetCount} asset(s)\nProvenance: ${built.provenancePath}`);
@@ -308,7 +331,8 @@ image
     const analysis = await analyzeImageTarget({ manifestPath, outputPath: analysisPath, ocr: options.ocr });
     const states = await analyzeImageStateSequence(manifestPath, join(output, "image-state-analysis.json"));
     const strategy = await writeImageContentStrategy(analysis, output, states);
-    const built = await buildImageTarget({ manifestPath, analysisPath, outputDirectory: output, policy: await currentImagePolicy(project, options.policy) });
+    const acss = await prepareConfiguredAutomaticCss(project, globals().acss);
+    const built = await buildImageTarget({ manifestPath, analysisPath, outputDirectory: output, policy: await currentImagePolicy(project, options.policy), acss });
     const evaluation = await evaluateImageBuild({ manifestPath, buildDirectory: output, outputDirectory: join(output, "evaluation"), acceptancePixelRatio: Number.parseFloat(options.acceptancePixelRatio), browserExecutable: project.capture.browserExecutable });
     const envelope = result("image run", { analysis: { regions: analysis.regions.length, text: analysis.text.length, stateObservations: states.observations.length, dynamicHypotheses: states.hypotheses.length, pageType: strategy.pageTypeHypothesis }, build: built, evaluation }); envelope.ok = evaluation.accepted;
     envelope.requiredActions.push(...await Bun.file(built.requiredActionsPath).json() as ResultEnvelope<unknown>["requiredActions"]);
@@ -324,7 +348,8 @@ image
   .option("--budget <number>", "maximum one-change experiments", "10")
   .action(async (options: { catalog: string; captures: string; workspace: string; budget: string }) => {
     const project = await config();
-    const summary = await runImageResearch({ catalogPath: resolve(options.catalog), captureRoot: resolve(options.captures), workspace: resolve(options.workspace), budget: Number.parseInt(options.budget, 10), browserExecutable: project.capture.browserExecutable });
+    const acss = await prepareConfiguredAutomaticCss(project, globals().acss);
+    const summary = await runImageResearch({ catalogPath: resolve(options.catalog), captureRoot: resolve(options.captures), workspace: resolve(options.workspace), budget: Number.parseInt(options.budget, 10), browserExecutable: project.capture.browserExecutable, acss });
     emit(result("image research", summary), `Image research ${summary.researchId}\nKept: ${summary.accepted}; reverted: ${summary.rejected}\nTrain fitness: ${summary.baseline.train.meanScore.toFixed(4)} → ${summary.final.train.meanScore.toFixed(4)}\nValidation fitness: ${summary.baseline.validation.meanScore.toFixed(4)} → ${summary.final.validation.meanScore.toFixed(4)}\nHidden holdout fitness: ${summary.final.holdout.meanScore.toFixed(4)}\nHoldout idempotence: ${(summary.final.holdout.idempotenceRate * 100).toFixed(1)}%\nTrajectories: ${summary.trajectories.path}`);
   });
 
@@ -363,7 +388,7 @@ program
   .action(async (input: string, options: { css?: string; tokens?: string; policy?: string; visualTarget?: string; mode?: string; profile?: string; capture: boolean }) => {
     const project = await config();
     const policy = await currentPolicy(project, options.policy);
-    const run = await executeRun({ input: resolve(input), cssPath: options.css, tokenPath: options.tokens, visualTargetPath: options.visualTarget, mode: ModeSchema.parse(options.mode ?? project.mode), profile: ProfileSchema.parse(options.profile ?? project.profile), capture: options.capture, config: project, policy });
+    const run = await executeRun({ input: resolve(input), cssPath: options.css, tokenPath: options.tokens, acssSource: globals().acss, visualTargetPath: options.visualTarget, mode: ModeSchema.parse(options.mode ?? project.mode), profile: ProfileSchema.parse(options.profile ?? project.profile), capture: options.capture, config: project, policy });
     const envelope = result("run", { runId: run.runId, runDirectory: run.runDirectory, passed: run.validation.passed, gates: run.validation.gates.map((gate) => ({ gate: gate.gate, passed: gate.passed, hard: gate.hard })), metrics: run.validation.metrics, repairCount: run.repairs.length });
     envelope.runId = run.runId;
     envelope.ok = run.validation.passed;
@@ -442,10 +467,16 @@ program
     const warnings: string[] = [];
     try { browser = await findBrowserExecutable(); } catch (error) { warnings.push(error instanceof Error ? error.message : String(error)); }
     let projectConfig = false;
-    try { await config(); projectConfig = true; } catch (error) { warnings.push(error instanceof Error ? error.message : String(error)); }
-    const data = { version: program.version(), runtime: `Bun ${Bun.version}`, platform: `${process.platform}/${process.arch}`, browser, projectConfig, registeredPasses: createPassRegistry().list().length, externalModelProvider: process.env.GEN2PROD_MODEL_ENDPOINT ? "configured" : "local deterministic provider" };
+    let automaticcss: { version: string; variables: number; utilityClasses: number; sourceHash: string } | null = null;
+    try {
+      const project = await config(); projectConfig = true;
+      const bundle = await prepareConfiguredAutomaticCss(project, globals().acss);
+      if (bundle) automaticcss = { version: bundle.provenance.version, variables: bundle.registry.tokens.length, utilityClasses: bundle.catalog.utilityClasses.length, sourceHash: bundle.provenance.sourceHash };
+      else warnings.push("Automatic.css is not configured or no release ZIP was discovered");
+    } catch (error) { warnings.push(error instanceof Error ? error.message : String(error)); }
+    const data = { version: program.version(), runtime: `Bun ${Bun.version}`, platform: `${process.platform}/${process.arch}`, browser, projectConfig, automaticcss, registeredPasses: createPassRegistry().list().length, externalModelProvider: process.env.GEN2PROD_MODEL_ENDPOINT ? "configured" : "local deterministic provider" };
     const envelope = result("doctor", data); envelope.warnings = warnings; envelope.ok = Boolean(browser && projectConfig);
-    emit(envelope, `Gen2Prod ${data.version}\n${data.runtime}\n${data.platform}\nBrowser: ${browser ?? "missing"}\nConfiguration: ${projectConfig ? "valid" : "missing/invalid"}\nRegistered passes: ${data.registeredPasses}\nPlanner: ${data.externalModelProvider}`);
+    emit(envelope, `Gen2Prod ${data.version}\n${data.runtime}\n${data.platform}\nBrowser: ${browser ?? "missing"}\nConfiguration: ${projectConfig ? "valid" : "missing/invalid"}\nAutomatic.css: ${automaticcss ? `${automaticcss.version} (${automaticcss.variables} variables; ${automaticcss.utilityClasses} utility classes)` : "missing"}\nRegistered passes: ${data.registeredPasses}\nPlanner: ${data.externalModelProvider}`);
   });
 
 program.parseAsync(process.argv).catch((error: unknown) => {

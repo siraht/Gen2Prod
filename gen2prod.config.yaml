@@ -2,6 +2,10 @@ schemaVersion: "0.1.0"
 mode: legacy-conversion
 profile: refactor
 workspace: .gen2prod
+designSystem:
+  provider: automaticcss
+  source: automatic.css-4.0.0-rc-3.zip
+  mode: full
 capture:
   viewports: [360, 768, 1280, 1440]
   themes: [light]

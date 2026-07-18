@@ -8,6 +8,11 @@ const ConfigSchema = z.object({
   mode: ModeSchema,
   profile: ProfileSchema,
   workspace: z.string(),
+  designSystem: z.object({
+    provider: z.literal("automaticcss"),
+    source: z.string().min(1),
+    mode: z.enum(["full", "pro", "classless", "mixed"]).default("full"),
+  }).optional(),
   capture: z.object({
     viewports: z.array(z.number().int().positive()),
     themes: z.array(z.enum(["light", "dark"])),
@@ -39,6 +44,12 @@ export async function loadConfig(path: string, overrides: Partial<Gen2ProdConfig
     ...parsed,
     ...overrides,
     workspace: process.env.GEN2PROD_WORKSPACE ?? overrides.workspace ?? parsed.workspace,
+    ...(parsed.designSystem || process.env.GEN2PROD_ACSS_SOURCE ? {
+      designSystem: {
+        ...(parsed.designSystem ?? { provider: "automaticcss" as const, mode: "full" as const }),
+        source: process.env.GEN2PROD_ACSS_SOURCE ?? parsed.designSystem?.source,
+      },
+    } : {}),
   });
 }
 

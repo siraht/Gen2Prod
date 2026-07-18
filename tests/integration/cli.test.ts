@@ -4,7 +4,7 @@ test("exposes the full human and automation command surface", async () => {
   const child = Bun.spawn(["bun", "src/cli.ts", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
   const output = await new Response(child.stdout).text();
   expect(await child.exited).toBe(0);
-  for (const command of ["init", "synth", "evaluate", "run", "validate", "research", "distill", "report", "doctor"]) expect(output).toContain(command);
+  for (const command of ["init", "acss", "synth", "evaluate", "run", "validate", "research", "distill", "report", "doctor"]) expect(output).toContain(command);
 });
 
 test("doctor emits a stable JSON envelope", async () => {

@@ -10,6 +10,8 @@ import { ReplayLog } from "../core/replay.ts";
 import { compileStaticPage } from "../compiler/pipeline.ts";
 import { loadSourceCss } from "../compiler/ingest.ts";
 import { extractTokenRegistry } from "../compiler/tokens.ts";
+import { prepareConfiguredAutomaticCss } from "../acss/configured.ts";
+import type { AutomaticCssBundle } from "../acss/schema.ts";
 import type { CompiledPage } from "../compiler/types.ts";
 import { capturePage, type CaptureResult } from "../evidence/capture.ts";
 import { cropUncertainRegions } from "../evidence/crops.ts";
@@ -30,6 +32,7 @@ export type RunOptions = {
   input: string;
   cssPath?: string | undefined;
   tokenPath?: string | undefined;
+  acssSource?: string | undefined;
   visualTargetPath?: string | undefined;
   mode: Mode;
   profile: Profile;
@@ -84,7 +87,10 @@ async function writePairedVisualEvidence(baseline: CaptureResult, candidate: Cap
   await writeJsonAtomic(join(outputDirectory, "visual-evaluation.json"), { schemaVersion: "0.1.0", conditions });
 }
 
-async function compileInput(options: RunOptions, outputDirectory: string, requiredActions: RequiredAction[]): Promise<{ compiled: CompiledPage; cssPath?: string; greenfield?: ReturnType<typeof generateGreenfield> }> {
+async function compileInput(options: RunOptions, outputDirectory: string, requiredActions: RequiredAction[]): Promise<{ compiled: CompiledPage; cssPath?: string; greenfield?: ReturnType<typeof generateGreenfield>; acss?: AutomaticCssBundle }> {
+  const acss = await prepareConfiguredAutomaticCss(options.config, options.acssSource);
+  const fallbackRegistry = acss?.registry ?? extractTokenRegistry("");
+  const frameworkClassCatalog = acss?.catalog.utilityClasses;
   if (options.mode === "greenfield") {
     const greenfield = generateGreenfield(await Bun.file(options.input).json());
     const sourceDirectory = join(outputDirectory, "greenfield-source");
@@ -93,13 +99,17 @@ async function compileInput(options: RunOptions, outputDirectory: string, requir
     const cssPath = join(sourceDirectory, "page.css");
     await Bun.write(htmlPath, greenfield.html);
     await Bun.write(cssPath, greenfield.css);
-    return { compiled: await compileStaticPage({ htmlPath, cssPath, tokenRegistry: greenfield.spec.tokens, policy: options.policy }), cssPath, greenfield };
+    return { compiled: await compileStaticPage({ htmlPath, cssPath, tokenRegistry: fallbackRegistry, authoritativeTokenRegistry: greenfield.spec.tokens, frameworkClassCatalog, policy: options.policy }), cssPath, greenfield, ...(acss ? { acss } : {}) };
   }
   const cssPath = await discoverCss(options.input, options.cssPath);
   const css = (await loadSourceCss(options.input, cssPath)).css;
-  const registry = options.tokenPath ? options.tokenPath : extractTokenRegistry(css);
-  if (typeof registry !== "string" && registry.tokens.length === 0) requiredActions.push({ id: "token-registry-authority", summary: "Provide or approve a project token registry", detail: "No runtime CSS custom properties were found. The compiler recorded governed values as expiring exceptions; supply --tokens with an ACSS/DTCG adapter registry to eliminate them.", blocking: false });
-  return { compiled: await compileStaticPage({ htmlPath: options.input, ...(cssPath ? { cssPath } : {}), tokenRegistry: registry, policy: options.policy }), ...(cssPath ? { cssPath } : {}) };
+  const projectRegistry = extractTokenRegistry(css);
+  if (!options.tokenPath && !acss && projectRegistry.tokens.length === 0) requiredActions.push({ id: "token-registry-authority", summary: "Provide or approve a project token registry", detail: "No runtime CSS custom properties or configured Automatic.css release were found. The compiler recorded governed values as expiring exceptions; configure designSystem.source or supply --tokens.", blocking: false });
+  return {
+    compiled: await compileStaticPage({ htmlPath: options.input, ...(cssPath ? { cssPath } : {}), tokenRegistry: fallbackRegistry, ...(options.tokenPath ? { authoritativeTokenRegistry: resolve(options.tokenPath) } : {}), frameworkClassCatalog, policy: options.policy }),
+    ...(cssPath ? { cssPath } : {}),
+    ...(acss ? { acss } : {}),
+  };
 }
 
 export async function executeRun(options: RunOptions): Promise<RunResult> {
@@ -112,6 +122,12 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
   const replay = new ReplayLog(join(runDirectory, "replay.jsonl"));
   const policyHash = hashJson(options.policy);
   const compiledInput = await compileInput(options, runDirectory, requiredActions);
+  if (compiledInput.acss) await writeJsonAtomic(join(runDirectory, "acss-provenance.json"), {
+    ...compiledInput.acss.provenance,
+    authorityChain: ["automaticcss-release-default", "project-compiled-css", ...(options.tokenPath ? ["approved-token-registry"] : [])],
+    recognizedUtilityClasses: compiledInput.acss.catalog.utilityClasses.length,
+    availableRuntimeVariables: compiledInput.acss.registry.tokens.length,
+  });
   let compiled = compiledInput.compiled;
   if (compiled.plan.source.executableScripts.length) requiredActions.push({ id: "interaction-contract-required", summary: "Reimplement source behavior from explicit interaction contracts", detail: `${compiled.plan.source.executableScripts.length} executable script(s) were intentionally excluded from deterministic output. Preserve only approved behavior through typed interaction contracts and tested modules.`, blocking: false });
   const unresolvedEvents = compiled.plan.source.executableEvents.filter((event) => !event.nativeDestination);
@@ -175,7 +191,7 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
     store.putJson("validation-report", validation, { id: "validation-report", producer: "gates-a-j", inputs: [inputRef.id] }),
     store.putJson("transformation-report", reports, { id: "product-reports", producer: "report-generator", inputs: [inputRef.id] }),
   ]);
-  const manifest = RunManifestSchema.parse({ schemaVersion: "0.1.0", projectId: basename(options.input).replace(/\.[^.]+$/, ""), runId: id, createdAt: new Date().toISOString(), mode: options.mode, profile: options.profile, inputs: [inputRef], artifacts: artifactRefs, inputAuthorities: { [options.input]: options.mode === "greenfield" ? ["approved-content-intent"] : ["content", "links", "forms", "behavior-hooks", "semantics-partial"] }, acceptanceProfile: { lockedViewports: options.config.capture.viewports, lockedRegions: visualTarget?.regions.filter((region) => region.locked).map((region) => region.regionId) ?? [], requiresHumanApproval: Boolean(visualTarget), thresholdsProvisional: options.config.validation.provisionalThresholds }, schemaVersions: { manifest: "0.1.0", normalForm: "0.1.0", tokenRegistryAdapter: compiled.plan.tokens.schemaVersion }, ...(candidateCapture ? { captureEnvironment: candidateCapture.environment } : {}), toolVersions: { gen2prod: "0.1.0", bun: Bun.version, sass: "1.x" }, modelRuns: [], requiredActions });
+  const manifest = RunManifestSchema.parse({ schemaVersion: "0.1.0", projectId: basename(options.input).replace(/\.[^.]+$/, ""), runId: id, createdAt: new Date().toISOString(), mode: options.mode, profile: options.profile, inputs: [inputRef], artifacts: artifactRefs, inputAuthorities: { [options.input]: options.mode === "greenfield" ? ["approved-content-intent"] : ["content", "links", "forms", "behavior-hooks", "semantics-partial"] }, acceptanceProfile: { lockedViewports: options.config.capture.viewports, lockedRegions: visualTarget?.regions.filter((region) => region.regionId && region.locked).map((region) => region.regionId) ?? [], requiresHumanApproval: Boolean(visualTarget), thresholdsProvisional: options.config.validation.provisionalThresholds }, schemaVersions: { manifest: "0.1.0", normalForm: "0.1.0", tokenRegistryAdapter: compiled.plan.tokens.schemaVersion }, ...(candidateCapture ? { captureEnvironment: candidateCapture.environment } : {}), toolVersions: { gen2prod: "0.1.0", bun: Bun.version, sass: "1.x", ...(compiledInput.acss ? { automaticcss: compiledInput.acss.provenance.version } : {}) }, modelRuns: [], requiredActions });
   await writeJsonAtomic(join(runDirectory, "manifest.json"), manifest);
   const hardFailures = validation.gates.filter((gate) => gate.hard && !gate.passed);
   const accessibilityErrors = validation.gates.find((gate) => gate.gate === "E")?.assertions.filter((assertion) => !assertion.passed && (assertion.severity === "error" || assertion.severity === "critical")).length ?? 0;
