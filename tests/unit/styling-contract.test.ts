@@ -1,8 +1,14 @@
 import { describe, expect, test } from "bun:test";
 import { compileString } from "sass";
 import { analyzeCssSelectorContract, analyzeScssNestingContract, analyzeTokenReferenceContract } from "../../src/validation/styling-contract.ts";
+import { isUtilityClass } from "../../src/core/classes.ts";
 
 describe("styling contract", () => {
+  test("distinguishes semantic BEM nouns from similarly prefixed utilities", () => {
+    expect(isUtilityClass("content-section")).toBeFalse();
+    expect(isUtilityClass("content-center")).toBeTrue();
+  });
+
   test("accepts token roots and nested class-only BEM components", () => {
     const scss = `:root {
   --space-m: 1rem;
