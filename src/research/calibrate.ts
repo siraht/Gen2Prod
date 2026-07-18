@@ -1,6 +1,7 @@
 import fg from "fast-glob";
+import { stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { ensureDirectory, pathExists, readJson, writeJsonAtomic } from "../core/fs.ts";
+import { ensureDirectory, readJson, writeJsonAtomic } from "../core/fs.ts";
 import { hashJson } from "../core/hash.ts";
 import { CalibrationReportSchema, EvaluationResultSchema, type CalibrationReport, type EvaluationResult, type FixtureEvaluation } from "../schemas/research.ts";
 
@@ -160,9 +161,13 @@ async function evaluationPaths(requested: string[]): Promise<string[]> {
   const found: string[] = [];
   for (const input of requested) {
     const path = resolve(input);
-    if (!await pathExists(path)) continue;
-    if (path.endsWith(".json")) found.push(path);
-    else found.push(...(await fg("**/evaluation.json", { cwd: path, absolute: true, onlyFiles: true })));
+    try {
+      const entry = await stat(path);
+      if (entry.isFile() && path.endsWith(".json")) found.push(path);
+      else if (entry.isDirectory()) found.push(...(await fg("**/evaluation.json", { cwd: path, absolute: true, onlyFiles: true })));
+    } catch {
+      // Missing inputs are reported with the rest of the calibration gaps.
+    }
   }
   return unique(found);
 }
