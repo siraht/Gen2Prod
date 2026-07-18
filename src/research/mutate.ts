@@ -41,6 +41,7 @@ export function proposeMutation(incumbent: TransformationPolicy, track: Mutation
   const before = readPath(incumbent, proposal.field);
   const alternatives = proposal.values.filter((value) => value !== before);
   const after = alternatives[Math.floor(iteration / proposals.length) % alternatives.length];
+  if (after === undefined) throw new Error(`Mutation proposal ${proposal.field} has no alternative value`);
   const candidate = structuredClone(incumbent) as unknown as Record<string, unknown>;
   writePath(candidate, proposal.field, after);
   (candidate as unknown as TransformationPolicy).name = `${incumbent.name}-${track}-${iteration + 1}`;
