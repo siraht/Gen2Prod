@@ -23,7 +23,7 @@ function eligibleTokens(registry: TokenRegistry, property: string): Token[] {
   return registry.tokens.filter((token) => token.allowedProperties.includes(property) || token.allowedProperties.some((allowed) => property.startsWith(`${allowed}-`)));
 }
 
-export function bindValue(property: string, rawValue: string, registry: TokenRegistry): { value: string; token?: Token | undefined; error?: number | undefined } {
+export function bindValue(property: string, rawValue: string, registry: TokenRegistry, relativeThreshold = 0.08): { value: string; token?: Token | undefined; error?: number | undefined } {
   const existing = registry.tokens.find((token) => rawValue.includes(token.runtimeExpression));
   if (existing) return { value: rawValue, token: existing, error: 0 };
   let value = rawValue;
@@ -42,7 +42,7 @@ export function bindValue(property: string, rawValue: string, registry: TokenReg
       const tokenNumber = numeric(sample);
       if (rawNumber && tokenNumber && rawNumber.unit === tokenNumber.unit) {
         const error = Math.abs(rawNumber.number - tokenNumber.number) / Math.max(Math.abs(rawNumber.number), 1);
-        if (error <= 0.08 && error < selectedError) {
+        if (error <= relativeThreshold && error < selectedError) {
           value = token.runtimeExpression;
           selected = token;
           selectedError = error;
@@ -61,7 +61,7 @@ function selectorClasses(selector: string): string[] {
   return [...selector.matchAll(/\.([_a-zA-Z]+[\w-]*)/g)].flatMap((match) => match[1] ? [match[1]] : []);
 }
 
-export function resolveStyles(source: SourceDocument, root: PlannedNode, registry: TokenRegistry): { styles: StyleIntent[]; exceptions: TokenException[] } {
+export function resolveStyles(source: SourceDocument, root: PlannedNode, registry: TokenRegistry, relativeThreshold = 0.08): { styles: StyleIntent[]; exceptions: TokenException[] } {
   const styles: StyleIntent[] = [];
   const exceptions: TokenException[] = [];
   for (const node of allNodes(root)) {
@@ -74,7 +74,7 @@ export function resolveStyles(source: SourceDocument, root: PlannedNode, registr
     if (deduplicated.size === 0) continue;
     const declarations = [...deduplicated.values()].map((declaration) => {
       const classification = classifyDeclaration(declaration.property, declaration.value);
-      const binding = classification === "governed-design-value" ? bindValue(declaration.property, declaration.value, registry) : { value: declaration.value };
+      const binding = classification === "governed-design-value" ? bindValue(declaration.property, declaration.value, registry, relativeThreshold) : { value: declaration.value };
       if (classification === "governed-design-value" && !binding.token) {
         exceptions.push({ id: `token-exception-${sha256(`${node.nodeId}:${declaration.property}:${declaration.value}`).slice(0, 10)}`, property: declaration.property, value: declaration.value, selector: node.classes[0] ? `.${node.classes[0]}` : node.tag, reason: "No compatible registered token within policy tolerance", risk: "medium", owner: "unassigned", expires: addDays(new Date(), 90).toISOString().slice(0, 10), reviewAction: "bind an existing token, approve a project token, or explicitly reapprove" });
       }

@@ -54,7 +54,11 @@ export function emitScss(plan: CompilationPlan): string {
     }).join("\n\n");
     return `.${block} {\n${contents}\n}`;
   }).join("\n\n");
-  return `/* Generated deterministically from G2P-NF. Token definitions remain external. */\n${rendered}\n`;
+  const tokenDefinitions = plan.tokens.tokens.flatMap((token) => {
+    const sample = token.sampledValues["default@1280"] ?? Object.values(token.sampledValues)[0];
+    return sample ? [`  ${token.runtimeVariable}: ${sample};`] : [];
+  }).join("\n");
+  return `/* Generated deterministically from G2P-NF. */\n:root {\n${tokenDefinitions}\n}\n\n${rendered}\n`;
 }
 
 export function emitHtml(plan: CompilationPlan, cssHref = "page.css"): string {

@@ -116,7 +116,7 @@ async function tokenGate(context: ValidationContext): Promise<GateResult> {
   return gate("C", "Token governance", true, async () => {
     const css = selectorClasses(context.scss);
     const exceptions = new Set(context.plan?.tokenExceptions.map((item) => `${item.selector}:${item.property}:${item.value}`) ?? []);
-    const governed = css.rawDeclarations.filter((item) => classifyDeclaration(item.property, item.value) === "governed-design-value");
+    const governed = css.rawDeclarations.filter((item) => item.selector !== ":root" && classifyDeclaration(item.property, item.value) === "governed-design-value");
     const tokenized = governed.filter((item) => /var\(--[a-z0-9-]+\)/.test(item.value));
     const excepted = governed.filter((item) => !/var\(--[a-z0-9-]+\)/.test(item.value) && [...exceptions].some((exception) => exception.endsWith(`:${item.property}:${item.value}`)));
     const unaccounted = governed.filter((item) => !tokenized.includes(item) && !excepted.includes(item));

@@ -20,10 +20,15 @@ function oldClasses(node: DomNode): string[] {
   return node.attributes.find((attribute) => attribute.name === "class")?.value.split(/\s+/).filter(Boolean) ?? [];
 }
 
-function semanticTag(node: DomNode, parent: DomNode | undefined): { tag: string; confidence: "high" | "medium" | "low"; role: string } {
+function semanticTag(node: DomNode, parent: DomNode | undefined, useStableNodeHints: boolean): { tag: string; confidence: "high" | "medium" | "low"; role: string } {
   const id = node.nodeId.toLowerCase();
   const attrs = attributes(node);
   if (node.tag !== "div" && node.tag !== "span") return { tag: node.tag, confidence: "high", role: explicitRole(node) };
+  if (!useStableNodeHints) {
+    if (parent?.tag === "body" && node.children.length > 0) return { tag: "main", confidence: "medium", role: "main" };
+    if (attrs["aria-labelledby"] || node.children.some((child) => /^h[1-6]$/.test(child.tag))) return { tag: "section", confidence: "medium", role: "titled-region" };
+    return { tag: node.tag, confidence: "low", role: "generic-container" };
+  }
   if (id === "main" || (parent?.tag === "body" && node.children.length > 0)) return { tag: "main", confidence: "high", role: "main" };
   if (id === "site-header") return { tag: "header", confidence: "high", role: "site-header" };
   if (id === "site-footer") return { tag: "footer", confidence: "high", role: "site-footer" };
@@ -52,13 +57,13 @@ function explicitRole(node: DomNode): string {
   return node.tag;
 }
 
-function rootBlock(node: DomNode, semantic: { tag: string }, parentBlock: string | null): string | null {
+function rootBlock(node: DomNode, semantic: { tag: string }, parentBlock: string | null, useStableNodeHints: boolean): string | null {
   const id = node.nodeId.toLowerCase();
-  if (BLOCK_ALIASES[id]) return BLOCK_ALIASES[id];
-  if (/^feature-\d+$/.test(id)) return "feature-card";
-  if (/^plan-\d+$/.test(id)) return "pricing-card";
-  if (id === "quote") return "testimonial-card";
-  if (id === "contact-form") return "contact-form";
+  if (useStableNodeHints && BLOCK_ALIASES[id]) return BLOCK_ALIASES[id];
+  if (useStableNodeHints && /^feature-\d+$/.test(id)) return "feature-card";
+  if (useStableNodeHints && /^plan-\d+$/.test(id)) return "pricing-card";
+  if (useStableNodeHints && id === "quote") return "testimonial-card";
+  if (useStableNodeHints && id === "contact-form") return "contact-form";
   if ((semantic.tag === "section" || semantic.tag === "header" || semantic.tag === "footer") && id.startsWith("n-")) {
     const labelled = node.attributes.find((attribute) => attribute.name === "aria-labelledby")?.value.replace(/-title$/, "");
     return labelled ? canonicalName(labelled) : parentBlock;
@@ -86,11 +91,11 @@ function elementName(nodeId: string, block: string): string {
   return canonicalName(result || "item");
 }
 
-function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: string | null, counts: SemanticPlan["confidenceSummary"], review: SemanticPlan["review"]): PlannedNode {
-  const semantic = semanticTag(node, parent);
+function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: string | null, counts: SemanticPlan["confidenceSummary"], review: SemanticPlan["review"], useStableNodeHints: boolean): PlannedNode {
+  const semantic = semanticTag(node, parent, useStableNodeHints);
   counts[semantic.confidence] += 1;
   if (semantic.confidence === "low" && (node.tag === "div" || node.tag === "span")) review.push({ nodeId: node.nodeId, concern: "ambiguous semantic container", evidenceNeeded: ["accessibility tree", "section crop if visually separated"] });
-  const block = rootBlock(node, semantic, parentBlock);
+  const block = rootBlock(node, semantic, parentBlock, useStableNodeHints);
   const isNewBlock = block !== null && block !== parentBlock;
   let classes: string[] = [];
   if (node.tag === "body") classes = ["page"];
@@ -112,14 +117,14 @@ function planNode(node: DomNode, parent: DomNode | undefined, parentBlock: strin
     oldClasses: oldClasses(node),
     attributes: attrs,
     text: node.text,
-    children: node.children.map((child) => planNode(child, node, block, counts, review)),
+    children: node.children.map((child) => planNode(child, node, block, counts, review, useStableNodeHints)),
   };
 }
 
-export function inferSemantics(source: SourceDocument): SemanticPlan {
+export function inferSemantics(source: SourceDocument, options: { useStableNodeHints?: boolean } = {}): SemanticPlan {
   const counts = { high: 0, medium: 0, low: 0 };
   const review: SemanticPlan["review"] = [];
-  return { root: planNode(source.dom, undefined, null, counts, review), confidenceSummary: counts, review };
+  return { root: planNode(source.dom, undefined, null, counts, review, options.useStableNodeHints ?? true), confidenceSummary: counts, review };
 }
 
 function plannedNodes(root: PlannedNode): PlannedNode[] {
