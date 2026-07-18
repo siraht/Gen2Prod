@@ -348,7 +348,7 @@ function aliasFallbackEligible(selector: string): boolean {
   // Alias recovery is only safe for a selector that addresses the aliased
   // element itself. Descendant/combinator rules are handled by selectorMatches
   // and must never be flattened onto the owning BEM block.
-  return !/[\s>+~]|:/.test(selector);
+  return /^\.[_a-zA-Z]+[\w-]*$/.test(selector);
 }
 
 type StyleCondition = NonNullable<StyleIntent["declarations"][number]["condition"]>;
