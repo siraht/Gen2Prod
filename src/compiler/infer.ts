@@ -40,7 +40,22 @@ function nativeMainAlreadyCovers(node: DomNode, parent: DomNode | undefined): bo
 }
 
 function inferableDocumentMain(node: DomNode, parent: DomNode | undefined): boolean {
-  return Boolean(parent?.tag === "body" && node.children.length > 0 && !nativeMainAlreadyCovers(node, parent));
+  return Boolean(
+    parent?.tag === "body"
+    && node.children.length > 0
+    && !attributes(node)["data-g2p-wrapper-for"]
+    && !nativeMainAlreadyCovers(node, parent),
+  );
+}
+
+function inferableWrappedMain(node: DomNode, parent: DomNode | undefined): boolean {
+  return Boolean(
+    parent
+    && attributes(parent)["data-g2p-wrapper-for"] === "main"
+    && parent.children.length === 1
+    && parent.children[0] === node
+    && node.children.length > 0,
+  );
 }
 
 function repeatedContainer(node: DomNode): boolean {
@@ -81,11 +96,11 @@ function semanticTag(node: DomNode, parent: DomNode | undefined, useStableNodeHi
   if (preserveExplicitSemantics) return { tag: node.tag, confidence: "high", role: explicitRole(node, parent) };
   if (node.tag !== "div" && node.tag !== "span") return { tag: node.tag, confidence: "high", role: explicitRole(node) };
   if (!useStableNodeHints) {
-    if (inferableDocumentMain(node, parent)) return { tag: "main", confidence: "medium", role: "main" };
+    if (inferableDocumentMain(node, parent) || inferableWrappedMain(node, parent)) return { tag: "main", confidence: "medium", role: "main" };
     if (attrs["aria-labelledby"] || node.children.some((child) => /^h[1-6]$/.test(child.tag))) return { tag: "section", confidence: "medium", role: "titled-region" };
     return { tag: node.tag, confidence: "low", role: "generic-container" };
   }
-  if ((id === "main" && !nativeMainAlreadyCovers(node, parent)) || inferableDocumentMain(node, parent)) return { tag: "main", confidence: "high", role: "main" };
+  if ((id === "main" && !nativeMainAlreadyCovers(node, parent)) || inferableDocumentMain(node, parent) || inferableWrappedMain(node, parent)) return { tag: "main", confidence: "high", role: "main" };
   if (id === "site-header") return { tag: "header", confidence: "high", role: "site-header" };
   if (id === "site-footer") return { tag: "footer", confidence: "high", role: "site-footer" };
   if (id.includes("nav") && (attrs["aria-label"] || node.children.some((child) => child.nodeId.includes("nav-list")))) return { tag: "nav", confidence: "high", role: "navigation" };

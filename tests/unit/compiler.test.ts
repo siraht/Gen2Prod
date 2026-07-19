@@ -116,6 +116,21 @@ describe("static compilation", () => {
     expect(output.html).toContain('<main class="page__main">');
   });
 
+  test("keeps explicit structural-noise wrappers outside a lineage-marked main", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-marked-main-wrapper-"));
+    const markedPath = join(directory, "marked.html");
+    const unmarkedPath = join(directory, "unmarked.html");
+    const html = '<!doctype html><html lang="en"><head><title>Marked main</title><meta name="description" content="A generated structural wrapper around the page main landmark."></head><body><div class="wrapper-main" data-g2p-wrapper-for="main"><div data-g2p-node="main"><section aria-labelledby="title"><h1 id="title">Marked main</h1></section></div></div></body></html>';
+    await Bun.write(markedPath, html);
+    await Bun.write(unmarkedPath, html.replace(/\s+data-g2p-node="[^"]+"/g, ""));
+    const tokens = { schemaVersion: "dtcg-2025-10+gen2prod-0.1.0", conformsTo: ["DTCG Format Module 2025.10"], adapterSchema: "gen2prod-token-adapter-0.1.0", tokens: [] };
+    const marked = await compileStaticPage({ htmlPath: markedPath, tokenRegistry: tokens });
+    const unmarked = await compileStaticPage({ htmlPath: unmarkedPath, tokenRegistry: tokens });
+    expect(marked.html.match(/<main\b/g)).toHaveLength(1);
+    expect(unmarked.html.match(/<main\b/g)).toHaveLength(1);
+    expect(marked.html).toContain('<div data-g2p-wrapper-for="main"');
+  });
+
   test("lowers embedded and inline CSS into governed BEM output", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-inline-compile-"));
     const htmlPath = join(directory, "page.html");
