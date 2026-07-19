@@ -33,6 +33,10 @@ test("exposes native adapter emit, evaluate, and research workflows", async () =
   expect(await research.exited).toBe(0);
   expect(researchOutput).toContain("--fresh");
   expect(researchOutput).toContain("--no-capture");
+  const distill = Bun.spawn(["bun", "src/cli.ts", "distill", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
+  const distillOutput = await new Response(distill.stdout).text();
+  expect(await distill.exited).toBe(0);
+  expect(distillOutput).toContain("--adapter");
 }, 15_000);
 
 test("exposes naturalistic import and modality ablation controls", async () => {
