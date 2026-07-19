@@ -116,6 +116,7 @@ export function bindValue(property: string, rawValue: string, registry: TokenReg
     const samples = Object.values(token.sampledValues);
     for (const sample of samples) {
       const comparableSample = normalizeComparableValue(property, sample);
+      if (!comparableSample.trim()) continue;
       const replaced = replaceCssAtom(value, comparableSample, token.runtimeExpression);
       if (replaced !== undefined) {
         value = replaced;

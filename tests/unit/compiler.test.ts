@@ -272,6 +272,16 @@ describe("static compilation", () => {
     expect(replaced.value).toBe("clamp(var(--space-m), 4vw, 4rem)");
   });
 
+  test("never treats an empty custom-property default as a replaceable CSS atom", () => {
+    const registry = {
+      ...inputTokens(),
+      tokens: [{ ...inputTokens().tokens[0]!, id: "empty.background", name: "empty.background", runtimeVariable: "--empty-background", runtimeExpression: "var(--empty-background)", allowedProperties: ["background"], sampledValues: { "default@1280": "" } }],
+    };
+    const value = "linear-gradient(45deg, #1a1a1a, #0d0d0d)";
+    expect(bindValue("background", value, registry).value).toBe(value);
+    expect(bindValue("background", value, registry).token).toBeUndefined();
+  });
+
   test("measures token snap error relative to sub-unit CSS values", () => {
     const registry = { ...inputTokens(), tokens: [{ ...inputTokens().tokens[0]!, id: "space.compact", name: "space.compact", type: "dimension" as const, category: "space", value: "0.78rem", runtimeVariable: "--space-compact", runtimeExpression: "var(--space-compact)", semanticRole: "space-compact", allowedProperties: ["gap"], sampledValues: { "default@1280": "0.78rem" } }] };
     expect(bindValue("gap", "0.85rem", registry, 0.08).token).toBeUndefined();
