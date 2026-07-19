@@ -11,7 +11,7 @@ This contract applies to every clean stylesheet emitted by dirty-HTML compilatio
 - The supported class grammar is one block, at most one element, and at most one modifier. Multiple BEM classes may be mixed on one HTML node, but generated CSS does not couple those classes in a combined selector.
 - Generated markup contains no Tailwind or ACSS utility classes. The imported ACSS class catalog is used to recognize and remove dirty framework classes; it is not an emission catalog.
 
-This is intentionally stricter than allowing global reset selectors. Dirty `html`, `body`, `:host`, `:root` styling, and universal source foundations are cascade-resolved and scoped to the semantic `.page` block. The output does not style document elements directly.
+This is intentionally stricter than allowing global reset selectors. Dirty `html`, `body`, `:host`, and `:root` document foundations are cascade-resolved onto the semantic `.page` block. Universal source foundations are lowered onto every generated primary BEM class because non-inherited properties such as `box-sizing` must retain their geometry without emitting `*`. The output does not style document elements directly.
 
 ## Values and tokens
 

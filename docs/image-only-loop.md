@@ -27,7 +27,9 @@ gen2prod image audit \
   --build .gen2prod/image-only/builds/example-home
 ```
 
-`still` records one visual state. `scroll-materialized` visits page positions before the final full-page image so common lazy content can render. `visual-probe-sequence` also records scroll checkpoints, temporal frames, and safe hover/focus probes. Capture stage deadlines prevent a live page timer or stalled script from hanging the corpus run.
+`still` records one visual state. `scroll-materialized` visits page positions before the final full-page image so common lazy content can render. `visual-probe-sequence` also records scroll checkpoints, temporal frames, and up to three safe hover plus three non-activating focus probes by default. Capture stage deadlines prevent a live page timer or stalled script from hanging the corpus run.
+
+Analysis writes base-image observations separately from `image-state-analysis.json`. Build consumes only state frames declared in the target manifest, verifies their hashes, records affected regions and enriched hypotheses in provenance, and never converts a pixel delta into behavior certainty.
 
 ## Uploaded or generated mockups
 

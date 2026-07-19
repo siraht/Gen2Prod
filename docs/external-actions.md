@@ -25,6 +25,8 @@ Imperfect real examples are still high-value. An evolved implementation, a mocku
 
 Keep related pages together and give the project a stable identity so every derivative stays in one train, validation or holdout partition. Exact pairs improve pixel-preserving compilation directly; reviewed partial pairs improve masked recovery; non-one-to-one pairs improve preference and planner data. All three are useful.
 
+The current calibration audit intentionally withholds activatable thresholds. To close its measured coverage gaps, add independently reviewed fixtures from at least two additional generator/prompt families and two additional content families, run at least two additional benchmark seeds, and capture one suite in a genuinely different browser/OS environment. Re-running the same fixture through another policy or evaluator revision does not count as independent evidence. Use `gen2prod calibrate` after import; do not copy the diagnostic thresholds into production configuration while the report remains `provisional`.
+
 ## Token authority
 
 If compiled CSS does not expose the project’s ACSS/custom-property registry, provide a versioned token adapter with portable values, runtime bindings, allowed properties, modes/themes, and provenance:

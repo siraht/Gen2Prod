@@ -22,9 +22,10 @@ gen2prod image audit <manifest> --build path
 gen2prod image run <manifest> --output path [--no-ocr] [--policy path]
 gen2prod image research [--catalog path] [--captures path] [--budget N]
 gen2prod evaluate [--split validation|holdout|all] [--policy path]
+gen2prod calibrate [evaluation.json ...] [--output path]
 gen2prod run <input> [--mode MODE] [--profile PROFILE] [--visual-target path]
 gen2prod validate <run-or-output>
-gen2prod research [--track policy|pass|verifier] [--budget N]
+gen2prod research [--fixtures path] [--track policy|pass|verifier] [--budget N] [--naturalistic manifest] [--naturalistic-max-per-project N] [--naturalistic-limit N]
 gen2prod distill [--trajectories path] [--naturalistic path] [--image path...] [--target selector|verifier|planner|all]
 gen2prod report [run]
 gen2prod doctor
@@ -36,11 +37,12 @@ Global flags are `--config <path>`, `--workspace <path>`, `--acss <plugin-zip-or
 
 - `init` and synthetic preparation refuse to overwrite user-owned artifacts unless `--force` is present.
 - `run` writes only beneath the configured workspace unless an explicit output path is provided.
-- Research evaluates candidates in isolated run directories and promotes only candidates that pass hard gates and improve the lexicographic fitness vector.
+- Research evaluates candidates in isolated run directories, rejects requested interventions that did not actually execute, and promotes only candidates that pass hard gates, improve synthetic or naturalistic lexicographic fitness without regressing the other, and pass sealed synthetic plus natural holdouts.
 - Re-running deterministic compilation from the same artifact hashes must yield the same patch and output hashes.
 - A command failure never weakens an evaluator or edits the frozen fixture manifest.
 - ACSS release defaults are hash/version/license-bound fallback authority. Project CSS overrides release defaults, and an explicit approved registry overrides both. Only referenced variables and transitive dependencies are emitted; recognized ACSS utility classes are not copied into clean BEM output.
-- Naturalistic evaluation writes a frozen evaluator hash, gate-level failures, candidate provenance, cross-page advisory metrics, and a project-split trajectory JSONL. `distill --naturalistic` blends that evidence with synthetic research trajectories while preserving the original project split labels.
+- Naturalistic evaluation writes a frozen evaluator hash, gate-level failures, candidate provenance, cross-page advisory metrics, and a project-split trajectory JSONL. `distill --naturalistic` blends that evidence with synthetic research trajectories while preserving project groups; evidence duplicates are removed and contradictory keep/revert groups are quarantined from training.
+- `calibrate` groups correlated fixture/policy/evaluator reruns, excludes structurally unsafe samples, audits family/seed/capture-environment coverage, and withholds activatable thresholds until its minimum independent support is met.
 - Image-only manifests declare exactly which hash-bound frames a builder may read. URLs, source/DOM/CSS, live extraction, and link records are quarantined; a post-build `image audit` cannot alter emitted files or policy inputs.
 - Image research searches train projects, promotes only validation improvements without hard regressions, reveals holdout projects only for the final audit, and exports accepted and rejected trajectories. Multiple image JSONLs can be blended with `distill --image`.
 - `image evaluate` separates visual-target acceptance from target quality. A large uniform/sparse capture region becomes an explicit recapture/review action even when the candidate accurately reproduces those pixels.

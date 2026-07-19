@@ -14,10 +14,10 @@ Gen2Prod turns uncertain website artifacts into semantic, BEM-structured, token-
 | Hard constraints | Build, BEM, token, inline-style, accessibility, SEO, security, and mode-specific visual failures cannot be outweighed by a soft score |
 | Styling contract | Clean output is nested SCSS with class-only BEM selectors, no utilities or element styling, and 100% direct registered-token coverage |
 | Reproducibility | Content hashes, manifests, source authority, versioned schemas, replay events, and idempotence checks make every decision attributable |
-| Synthetic curriculum | Seven archetypes plus imported model-generator families produce strategy, page briefs, varied content, rendered mockups, gold code, marked/unmarked dirty inputs, image diffs, lineage, controls, and held-out splits |
+| Synthetic curriculum | Ten archetypes plus imported model-generator families produce strategy, page briefs, varied content, rendered mockups, gold code, marked/unmarked dirty inputs, image diffs, dynamic states, lineage, controls, and held-out splits |
 | Strict image-only loop | Live captures or generated mockups become hash-bound visual targets; local OCR/segmentation proposes semantic BEM builds, dirty/target/candidate image diffs score them, and source leakage is forbidden |
-| Autoresearch | One bounded mutation per experiment; frozen evaluator; separate policy/pass/verifier tracks; automatic keep or revert |
-| Distillation | Exports supervised, preference, and verifier JSONL and trains reloadable selector/verifier/planner models |
+| Autoresearch | One bounded mutation per experiment; frozen evaluator; separate policy/pass/verifier tracks; synthetic and project-isolated naturalistic non-regression; sealed holdout promotion |
+| Distillation | Exports group-isolated supervised, preference, and verifier JSONL; quarantines contradictory labels; trains reloadable selector/verifier/planner models |
 | Local-first operation | The entire loop runs with deterministic local planners; an external structured-model provider is optional |
 
 ## Quick example
@@ -36,6 +36,9 @@ bun run cli -- synth prepare --force
 
 # Prove the current policy against every split.
 bun run cli -- evaluate --split all
+
+# Audit whether benchmark coverage supports activating learned thresholds.
+bun run cli -- calibrate
 
 # Measure which evidence modalities actually change fitness.
 bun run cli -- evaluate --split validation --ablation
@@ -146,9 +149,10 @@ Global flags:
 | `image synth-prepare/synth-evaluate/research` | Build dirty/gold image curricula and run project-isolated one-change recursive improvement | `gen2prod image research --budget 10` |
 | `evaluate` | Score a policy with the frozen evaluator | `gen2prod evaluate --split holdout` |
 | `evaluate --ablation` | Run controlled evidence configurations A through F | `gen2prod evaluate --split validation --ablation` |
+| `calibrate` | Deduplicate correlated evaluations, audit benchmark coverage, and withhold unsafe threshold activation | `gen2prod calibrate --output .gen2prod/calibration/report.json` |
 | `run <input>` | Execute any production mode | `gen2prod run page.html --css app.css --tokens tokens.json` |
 | `validate <target>` | Run Gates A–J on emitted files | `gen2prod validate .gen2prod/runs/<run-id>` |
-| `research` | Run policy/pass/verifier keep-revert experiments | `gen2prod research --track pass --budget 8` |
+| `research` | Run policy/pass/verifier keep-revert experiments with optional natural-project constraints and sealed holdout promotion | `gen2prod research --track pass --budget 8 --naturalistic .gen2prod/corpus/naturalistic/manifest.json` |
 | `distill` | Export datasets and train selected models | `gen2prod distill --target verifier` |
 | `report [run]` | Print the latest or selected transformation report | `gen2prod report` |
 | `doctor` | Check config, browser, runtime, providers, and pass registry | `gen2prod --json doctor` |
@@ -265,7 +269,7 @@ Important on-disk artifacts:
 
 The normative designs are [docs/Gen2Prod_plan_v2_3_4_revised.md](docs/Gen2Prod_plan_v2_3_4_revised.md) and [docs/karpathyloop.md](docs/karpathyloop.md). [docs/implementation-matrix.md](docs/implementation-matrix.md) maps each layer to executable evidence. [docs/image-only-loop.md](docs/image-only-loop.md) defines the strict screenshot path and its authority boundary. [docs/dataset-intake.md](docs/dataset-intake.md) defines how to contribute exact, partial, and non-1:1 real examples.
 
-Both research evaluations and production runs feed `research/trajectories.jsonl`. The former contributes accepted/rejected policy trials; the latter contributes real-run observations, exact idempotence labels, hard-gate labels, and measured evaluator-mutation recall. Naturalistic output can be added without rewriting the procedural generator:
+Both research evaluations and production runs feed `research/trajectories.jsonl`. The former contributes accepted/rejected policy trials; the latter contributes real-run observations, exact idempotence labels, hard-gate labels, and measured evaluator-mutation recall. Distillation deduplicates them by evidence, isolates project/fixture groups across train and holdout, and quarantines any identical evidence/action/output group with conflicting keep/revert labels. Naturalistic output can be added without rewriting the procedural generator:
 
 ```bash
 gen2prod synth import canonical-spec.json model-page.html \
