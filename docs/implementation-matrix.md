@@ -58,6 +58,7 @@ These are not blockers for the local self-improving static compiler. They are ex
 
 ## Current frozen evidence
 
+- Frozen acceptance proof (`seed=424242`): 10/10 recoverable archetypes reach zero hard-gate, content/behavior, semantic, accessibility, visual, token-accounting, BEM, cross-page and idempotence error; mean dirty-to-gold visual recovery is 100%, all 54 browser captures complete, and static/rendered mutation-control recall is 100%. The research proof first keeps and promotes a genuinely effective policy change, then resumes that incumbent and exercises a genuinely effective revert; its isolated distillation export contains three valid preference pairs with no contradictory labels.
 - Naturalistic corpus: 6 projects, 96 artifacts, 48 HTML files, 28 screenshots and 17 strategy documents, split by project identity into train/validation/holdout.
 - Seed-424242 ten-archetype audit: 10/10 cases have zero hard, semantic and BEM error, 100% mutation-control recall and 54 browser captures. Mean gold visual loss is 13.2418% and mean dirty-to-gold recovery is 70.6%; the remaining loss is concentrated in deliberately erased visual evidence rather than accepted hallucination.
 - Current natural validation audit (`rockdome` and `embodied-authority`): 2/2 trajectories accepted with zero hard failures, 100% content/URL/form recall, 100% exact second-pass idempotence and 0.00% dirty-to-candidate pixel loss. This audit caught and fixed empty-token gradient corruption, duplicate-main inference and non-inherited universal-foundation lowering.
