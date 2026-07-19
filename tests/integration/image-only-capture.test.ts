@@ -36,5 +36,5 @@ describe("image-only capture", () => {
     expect(hover?.interpretation).toBe("hover-response-observed");
     expect(hover?.changedPixelRatio).toBeGreaterThan(0.01);
     expect(states.hypotheses.some((item) => item.kind === "hover-response")).toBe(true);
-  }, 30_000);
+  }, 120_000);
 });

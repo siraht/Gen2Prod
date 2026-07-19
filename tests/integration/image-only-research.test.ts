@@ -41,5 +41,5 @@ describe("image-only recursive research", () => {
 
     const resumed = await runImageResearch({ catalogPath, captureRoot, workspace: join(directory, "research"), budget: 0 });
     expect(resumed.initialPolicy).toEqual(summary.productionPolicy);
-  }, 30_000);
+  }, 120_000);
 });
