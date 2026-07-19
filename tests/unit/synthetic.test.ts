@@ -23,7 +23,10 @@ describe("synthetic curriculum", () => {
     expect(dialog.interactions[0]?.focusManagement).toContain("restore");
     expect(mockupArtifact(dialog).states).toEqual(["default", "dialog-open", "hover"]);
     expect(mockupArtifact(archetypes.find((item) => item.archetype === "faq")!).states).toEqual(["default", "open"]);
-    expect(renderGold(longForm).html.match(/<section/g)?.length).toBeGreaterThanOrEqual(4);
+    const longFormGold = renderGold(longForm);
+    expect(longFormGold.html.match(/<section/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(longFormGold.css).toMatch(/\.field-guide__checklist\s*\{[^}]*margin: 0;[^}]*list-style: none;/s);
+    expect(longFormGold.css).toMatch(/\.field-guide__checklist-item\s*\{[^}]*display: block;[^}]*list-style: none;/s);
     expect(renderGold(responsive).html).toContain("<picture");
     expect(renderGold(responsive).html).toContain("srcset=");
   });
