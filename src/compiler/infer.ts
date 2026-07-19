@@ -353,11 +353,32 @@ export function inferSemantics(source: SourceDocument, options: { useStableNodeH
   const review: SemanticPlan["review"] = [];
   const classRoles = new Map(source.classInventory.map((item) => [item.name, item.role]));
   const root = planNode(source.dom, undefined, null, counts, review, options.useStableNodeHints ?? true, options.preserveExplicitSemantics ?? false, options.preserveUnknownClasses ?? true, options.semanticReviewThreshold ?? 0.65, classRoles, externalPresentationClasses(source));
+  removeDeclaredStructuralWrappers(root, review);
   normalizeListValidity(root);
   normalizeHeadingOrder(root, review);
   addMissingFormLabels(root, review);
   addMissingControlNames(root, review);
   return { root, confidenceSummary: counts, review };
+}
+
+function removeDeclaredStructuralWrappers(node: PlannedNode, review: SemanticPlan["review"]): void {
+  const replacements = new Map<string, string>();
+  node.children = node.children.flatMap((child) => {
+    removeDeclaredStructuralWrappers(child, review);
+    const wrappedNodeId = child.attributes["data-g2p-wrapper-for"];
+    if (!wrappedNodeId || child.children.length !== 1) return [child];
+    const replacement = child.children[0]!;
+    replacements.set(child.nodeId, replacement.nodeId);
+    review.push({
+      nodeId: child.nodeId,
+      concern: `declared structural wrapper for ${wrappedNodeId} was removed from canonical output`,
+      evidenceNeeded: ["paired browser render non-regression"],
+    });
+    return [replacement];
+  });
+  if (node.content && replacements.size > 0) {
+    node.content = node.content.map((item) => item.kind === "child" && replacements.has(item.nodeId) ? { kind: "child" as const, nodeId: replacements.get(item.nodeId)! } : item);
+  }
 }
 
 function normalizeListValidity(node: PlannedNode, parentTag?: string): void {

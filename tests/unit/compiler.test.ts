@@ -128,7 +128,8 @@ describe("static compilation", () => {
     const unmarked = await compileStaticPage({ htmlPath: unmarkedPath, tokenRegistry: tokens });
     expect(marked.html.match(/<main\b/g)).toHaveLength(1);
     expect(unmarked.html.match(/<main\b/g)).toHaveLength(1);
-    expect(marked.html).toContain('<div data-g2p-wrapper-for="main"');
+    expect(marked.html).not.toContain("data-g2p-wrapper-for");
+    expect(marked.html).toBe(unmarked.html);
   });
 
   test("recovers long-form article and introductory header semantics", async () => {
