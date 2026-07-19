@@ -11,6 +11,7 @@ import { emitFrameworkAdapter } from "../../src/adapters/emit.ts";
 import { defaultFrameworkAdapterPolicy } from "../../src/adapters/policy.ts";
 import { createArchetypes } from "../../src/synthetic/archetypes.ts";
 import { renderGold } from "../../src/synthetic/render.ts";
+import { CmsDocumentSchema } from "../../src/schemas/adapters.ts";
 
 async function compileDialog() {
   const spec = createArchetypes().find((item) => item.archetype === "dialog")!;
@@ -75,6 +76,29 @@ describe("framework adapters", () => {
         }
         if (file.path.endsWith(".svelte")) expect(() => compileSvelte(source, { filename: file.path, generate: "server" })).not.toThrow();
         if (file.path.endsWith(".astro")) expect((await compileAstro(source, { filename: file.path })).diagnostics.filter((item) => item.severity === 1)).toHaveLength(0);
+      }
+    }
+  });
+
+  test("emits lossless WordPress and Bricks CMS bundles without inline styling", async () => {
+    const { directory, compiled } = await compileDialog();
+    for (const target of ["wordpress", "bricks"] as const) {
+      const output = join(directory, target);
+      const manifest = await emitFrameworkAdapter({ compiled, target, outputDirectory: output, policy: defaultFrameworkAdapterPolicy });
+      const cms = CmsDocumentSchema.parse(await Bun.file(join(output, "cms-content.json")).json());
+      expect(cms.root.children.length).toBeGreaterThan(0);
+      expect(cms.interactionContracts.some((interaction) => interaction.kind === "dialog")).toBeTrue();
+      expect(await Bun.file(join(output, "page.scss")).text()).toBe(compiled.scss);
+      if (target === "wordpress") {
+        const template = await Bun.file(join(output, manifest.entry)).text();
+        expect(template).toContain("<!-- wp:group");
+        expect(template).toContain("<!-- wp:heading");
+        expect(compiled.scss).not.toContain(".wp-block-");
+      } else {
+        const payload = await Bun.file(join(output, manifest.entry)).json() as { source: string; elements: { settings: Record<string, unknown> }[] };
+        expect(payload.source).toBe("bricksCopiedElements");
+        expect(payload.elements.some((element) => typeof element.settings._cssClasses === "string")).toBeTrue();
+        expect(payload.elements.every((element) => !("style" in element.settings))).toBeTrue();
       }
     }
   });

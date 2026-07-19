@@ -72,8 +72,44 @@ export const FrameworkAdapterEvaluationSchema = z.object({
   accepted: z.boolean(),
 });
 
+export const CmsNodeSchema: z.ZodType<{
+  id: string;
+  parentId: string | null;
+  tag: string;
+  classes: string[];
+  attributes: Record<string, string>;
+  text: string;
+  content: ({ kind: "text"; value: string } | { kind: "child"; nodeId: string })[];
+  component: string | null;
+  children: unknown[];
+}> = z.lazy(() => z.object({
+  id: z.string(),
+  parentId: z.string().nullable(),
+  tag: z.string(),
+  classes: z.array(z.string()),
+  attributes: z.record(z.string(), z.string()),
+  text: z.string(),
+  content: z.array(z.discriminatedUnion("kind", [z.object({ kind: z.literal("text"), value: z.string() }), z.object({ kind: z.literal("child"), nodeId: z.string() })])),
+  component: z.string().nullable(),
+  children: z.array(CmsNodeSchema),
+}));
+
+export const CmsDocumentSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  vendor: z.enum(["wordpress", "bricks"]),
+  title: z.string(),
+  description: z.string(),
+  htmlAttributes: z.record(z.string(), z.string()),
+  bodyAttributes: z.record(z.string(), z.string()),
+  stylesheet: z.literal("page.css"),
+  root: CmsNodeSchema,
+  interactionContracts: z.array(z.object({ component: z.string(), nodeId: z.string(), kind: z.string(), keyboard: z.array(z.string()), focusManagement: z.string(), stateAttributes: z.array(z.string()), reducedMotion: z.string() })),
+});
+
 export type FrameworkAdapterTarget = z.infer<typeof FrameworkAdapterTargetSchema>;
 export type FrameworkAdapterPolicy = z.infer<typeof FrameworkAdapterPolicySchema>;
 export type FrameworkAdapterManifest = z.infer<typeof FrameworkAdapterManifestSchema>;
 export type FrameworkAdapterValidation = z.infer<typeof FrameworkAdapterValidationSchema>;
 export type FrameworkAdapterEvaluation = z.infer<typeof FrameworkAdapterEvaluationSchema>;
+export type CmsNode = z.infer<typeof CmsNodeSchema>;
+export type CmsDocument = z.infer<typeof CmsDocumentSchema>;

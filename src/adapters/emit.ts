@@ -7,6 +7,8 @@ import { generateReactAdapter } from "./react.ts";
 import { generateAstroAdapter } from "./astro.ts";
 import { generateSvelteAdapter } from "./svelte.ts";
 import { generateVueAdapter } from "./vue.ts";
+import { generateBricksAdapter } from "./bricks.ts";
+import { generateWordPressAdapter } from "./wordpress.ts";
 import type { GeneratedAdapter } from "./types.ts";
 
 export type EmitFrameworkAdapterOptions = {
@@ -21,6 +23,8 @@ function generate(target: FrameworkAdapterTarget, compiled: CompiledPage, policy
   if (target === "vue") return generateVueAdapter({ compiled, policy });
   if (target === "svelte") return generateSvelteAdapter({ compiled, policy });
   if (target === "astro") return generateAstroAdapter({ compiled, policy });
+  if (target === "wordpress") return generateWordPressAdapter({ compiled, policy });
+  if (target === "bricks") return generateBricksAdapter({ compiled, policy });
   throw new Error(`Framework adapter ${target} is not registered`);
 }
 
