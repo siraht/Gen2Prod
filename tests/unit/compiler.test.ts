@@ -17,6 +17,18 @@ function resolvedSample(output: Compiled, value: string | undefined): string | u
   return output.plan.tokens.tokens.find((token) => token.runtimeExpression === value)?.sampledValues["default@1280"] ?? value;
 }
 
+function primaryGeneratedClasses(output: Compiled): Set<string> {
+  const nodes = [output.plan.semantics.root];
+  for (let index = 0; index < nodes.length; index += 1) nodes.push(...nodes[index]!.children);
+  return new Set(nodes.flatMap((node) => {
+    const primary = [...node.classes].reverse().find((name) => name.includes("--"))
+      ?? node.classes.find((name) => name.includes("__"))
+      ?? node.classes.find((name) => !name.includes("--"))
+      ?? node.classes[0];
+    return primary ? [primary] : [];
+  }));
+}
+
 async function fixtureInput() {
   const spec = createArchetypes()[0]!;
   const gold = renderGold(spec);
@@ -141,7 +153,7 @@ describe("static compilation", () => {
     expect(rerun.scss).toBe(output.scss);
   });
 
-  test("scopes universal source foundations to the page BEM block", async () => {
+  test("lowers universal source foundations onto every generated BEM class", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-universal-root-"));
     const htmlPath = join(directory, "page.html");
     await Bun.write(htmlPath, '<!doctype html><html><head><title>Universal styles</title><meta name="description" content="Universal style fixture"><style>*{box-sizing:border-box}*::before{content:"";border-width:0}*:disabled{cursor:default}.card{padding:1rem}</style></head><body><main><h1>Universal styles</h1><div class="card">Card</div></main></body></html>');
@@ -150,8 +162,10 @@ describe("static compilation", () => {
     expect(output.scss).not.toContain("* {");
     expect(output.scss).toContain("&::before {");
     expect(output.scss).toContain("&:disabled {");
-    expect(output.scss.match(/box-sizing: border-box;/g)).toHaveLength(1);
-    expect(output.scss.match(/content: "";/g)).toHaveLength(1);
+    const generatedClasses = primaryGeneratedClasses(output);
+    expect(output.scss.match(/box-sizing: border-box;/g)).toHaveLength(generatedClasses.size);
+    expect(output.scss.match(/content: "";/g)).toHaveLength(generatedClasses.size);
+    expect(output.css).not.toMatch(/(?:^|[},])\s*(?:html|body|\*)\b/m);
   });
 
   test("removes source important flags after resolving the winning cascade", async () => {
@@ -495,7 +509,8 @@ describe("static compilation", () => {
     expect(resolvedSample(output, byNode.get("second")?.["margin-top"])).toBe("10px");
     expect(resolvedSample(output, byNode.get("second")?.color)).toBe("#123456");
     expect(byNode.get("g2p-universal-root")?.["box-sizing"]).toBe("border-box");
-    expect(output.scss.match(/box-sizing: border-box;/g)).toHaveLength(1);
+    const generatedClasses = primaryGeneratedClasses(output);
+    expect(output.scss.match(/box-sizing: border-box;/g)).toHaveLength(generatedClasses.size);
   });
 
   test("does not flatten descendant declarations onto an aliased block root", async () => {

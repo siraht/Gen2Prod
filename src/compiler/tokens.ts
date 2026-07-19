@@ -393,6 +393,30 @@ function conditionKey(condition?: StyleCondition): string {
   return condition ? JSON.stringify({ states: condition.states, pseudo: condition.pseudo ?? "", media: condition.media, supports: condition.supports }) : "default";
 }
 
+function lowerUniversalFoundations(styles: StyleIntent[], root: PlannedNode): void {
+  const universal = styles.find((style) => style.nodeId === "g2p-universal-root");
+  if (!universal) return;
+  for (const node of allNodes(root)) {
+    const existing = styles.find((style) => style.nodeId === node.nodeId);
+    const declarations = new Map<string, StyleIntent["declarations"][number]>();
+    for (const declaration of [...universal.declarations, ...(existing?.declarations ?? [])]) {
+      declarations.set(`${conditionKey(declaration.condition)}\0${declaration.property}`, declaration);
+    }
+    if (existing) {
+      existing.declarations = [...declarations.values()];
+      continue;
+    }
+    styles.push({
+      ...universal,
+      nodeId: node.nodeId,
+      styleRole: node.role,
+      layoutRole: node.role.includes("layout") || node.role.includes("list") ? node.role : "content-owned",
+      contentRole: node.role,
+      declarations: [...declarations.values()],
+    });
+  }
+}
+
 export function resolveStyles(source: SourceDocument, root: PlannedNode, registry: TokenRegistry, relativeThreshold = 0.08): { styles: StyleIntent[]; exceptions: TokenException[] } {
   const styles: StyleIntent[] = [];
   const exceptions: TokenException[] = [];
@@ -436,6 +460,10 @@ export function resolveStyles(source: SourceDocument, root: PlannedNode, registr
     if (declarations.length === 0) continue;
     styles.push({ nodeId: node.nodeId, styleRole: node.role, layoutRole: node.role.includes("layout") || node.role.includes("list") ? node.role : "content-owned", contentRole: node.role, confidence: { value: 0.85, kind: "ordinal-uncalibrated", evidence: [{ source: "compiled-css", nodeId: node.nodeId, signal: `${declarations.length} matched declarations`, authority: "computed-visual-truth", weight: 0.9 }], risk: "low" }, declarations });
   }
+  // Make source-wide, non-inherited foundations part of G2P-NF before BEM
+  // variant differentiation. Emission-only lowering makes the first and
+  // canonical second passes reason over different style graphs.
+  lowerUniversalFoundations(styles, root);
   return { styles, exceptions };
 }
 

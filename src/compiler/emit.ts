@@ -131,7 +131,6 @@ function mergeScopedFoundationDeclarations(styles: StyleIntent[]): StyleIntent["
 export function emitScss(plan: CompilationPlan): string {
   const styleMap = stylesByNode(plan.styles);
   const documentStyle = styleMap.get("g2p-document-root");
-  const universalStyle = styleMap.get("g2p-universal-root");
   const groups = new Map<string, { node: PlannedNode; className: string; style: StyleIntent }[]>();
   for (const node of allNodes(plan.semantics.root)) {
     const style = styleMap.get(node.nodeId);
@@ -142,19 +141,17 @@ export function emitScss(plan: CompilationPlan): string {
     if (!rules.some((rule) => rule.className === primary)) rules.push({ node, className: primary, style });
     groups.set(block, rules);
   }
-  // Source document/universal foundations are useful, but element and
-  // universal selectors are not part of the production architecture. Scope
-  // those declarations to the semantic page block so canonical output remains
-  // class-only, nested, and idempotent.
+  // Document declarations belong on the page block. Universal declarations
+  // were already lowered onto every generated class in G2P-NF so component and
+  // BEM differentiation reason over the same graph that is emitted.
   const pageNode = plan.semantics.root;
   const pageClass = primaryClass(pageNode);
-  const foundations = [documentStyle, universalStyle].filter((style): style is StyleIntent => Boolean(style));
-  if (pageClass && foundations.length > 0) {
+  if (pageClass && documentStyle) {
     const block = pageClass.split(/__|--/)[0]!;
     const rules = groups.get(block) ?? [];
     const existing = rules.find((rule) => rule.className === pageClass);
-    const template = existing?.style ?? foundations[0]!;
-    const style: StyleIntent = { ...template, nodeId: pageNode.nodeId, styleRole: pageNode.role, contentRole: pageNode.role, declarations: mergeScopedFoundationDeclarations([...foundations, ...(existing ? [existing.style] : [])]) };
+    const template = existing?.style ?? documentStyle;
+    const style: StyleIntent = { ...template, nodeId: pageNode.nodeId, styleRole: pageNode.role, contentRole: pageNode.role, declarations: mergeScopedFoundationDeclarations([documentStyle, ...(existing ? [existing.style] : [])]) };
     if (existing) existing.style = style;
     else rules.push({ node: pageNode, className: pageClass, style });
     groups.set(block, rules);
