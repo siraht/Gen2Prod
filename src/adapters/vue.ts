@@ -16,8 +16,8 @@ export function generateVueAdapter(context: AdapterGenerationContext): Generated
     ...(verifiedBindings > 0 ? ['import { onMounted } from "vue";', 'import { installVerifiedInteractions } from "./interactions/installVerifiedInteractions";', "onMounted(() => installVerifiedInteractions());"] : []),
   ].join("\n");
   const markup = root.tag === "body"
-    ? renderTemplateChildren(root, { depth: 1, replacements, verifiedInteractions: verifiedBindings > 0 })
-    : renderTemplateNode(root, { depth: 1, replacements, verifiedInteractions: verifiedBindings > 0 });
+    ? renderTemplateChildren(root, { depth: 1, dialect: "vue", replacements, verifiedInteractions: verifiedBindings > 0 })
+    : renderTemplateNode(root, { depth: 1, dialect: "vue", replacements, verifiedInteractions: verifiedBindings > 0 });
   const files: GeneratedAdapterFile[] = [
     {
       path: "Page.vue",
@@ -41,7 +41,7 @@ export function generateVueAdapter(context: AdapterGenerationContext): Generated
       return {
         path: `components/${component.name}.vue`,
         role: "component",
-        contents: `${componentImports ? `<script setup lang="ts">\n${componentImports}\n</script>\n\n` : ""}<template>\n${renderTemplateNode(component.node, { depth: 1, replacements, skipReplacement: component.node.nodeId, verifiedInteractions: verifiedBindings > 0 })}\n</template>\n`,
+        contents: `${componentImports ? `<script setup lang="ts">\n${componentImports}\n</script>\n\n` : ""}<template>\n${renderTemplateNode(component.node, { depth: 1, dialect: "vue", replacements, skipReplacement: component.node.nodeId, verifiedInteractions: verifiedBindings > 0 })}\n</template>\n`,
       };
     }),
     ...(verifiedBindings > 0 ? [verifiedInteractionRuntimeFile()] : []),

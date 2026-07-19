@@ -15,8 +15,8 @@ import { CmsDocumentSchema } from "../../src/schemas/adapters.ts";
 import { validateFrameworkAdapter } from "../../src/adapters/validate.ts";
 import { ALL_FRAMEWORK_ADAPTER_TARGETS, runFrameworkAdapterSuite } from "../../src/adapters/pipeline.ts";
 
-async function compileDialog() {
-  const spec = createArchetypes().find((item) => item.archetype === "dialog")!;
+async function compileArchetype(archetype: "dialog" | "form") {
+  const spec = createArchetypes().find((item) => item.archetype === archetype)!;
   const gold = renderGold(spec);
   const directory = await mkdtemp(join(tmpdir(), "gen2prod-adapter-"));
   const htmlPath = join(directory, "page.html");
@@ -24,6 +24,10 @@ async function compileDialog() {
   await Bun.write(htmlPath, gold.html);
   await Bun.write(cssPath, gold.css);
   return { directory, compiled: await compileStaticPage({ htmlPath, cssPath, tokenRegistry: spec.tokens }) };
+}
+
+async function compileDialog() {
+  return compileArchetype("dialog");
 }
 
 describe("framework adapters", () => {
@@ -124,20 +128,22 @@ describe("framework adapters", () => {
     }
   }, 60_000);
 
-  test("browser-diffs every native adapter against canonical output", async () => {
-    const { directory, compiled } = await compileDialog();
-    const suite = await runFrameworkAdapterSuite({
-      compiled,
-      outputDirectory: join(directory, "visual-suite"),
-      targets: ALL_FRAMEWORK_ADAPTER_TARGETS,
-      policy: defaultFrameworkAdapterPolicy,
-      capture: { viewport: 720 },
-    });
-    expect(suite.aggregate.nativeCompileRate).toBe(1);
-    expect(suite.aggregate.nativeRenderRate).toBe(1);
-    expect(suite.aggregate.meanStructuralEquivalence).toBe(1);
-    expect(suite.aggregate.meanVisualPixelDifferenceRatio).toBe(0);
-    expect(suite.validations.every((validation) => validation.visualPixelDifferenceRatio === 0)).toBeTrue();
-    expect(suite.passed, suite.validations.flatMap((validation) => validation.issues).join("; ")).toBeTrue();
+  test("browser-diffs every native adapter against canonical dialog and inline-form output", async () => {
+    for (const archetype of ["dialog", "form"] as const) {
+      const { directory, compiled } = await compileArchetype(archetype);
+      const suite = await runFrameworkAdapterSuite({
+        compiled,
+        outputDirectory: join(directory, `visual-suite-${archetype}`),
+        targets: ALL_FRAMEWORK_ADAPTER_TARGETS,
+        policy: defaultFrameworkAdapterPolicy,
+        capture: { viewport: 720 },
+      });
+      expect(suite.aggregate.nativeCompileRate).toBe(1);
+      expect(suite.aggregate.nativeRenderRate).toBe(1);
+      expect(suite.aggregate.meanStructuralEquivalence).toBe(1);
+      expect(suite.aggregate.meanVisualPixelDifferenceRatio).toBe(0);
+      expect(suite.validations.every((validation) => validation.visualPixelDifferenceRatio === 0)).toBeTrue();
+      expect(suite.passed, `${archetype}: ${suite.validations.flatMap((validation) => validation.issues).join("; ")}`).toBeTrue();
+    }
   }, 60_000);
 });

@@ -203,7 +203,7 @@ function renderCmsNode(node: CmsNode): string {
   const children = new Map(node.children.map((child) => [child.id, child]));
   const content = node.content.some((part) => part.kind === "text")
     ? node.content.map((part) => part.kind === "text" ? escapeHtml(part.value) : children.has(part.nodeId) ? renderCmsNode(children.get(part.nodeId)!) : "").join("")
-    : `${escapeHtml(node.text)}${node.children.map(renderCmsNode).join("")}`;
+    : `${escapeHtml(node.text)}${node.children.map(renderCmsNode).join(["pre", "textarea", "script", "style"].includes(node.tag) ? "" : " ")}`;
   return `${opening}${content}</${node.tag}>`;
 }
 

@@ -58,9 +58,15 @@ function renderNode(node: PlannedNode, options: { depth?: number; replacements: 
   const parts = orderedNodeParts(node);
   if (parts.length === 0) return `${indent}${opening}></${node.tag}>`;
   if (parts.every((part) => part.kind === "text")) return `${indent}${opening}>${parts.map((part) => renderText(part.value)).join("")}</${node.tag}>`;
-  const contents = parts.map((part) => part.kind === "text"
-    ? `${"  ".repeat(depth + 1)}${renderText(part.value)}`
-    : renderNode(part.node, { ...options, depth: depth + 1 })).filter(Boolean).join("\n");
+  const preserveStructuralWhitespace = !node.content?.some((part) => part.kind === "text") && !["pre", "textarea", "script", "style"].includes(node.tag);
+  const renderedParts: string[] = [];
+  for (const [index, part] of parts.entries()) {
+    if (preserveStructuralWhitespace && index > 0) renderedParts.push(`${"  ".repeat(depth + 1)}{" "}`);
+    renderedParts.push(part.kind === "text"
+      ? `${"  ".repeat(depth + 1)}${renderText(part.value)}`
+      : renderNode(part.node, { ...options, depth: depth + 1 }));
+  }
+  const contents = renderedParts.filter(Boolean).join("\n");
   return `${indent}${opening}>\n${contents}\n${indent}</${node.tag}>`;
 }
 
