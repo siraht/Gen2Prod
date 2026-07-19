@@ -88,7 +88,7 @@ async function compileVueFiles(workspace: string, manifest: FrameworkAdapterMani
       bindingMetadata = compiled.bindings ?? {};
     }
     if (!descriptor.template) { errors.push(`${file.path}: missing template`); continue; }
-    const template = compileVueTemplate({ source: descriptor.template.content, filename: file.path, id: hashJson(file.path).slice(0, 8), ssr: true, compilerOptions: { bindingMetadata } });
+    const template = compileVueTemplate({ source: descriptor.template.content, filename: file.path, id: hashJson(file.path).slice(0, 8), ssr: true, ssrCssVars: [], compilerOptions: { bindingMetadata } });
     if (template.errors.length) { errors.push(...template.errors.map(String)); continue; }
     const code = `${script}\n${template.code.replace("export function ssrRender", "function ssrRender")}\n(__sfc__ as { ssrRender?: typeof ssrRender }).ssrRender = ssrRender;\nexport default __sfc__;\n`
       .replaceAll(/(from\s+["'][^"']+)\.vue(["'])/g, "$1.vue.ts$2");

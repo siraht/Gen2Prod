@@ -17,6 +17,10 @@ research:
   budget: 12
   split: validation
   hiddenHoldoutEvery: 5
+adapters:
+  targets: [react, vue, svelte, astro, wordpress, bricks]
+  visualValidation: true
+  captureViewport: 1280
 validation:
   wcag: WCAG2AA
   provisionalThresholds: true

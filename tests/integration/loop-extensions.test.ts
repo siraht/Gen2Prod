@@ -91,6 +91,7 @@ test("records accepted production runs as distillation trajectories", async () =
     capture: { viewports: [360], themes: ["light"], states: ["default"], browserExecutable: "auto" },
     policy: { file: "src/research/policy.ts" },
     research: { budget: 1, split: "validation", hiddenHoldoutEvery: 1 },
+    adapters: { targets: ["react", "vue", "svelte", "astro", "wordpress", "bricks"], visualValidation: true, captureViewport: 360 },
     validation: { wcag: "WCAG2AA", provisionalThresholds: true, maxVisualPixelRatio: 0.01, minBemCoverage: 0.95, minTokenCoverage: 0.95 },
   };
   const run = await executeRun({ input: join(fixture, "fixture.corrupted.html"), cssPath: join(fixture, "corrupted.css"), tokenPath: join(fixture, "fixture.gold.tokens.json"), mode: "legacy-conversion", profile: "migration", capture: true, config, policy: defaultPolicy });
@@ -105,7 +106,12 @@ test("records accepted production runs as distillation trajectories", async () =
   expect(await Bun.file(join(run.runDirectory, "capture", "diff", "baseline-vs-candidate-360-light-default.png")).exists()).toBeTrue();
   expect(await Bun.file(join(run.runDirectory, "distilled-controller.json")).exists()).toBeTrue();
   expect(await Bun.file(join(run.runDirectory, "model-candidate-history.json")).exists()).toBeTrue();
-});
+  expect(run.adapterSuite?.passed).toBeTrue();
+  expect(run.adapterSuite?.aggregate.meanVisualPixelDifferenceRatio).toBe(0);
+  expect(await Bun.file(join(run.runDirectory, "output", "adapters", "react", "PageDocument.tsx")).exists()).toBeTrue();
+  expect(await Bun.file(join(run.runDirectory, "output", "adapters", "wordpress", "templates", "page.html")).exists()).toBeTrue();
+  expect(run.validation.gates.find((gate) => gate.gate === "A")?.assertions.filter((assertion) => assertion.id.startsWith("framework-adapter-")).every((assertion) => assertion.passed)).toBeTrue();
+}, 60_000);
 
 test("keeps a gate-improving localized repair in the production run", async () => {
   const root = await mkdtemp(join(tmpdir(), "gen2prod-production-repair-"));

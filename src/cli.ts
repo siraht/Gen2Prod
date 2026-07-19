@@ -39,6 +39,8 @@ import { evaluateSyntheticImageCurriculum } from "./image-only/curriculum.ts";
 import { prepareConfiguredAutomaticCss } from "./acss/configured.ts";
 import { prepareAutomaticCss } from "./acss/adapter.ts";
 import { discoverAutomaticCssSource } from "./acss/archive.ts";
+import { FrameworkAdapterTargetSchema } from "./schemas/adapters.ts";
+import { defaultFrameworkAdapterPolicy } from "./adapters/policy.ts";
 
 type GlobalOptions = { config: string; workspace: string; acss?: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -97,6 +99,7 @@ program
       designSystem: { provider: "automaticcss", source: "auto", mode: "full" },
       capture: { viewports: [360, 768, 1280, 1440], themes: ["light"], states: ["default", "focus-visible"], browserExecutable: "auto" },
       policy: { file: "src/research/policy.ts" }, research: { budget: 12, split: "validation", hiddenHoldoutEvery: 5 },
+      adapters: { targets: ["react", "vue", "svelte", "astro", "wordpress", "bricks"], visualValidation: true, captureViewport: 1280 },
       validation: { wcag: "WCAG2AA", provisionalThresholds: true, maxVisualPixelRatio: 0.01, minBemCoverage: 0.95, minTokenCoverage: 0.95 },
     };
     await ensureDirectory(target);
@@ -404,18 +407,20 @@ program
   .option("--tokens <path>", "ACSS/DTCG token adapter registry")
   .option("--policy <path>", "TypeScript or JSON policy")
   .option("--visual-target <path>", "approved visual target image")
+  .option("--adapters <targets>", "comma-separated framework targets: react,vue,svelte,astro,wordpress,bricks")
   .addOption(new Option("--mode <mode>", "operating mode").choices(ModeSchema.options))
   .addOption(new Option("--profile <profile>", "acceptance profile").choices(ProfileSchema.options))
   .option("--no-capture", "skip browser and accessibility evidence")
-  .action(async (input: string, options: { css?: string; tokens?: string; policy?: string; visualTarget?: string; mode?: string; profile?: string; capture: boolean }) => {
+  .action(async (input: string, options: { css?: string; tokens?: string; policy?: string; visualTarget?: string; adapters?: string; mode?: string; profile?: string; capture: boolean }) => {
     const project = await config();
     const policy = await currentPolicy(project, options.policy);
-    const run = await executeRun({ input: resolve(input), cssPath: options.css, tokenPath: options.tokens, acssSource: globals().acss, visualTargetPath: options.visualTarget, mode: ModeSchema.parse(options.mode ?? project.mode), profile: ProfileSchema.parse(options.profile ?? project.profile), capture: options.capture, config: project, policy });
+    const adapterTargets = options.adapters ? options.adapters.split(",").filter(Boolean).map((target) => FrameworkAdapterTargetSchema.parse(target.trim())) : undefined;
+    const run = await executeRun({ input: resolve(input), cssPath: options.css, tokenPath: options.tokens, acssSource: globals().acss, visualTargetPath: options.visualTarget, mode: ModeSchema.parse(options.mode ?? project.mode), profile: ProfileSchema.parse(options.profile ?? project.profile), capture: options.capture, config: project, policy, adapterPolicy: defaultFrameworkAdapterPolicy, ...(adapterTargets ? { adapterTargets } : {}) });
     const envelope = result("run", { runId: run.runId, runDirectory: run.runDirectory, passed: run.validation.passed, gates: run.validation.gates.map((gate) => ({ gate: gate.gate, passed: gate.passed, hard: gate.hard })), metrics: run.validation.metrics, repairCount: run.repairs.length });
     envelope.runId = run.runId;
     envelope.ok = run.validation.passed;
     envelope.requiredActions.push(...run.manifest.requiredActions);
-    emit(envelope, `Run ${run.runId}\n${run.validation.passed ? "All hard gates passed." : `${run.validation.gates.filter((gate) => gate.hard && !gate.passed).length} hard gate(s) require localized repair.`}\nArtifacts: ${run.runDirectory}\n${run.reports.ciSummary}`);
+    emit(envelope, `Run ${run.runId}\n${run.validation.passed ? "All hard gates passed." : `${run.validation.gates.filter((gate) => gate.hard && !gate.passed).length} hard gate(s) require localized repair.`}${run.adapterSuite ? `\nFramework adapters: ${run.adapterSuite.aggregate.passed}/${run.adapterSuite.targets.length} passed${run.adapterSuite.aggregate.meanVisualPixelDifferenceRatio === undefined ? "" : `; mean pixel diff ${(run.adapterSuite.aggregate.meanVisualPixelDifferenceRatio * 100).toFixed(4)}%`}` : ""}\nArtifacts: ${run.runDirectory}\n${run.reports.ciSummary}`);
     if (!run.validation.passed) process.exitCode = 3;
   });
 

@@ -13,6 +13,14 @@ test("doctor emits a stable JSON envelope", async () => {
   expect(await child.exited).toBe(0);
   expect(output.command).toBe("doctor");
   expect(output.data.registeredPasses).toBeGreaterThan(20);
+}, 15_000);
+
+test("exposes framework adapter selection on production runs", async () => {
+  const child = Bun.spawn(["bun", "src/cli.ts", "run", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
+  const output = await new Response(child.stdout).text();
+  expect(await child.exited).toBe(0);
+  expect(output).toContain("--adapters");
+  expect(output).toContain("react,vue,svelte,astro,wordpress,bricks");
 });
 
 test("exposes naturalistic import and modality ablation controls", async () => {

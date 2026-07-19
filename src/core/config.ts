@@ -2,6 +2,7 @@ import { resolve } from "node:path";
 import { parse } from "yaml";
 import { z } from "zod";
 import { ModeSchema, ProfileSchema } from "../schemas/artifacts.ts";
+import { FrameworkAdapterTargetSchema } from "../schemas/adapters.ts";
 
 const ConfigSchema = z.object({
   schemaVersion: z.string(),
@@ -25,6 +26,11 @@ const ConfigSchema = z.object({
     split: z.enum(["train", "validation", "holdout", "all"]),
     hiddenHoldoutEvery: z.number().int().positive(),
   }),
+  adapters: z.object({
+    targets: z.array(FrameworkAdapterTargetSchema).min(1),
+    visualValidation: z.boolean(),
+    captureViewport: z.number().int().positive(),
+  }).optional(),
   validation: z.object({
     wcag: z.string(),
     provisionalThresholds: z.boolean(),

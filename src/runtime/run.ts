@@ -31,6 +31,9 @@ import { loadDistilledController, recommendWithController, verifyWithController 
 import { scheduleLocalizedRepair, type RepairSchedule } from "./repair-scheduler.ts";
 import { HttpStructuredProvider } from "../models/provider.ts";
 import { exploreSemanticRepairs, type SemanticRepairExploration } from "../models/semantic-repair.ts";
+import { runFrameworkAdapterSuite } from "../adapters/pipeline.ts";
+import { defaultFrameworkAdapterPolicy } from "../adapters/policy.ts";
+import type { FrameworkAdapterPolicy, FrameworkAdapterSuite, FrameworkAdapterTarget } from "../schemas/adapters.ts";
 
 export type RunOptions = {
   input: string;
@@ -43,6 +46,8 @@ export type RunOptions = {
   capture: boolean;
   config: Gen2ProdConfig;
   policy: TransformationPolicy;
+  adapterTargets?: FrameworkAdapterTarget[] | undefined;
+  adapterPolicy?: FrameworkAdapterPolicy | undefined;
 };
 
 export type RunResult = {
@@ -53,6 +58,7 @@ export type RunResult = {
   manifest: RunManifest;
   repairs: ReturnType<typeof planLocalizedRepairs>;
   reports: Awaited<ReturnType<typeof generateProductReports>>;
+  adapterSuite?: FrameworkAdapterSuite | undefined;
 };
 
 function runId(): string { return `${new Date().toISOString().replace(/[:.]/g, "-")}-${crypto.randomUUID().slice(0, 8)}`; }
@@ -202,6 +208,19 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
   }
   if (baselineCapture && candidateCapture) await writePairedVisualEvidence(baselineCapture, candidateCapture, join(runDirectory, "capture", "diff"));
 
+  const adapterTargets = options.adapterTargets ?? options.config.adapters?.targets ?? [];
+  const adapterSuite = adapterTargets.length ? await runFrameworkAdapterSuite({
+    compiled,
+    outputDirectory: join(outputDirectory, "adapters"),
+    targets: adapterTargets,
+    policy: options.adapterPolicy ?? defaultFrameworkAdapterPolicy,
+    ...(options.capture && options.config.adapters?.visualValidation ? { capture: { viewport: options.config.adapters.captureViewport, browserExecutable: options.config.capture.browserExecutable } } : {}),
+  }) : undefined;
+  if (adapterSuite) {
+    await replay.append(event(id, "framework-adapter-emission-and-validation", policyHash, adapterSuite.passed ? "accepted" : "rejected", `${adapterSuite.aggregate.passed}/${adapterSuite.targets.length} native adapters passed compile, round-trip and visual gates.`));
+    if (!adapterSuite.passed) requiredActions.push({ id: "framework-adapter-failure", summary: "Repair failed framework/CMS adapter outputs", detail: adapterSuite.validations.filter((item) => !item.passed).map((item) => `${item.target}: ${item.issues.join("; ")}`).join("\n"), blocking: false });
+  }
+
   const idempotenceDirectory = join(runDirectory, "idempotence");
   await ensureDirectory(idempotenceDirectory);
   const rerun = await compileStaticPage({ htmlPath: join(outputDirectory, "page.html"), cssPath: join(outputDirectory, "page.css"), tokenRegistry: compiled.plan.tokens, policy: options.policy });
@@ -218,6 +237,7 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
   if (buildGate) {
     buildGate.assertions.push({ id: "idempotence", passed: idempotent, severity: "error", message: idempotent ? "Exact compiler idempotence passes" : `Output hash ${outputHash} differs from recompile ${idempotenceHash}` });
     buildGate.assertions.push({ id: "evaluator-mutation-controls", passed: mutationControlRecall === 1, severity: "critical", message: `Evaluator caught ${(mutationControlRecall * 100).toFixed(1)}% of controlled defects` });
+    for (const adapter of adapterSuite?.validations ?? []) buildGate.assertions.push({ id: `framework-adapter-${adapter.target}`, passed: adapter.passed, severity: "critical", message: adapter.passed ? `${adapter.target} native compile/render, semantic round-trip and visual equivalence pass` : `${adapter.target} adapter failed: ${adapter.issues.join("; ")}` });
     buildGate.passed = buildGate.assertions.every((assertion) => assertion.passed || assertion.severity === "warning" || assertion.severity === "info");
   }
   validation.metrics.idempotenceError = idempotent ? 0 : 1;
@@ -247,7 +267,7 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
     })) : {},
     loadErrors: distilledController?.loadErrors ?? [],
   };
-  await Promise.all([writeJsonAtomic(join(runDirectory, "plan.json"), compiled.plan), writeJsonAtomic(join(runDirectory, "validation.json"), validation), writeJsonAtomic(join(runDirectory, "repairs.json"), repairs), writeJsonAtomic(join(runDirectory, "distilled-controller.json"), controllerTrace), writeJsonAtomic(join(runDirectory, "model-candidate-history.json"), modelCandidateArtifact), ...(visualTarget ? [writeJsonAtomic(join(runDirectory, "visual-target.json"), visualTarget)] : []), ...(compiledInput.greenfield ? [writeJsonAtomic(join(runDirectory, "greenfield-artifacts.json"), compiledInput.greenfield)] : [])]);
+  await Promise.all([writeJsonAtomic(join(runDirectory, "plan.json"), compiled.plan), writeJsonAtomic(join(runDirectory, "validation.json"), validation), writeJsonAtomic(join(runDirectory, "repairs.json"), repairs), writeJsonAtomic(join(runDirectory, "distilled-controller.json"), controllerTrace), writeJsonAtomic(join(runDirectory, "model-candidate-history.json"), modelCandidateArtifact), ...(adapterSuite ? [writeJsonAtomic(join(runDirectory, "adapter-suite.json"), adapterSuite)] : []), ...(visualTarget ? [writeJsonAtomic(join(runDirectory, "visual-target.json"), visualTarget)] : []), ...(compiledInput.greenfield ? [writeJsonAtomic(join(runDirectory, "greenfield-artifacts.json"), compiledInput.greenfield)] : [])]);
 
   const store = new ArtifactStore(join(runDirectory, "artifacts"));
   const inputRef = await store.putText("source-input", await Bun.file(options.input).text(), { id: "primary-input", producer: "run-intake", authorities: options.mode === "greenfield" ? ["approved-content-intent"] : ["content", "links", "forms", "behavior-hooks", "semantics-partial"] });
@@ -255,9 +275,10 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
     store.putJson("normal-form", { components: compiled.plan.components, dom: compiled.plan.semantics.root, bem: compiled.plan.bem, tokens: compiled.plan.tokens, styles: compiled.plan.styles, interactions: compiled.plan.interactions }, { id: "g2p-normal-form", producer: "compiler", inputs: [inputRef.id] }),
     store.putJson("validation-report", validation, { id: "validation-report", producer: "gates-a-j", inputs: [inputRef.id] }),
     store.putJson("transformation-report", reports, { id: "product-reports", producer: "report-generator", inputs: [inputRef.id] }),
+    ...(adapterSuite ? [store.putJson("framework-output", { targets: adapterSuite.targets, manifests: adapterSuite.manifests, policy: adapterSuite.policy }, { id: "framework-outputs", producer: "framework-adapter-emission", inputs: [inputRef.id] }), store.putJson("adapter-validation-report", adapterSuite, { id: "adapter-validation", producer: "framework-adapter-validation", inputs: [inputRef.id] })] : []),
   ]);
   const modelRuns = modelExploration && modelExploration.receivedCandidates > 0 ? [{ pass: "semantic-repair", model: modelExploration.model, promptHash: modelExploration.promptHash ?? "provider-returned-no-prompt-hash", schema: "semantic-repair-patch-0.1.0", samplingSettings: modelExploration.sampling, candidateCount: modelExploration.receivedCandidates, selectedCandidate: modelExploration.selectedCandidate, outputHash: hashJson(modelExploration.candidates), selectionRationale: modelExploration.reason }] : [];
-  const manifest = RunManifestSchema.parse({ schemaVersion: "0.1.0", projectId: basename(options.input).replace(/\.[^.]+$/, ""), runId: id, createdAt: new Date().toISOString(), mode: options.mode, profile: options.profile, inputs: [inputRef], artifacts: artifactRefs, inputAuthorities: { [options.input]: options.mode === "greenfield" ? ["approved-content-intent"] : ["content", "links", "forms", "behavior-hooks", "semantics-partial"] }, acceptanceProfile: { lockedViewports: options.config.capture.viewports, lockedRegions: visualTarget?.regions.filter((region) => region.regionId && region.locked).map((region) => region.regionId) ?? [], requiresHumanApproval: Boolean(visualTarget), thresholdsProvisional: options.config.validation.provisionalThresholds }, schemaVersions: { manifest: "0.1.0", normalForm: "0.1.0", tokenRegistryAdapter: compiled.plan.tokens.schemaVersion }, ...(candidateCapture ? { captureEnvironment: candidateCapture.environment } : {}), toolVersions: { gen2prod: "0.1.0", bun: Bun.version, sass: "1.x", ...(compiledInput.acss ? { automaticcss: compiledInput.acss.provenance.version } : {}) }, modelRuns, requiredActions });
+  const manifest = RunManifestSchema.parse({ schemaVersion: "0.1.0", projectId: basename(options.input).replace(/\.[^.]+$/, ""), runId: id, createdAt: new Date().toISOString(), mode: options.mode, profile: options.profile, inputs: [inputRef], artifacts: artifactRefs, inputAuthorities: { [options.input]: options.mode === "greenfield" ? ["approved-content-intent"] : ["content", "links", "forms", "behavior-hooks", "semantics-partial"] }, acceptanceProfile: { lockedViewports: options.config.capture.viewports, lockedRegions: visualTarget?.regions.filter((region) => region.regionId && region.locked).map((region) => region.regionId) ?? [], requiresHumanApproval: Boolean(visualTarget), thresholdsProvisional: options.config.validation.provisionalThresholds }, schemaVersions: { manifest: "0.1.0", normalForm: "0.1.0", tokenRegistryAdapter: compiled.plan.tokens.schemaVersion, ...(adapterSuite ? { frameworkAdapters: "0.1.0" } : {}) }, ...(candidateCapture ? { captureEnvironment: candidateCapture.environment } : {}), toolVersions: { gen2prod: "0.1.0", bun: Bun.version, sass: "1.x", ...(compiledInput.acss ? { automaticcss: compiledInput.acss.provenance.version } : {}) }, modelRuns, requiredActions });
   await writeJsonAtomic(join(runDirectory, "manifest.json"), manifest);
   const hardFailures = validation.gates.filter((gate) => gate.hard && !gate.passed);
   const accessibilityErrors = validation.gates.find((gate) => gate.gate === "E")?.assertions.filter((assertion) => !assertion.passed && (assertion.severity === "error" || assertion.severity === "critical")).length ?? 0;
@@ -270,8 +291,8 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
     groupId: `production:${basename(options.input)}`,
     sourceKind: "production-html",
     split: "production",
-    observations: { mode: options.mode, profile: options.profile, capture: options.capture, semanticReview: compiled.plan.semantics.review.length, hardGateFailures: hardFailures.length, mutationControlRecall },
-    actions: policyActions(compiled),
+    observations: { mode: options.mode, profile: options.profile, capture: options.capture, semanticReview: compiled.plan.semantics.review.length, hardGateFailures: hardFailures.length, mutationControlRecall, adapterTargets: adapterSuite?.targets.length ?? 0, adapterFailures: adapterSuite?.aggregate.failed ?? 0, adapterVisualLoss: adapterSuite?.aggregate.meanVisualPixelDifferenceRatio ?? 0 },
+    actions: [...policyActions(compiled), ...(adapterSuite?.targets.map((target) => `adapter:${target}:native-emit-validate`) ?? [])],
     planSummary: { runId: id, outputHash, idempotenceHash, passes: replayEvents.map((item) => item.pass) },
     verifierLabels: { hardGatesPass: hardFailures.length === 0, idempotent, mutationControlsPass: mutationControlRecall === 1 },
     fitness: {
@@ -291,5 +312,5 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
     cost: policyCost(options.policy, compiled),
   });
   await appendJsonLine(join(resolve(options.config.workspace), "research", "trajectories.jsonl"), trajectory);
-  return { runId: id, runDirectory, compiled, validation, manifest, repairs, reports };
+  return { runId: id, runDirectory, compiled, validation, manifest, repairs, reports, ...(adapterSuite ? { adapterSuite } : {}) };
 }

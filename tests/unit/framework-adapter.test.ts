@@ -72,7 +72,7 @@ describe("framework adapters", () => {
           expect(parsed.errors).toHaveLength(0);
           if (parsed.descriptor.scriptSetup) compileVueScript(parsed.descriptor, { id: file.path });
           if (parsed.descriptor.template) {
-            const result = compileVueTemplate({ source: parsed.descriptor.template.content, filename: file.path, id: file.path, ssr: true });
+            const result = compileVueTemplate({ source: parsed.descriptor.template.content, filename: file.path, id: file.path, ssr: true, ssrCssVars: [] });
             expect(result.errors).toHaveLength(0);
           }
         }
