@@ -41,6 +41,11 @@ import { prepareAutomaticCss } from "./acss/adapter.ts";
 import { discoverAutomaticCssSource } from "./acss/archive.ts";
 import { FrameworkAdapterTargetSchema } from "./schemas/adapters.ts";
 import { defaultFrameworkAdapterPolicy } from "./adapters/policy.ts";
+import { FrameworkAdapterPolicySchema } from "./schemas/adapters.ts";
+import { runFrameworkAdapterSuite, ALL_FRAMEWORK_ADAPTER_TARGETS } from "./adapters/pipeline.ts";
+import { evaluateFrameworkAdapterPolicy } from "./adapters/evaluate.ts";
+import { runFrameworkAdapterResearch } from "./adapters/research.ts";
+import type { CompiledPage, CompilationPlan } from "./compiler/types.ts";
 
 type GlobalOptions = { config: string; workspace: string; acss?: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -75,6 +80,15 @@ async function currentPolicy(project: Gen2ProdConfig, explicit?: string): Promis
 async function currentImagePolicy(project: Gen2ProdConfig, explicit?: string) {
   const path = explicit ? resolve(explicit) : resolve(project.workspace, "image-only", "research", "incumbent-policy.json");
   return await pathExists(path) ? ImageOnlyPolicySchema.parse(await readJson(path)) : undefined;
+}
+
+async function currentAdapterPolicy(project: Gen2ProdConfig, explicit?: string) {
+  const path = explicit ? resolve(explicit) : resolve(project.workspace, "adapters", "research", "incumbent-policy.json");
+  return await pathExists(path) ? FrameworkAdapterPolicySchema.parse(await readJson(path)) : defaultFrameworkAdapterPolicy;
+}
+
+function adapterTargets(value: string | undefined, project: Gen2ProdConfig) {
+  return value ? value.split(",").filter(Boolean).map((target) => FrameworkAdapterTargetSchema.parse(target.trim())) : project.adapters?.targets ?? ALL_FRAMEWORK_ADAPTER_TARGETS;
 }
 
 function emit<T>(envelope: ResultEnvelope<T>, human: string): void {
@@ -414,14 +428,75 @@ program
   .action(async (input: string, options: { css?: string; tokens?: string; policy?: string; visualTarget?: string; adapters?: string; mode?: string; profile?: string; capture: boolean }) => {
     const project = await config();
     const policy = await currentPolicy(project, options.policy);
-    const adapterTargets = options.adapters ? options.adapters.split(",").filter(Boolean).map((target) => FrameworkAdapterTargetSchema.parse(target.trim())) : undefined;
-    const run = await executeRun({ input: resolve(input), cssPath: options.css, tokenPath: options.tokens, acssSource: globals().acss, visualTargetPath: options.visualTarget, mode: ModeSchema.parse(options.mode ?? project.mode), profile: ProfileSchema.parse(options.profile ?? project.profile), capture: options.capture, config: project, policy, adapterPolicy: defaultFrameworkAdapterPolicy, ...(adapterTargets ? { adapterTargets } : {}) });
+    const selectedAdapters = adapterTargets(options.adapters, project);
+    const run = await executeRun({ input: resolve(input), cssPath: options.css, tokenPath: options.tokens, acssSource: globals().acss, visualTargetPath: options.visualTarget, mode: ModeSchema.parse(options.mode ?? project.mode), profile: ProfileSchema.parse(options.profile ?? project.profile), capture: options.capture, config: project, policy, adapterPolicy: await currentAdapterPolicy(project), adapterTargets: selectedAdapters });
     const envelope = result("run", { runId: run.runId, runDirectory: run.runDirectory, passed: run.validation.passed, gates: run.validation.gates.map((gate) => ({ gate: gate.gate, passed: gate.passed, hard: gate.hard })), metrics: run.validation.metrics, repairCount: run.repairs.length });
     envelope.runId = run.runId;
     envelope.ok = run.validation.passed;
     envelope.requiredActions.push(...run.manifest.requiredActions);
     emit(envelope, `Run ${run.runId}\n${run.validation.passed ? "All hard gates passed." : `${run.validation.gates.filter((gate) => gate.hard && !gate.passed).length} hard gate(s) require localized repair.`}${run.adapterSuite ? `\nFramework adapters: ${run.adapterSuite.aggregate.passed}/${run.adapterSuite.targets.length} passed${run.adapterSuite.aggregate.meanVisualPixelDifferenceRatio === undefined ? "" : `; mean pixel diff ${(run.adapterSuite.aggregate.meanVisualPixelDifferenceRatio * 100).toFixed(4)}%`}` : ""}\nArtifacts: ${run.runDirectory}\n${run.reports.ciSummary}`);
     if (!run.validation.passed) process.exitCode = 3;
+  });
+
+const adapter = program.command("adapter").description("emit, evaluate, and self-improve framework-native and CMS adapters");
+adapter
+  .command("emit <run>")
+  .description("emit native adapters from an existing accepted Gen2Prod run")
+  .option("--targets <targets>", "comma-separated framework targets")
+  .option("--policy <path>", "adapter policy JSON; defaults to the promoted incumbent")
+  .option("--output <path>", "adapter output directory")
+  .option("--viewport <pixels>", "visual-equivalence capture viewport")
+  .option("--no-capture", "skip adapter browser image diffing")
+  .action(async (run: string, options: { targets?: string; policy?: string; output?: string; viewport?: string; capture: boolean }) => {
+    const project = await config();
+    const runDirectory = resolve(run);
+    const outputDirectory = await pathExists(join(runDirectory, "output", "page.html")) ? join(runDirectory, "output") : runDirectory;
+    const [html, scss, css, plan] = await Promise.all([
+      Bun.file(join(outputDirectory, "page.html")).text(),
+      Bun.file(join(outputDirectory, "page.scss")).text(),
+      Bun.file(join(outputDirectory, "page.css")).text(),
+      readJson<CompilationPlan>(await pathExists(join(runDirectory, "plan.json")) ? join(runDirectory, "plan.json") : join(dirname(outputDirectory), "plan.json")),
+    ]);
+    const compiled: CompiledPage = { html, scss, css, plan, correspondence: [] };
+    const targets = adapterTargets(options.targets, project);
+    const suite = await runFrameworkAdapterSuite({ compiled, outputDirectory: resolve(options.output ?? join(outputDirectory, "adapters")), targets, policy: await currentAdapterPolicy(project, options.policy), ...(options.capture ? { capture: { viewport: Number.parseInt(options.viewport ?? String(project.adapters?.captureViewport ?? 1280), 10), browserExecutable: project.capture.browserExecutable } } : {}) });
+    const envelope = result("adapter emit", suite); envelope.ok = suite.passed;
+    emit(envelope, `Adapter suite ${suite.suiteId}\nNative builds: ${suite.aggregate.passed}/${suite.targets.length}\nStructural equivalence: ${(suite.aggregate.meanStructuralEquivalence * 100).toFixed(2)}%${suite.aggregate.meanVisualPixelDifferenceRatio === undefined ? "" : `\nMean pixel difference: ${(suite.aggregate.meanVisualPixelDifferenceRatio * 100).toFixed(4)}%`}\nOutput: ${resolve(options.output ?? join(outputDirectory, "adapters"))}`);
+    if (!suite.passed) process.exitCode = 3;
+  });
+adapter
+  .command("evaluate")
+  .description("evaluate an adapter policy across the frozen synthetic benchmark")
+  .option("--fixtures <path>", "synthetic manifest", "fixtures/generated/manifest.json")
+  .option("--policy <path>", "adapter policy JSON; defaults to the promoted incumbent")
+  .option("--output <path>", "evaluation output", ".gen2prod/adapters/evaluations/manual")
+  .addOption(new Option("--split <split>", "benchmark split").choices(["train", "validation", "holdout", "all"]).default("validation"))
+  .option("--targets <targets>", "comma-separated framework targets")
+  .option("--viewport <pixels>", "visual-equivalence capture viewport")
+  .option("--limit <number>", "optional fixture limit")
+  .option("--no-capture", "skip adapter browser image diffing")
+  .action(async (options: { fixtures: string; policy?: string; output: string; split: "train" | "validation" | "holdout" | "all"; targets?: string; viewport?: string; limit?: string; capture: boolean }) => {
+    const project = await config();
+    const evaluation = await evaluateFrameworkAdapterPolicy({ manifestPath: resolve(options.fixtures), outputDirectory: resolve(options.output), split: options.split, policy: await currentAdapterPolicy(project, options.policy), targets: adapterTargets(options.targets, project), capture: options.capture, viewport: Number.parseInt(options.viewport ?? String(project.adapters?.captureViewport ?? 1280), 10), browserExecutable: project.capture.browserExecutable, ...(options.limit ? { limit: Number.parseInt(options.limit, 10) } : {}) });
+    const envelope = result("adapter evaluate", evaluation); envelope.ok = evaluation.accepted;
+    emit(envelope, `Adapter evaluation ${evaluation.evaluationId}\nFixtures: ${evaluation.coverage.fixtures}; native targets: ${evaluation.coverage.targets}\nHard failures: ${evaluation.fitness.hardFailures}\nStructural error: ${(evaluation.fitness.structuralError * 100).toFixed(4)}%\nVisual loss: ${(evaluation.fitness.visualLoss * 100).toFixed(4)}%\nComponentization error: ${(evaluation.fitness.componentizationError * 100).toFixed(1)}%\nMetadata error: ${(evaluation.fitness.metadataError * 100).toFixed(1)}%\nInteraction error: ${(evaluation.fitness.interactionError * 100).toFixed(1)}%\nMutation-control recall: ${(evaluation.mutationControlRecall * 100).toFixed(1)}%`);
+    if (!evaluation.accepted) process.exitCode = 3;
+  });
+adapter
+  .command("research")
+  .description("run one-change adapter policy experiments with sealed holdout promotion")
+  .option("--fixtures <path>", "synthetic manifest", "fixtures/generated/manifest.json")
+  .option("--budget <number>", "one-change experiment budget", "3")
+  .addOption(new Option("--split <split>", "search split").choices(["train", "validation"]).default("validation"))
+  .option("--targets <targets>", "comma-separated framework targets")
+  .option("--viewport <pixels>", "visual-equivalence capture viewport")
+  .option("--limit <number>", "optional fixture limit per split")
+  .option("--fresh", "start from the deliberately weak baseline instead of resuming the incumbent")
+  .option("--no-capture", "skip browser image diffing while retaining native compile and DOM round-trip gates")
+  .action(async (options: { fixtures: string; budget: string; split: "train" | "validation"; targets?: string; viewport?: string; limit?: string; fresh?: boolean; capture: boolean }) => {
+    const project = await config();
+    const summary = await runFrameworkAdapterResearch({ manifestPath: resolve(options.fixtures), workspace: resolve(project.workspace), budget: Number.parseInt(options.budget, 10), split: options.split, targets: adapterTargets(options.targets, project), capture: options.capture, viewport: Number.parseInt(options.viewport ?? String(project.adapters?.captureViewport ?? 1280), 10), browserExecutable: project.capture.browserExecutable, ...(options.limit ? { limit: Number.parseInt(options.limit, 10) } : {}), fresh: options.fresh });
+    emit(result("adapter research", summary), `Adapter research complete\nKept: ${summary.accepted}; reverted: ${summary.rejected}\nComponentization error: ${(summary.initialFitness.componentizationError * 100).toFixed(1)}% → ${(summary.finalFitness.componentizationError * 100).toFixed(1)}%\nMetadata error: ${(summary.initialFitness.metadataError * 100).toFixed(1)}% → ${(summary.finalFitness.metadataError * 100).toFixed(1)}%\nSealed holdout: ${summary.holdoutNonRegression ? "pass" : "fail"}\nProduction promotion: ${summary.promoted ? "accepted" : "unchanged"}\n${summary.reason}\nIncumbent: ${summary.incumbentPath}`);
   });
 
 program
@@ -499,15 +574,18 @@ program
     try { browser = await findBrowserExecutable(); } catch (error) { warnings.push(error instanceof Error ? error.message : String(error)); }
     let projectConfig = false;
     let automaticcss: { version: string; mode: string; variables: number; utilityClasses: number; sourceHash: string } | null = null;
+    let frameworkAdapters: { targets: string[]; policy: string } | null = null;
     try {
       const project = await config(); projectConfig = true;
       const bundle = await prepareConfiguredAutomaticCss(project, globals().acss);
+      const adapterPolicy = await currentAdapterPolicy(project);
+      frameworkAdapters = { targets: project.adapters?.targets ?? ALL_FRAMEWORK_ADAPTER_TARGETS, policy: adapterPolicy.name };
       if (bundle) automaticcss = { version: bundle.provenance.version, mode: bundle.provenance.moduleMode, variables: bundle.registry.tokens.length, utilityClasses: bundle.catalog.utilityClasses.length, sourceHash: bundle.provenance.sourceHash };
       else warnings.push("Automatic.css is not configured or no release ZIP was discovered");
     } catch (error) { warnings.push(error instanceof Error ? error.message : String(error)); }
-    const data = { version: program.version(), runtime: `Bun ${Bun.version}`, platform: `${process.platform}/${process.arch}`, browser, projectConfig, automaticcss, registeredPasses: createPassRegistry().list().length, externalModelProvider: process.env.GEN2PROD_MODEL_ENDPOINT ? "configured" : "local deterministic provider" };
+    const data = { version: program.version(), runtime: `Bun ${Bun.version}`, platform: `${process.platform}/${process.arch}`, browser, projectConfig, automaticcss, frameworkAdapters, registeredPasses: createPassRegistry().list().length, externalModelProvider: process.env.GEN2PROD_MODEL_ENDPOINT ? "configured" : "local deterministic provider" };
     const envelope = result("doctor", data); envelope.warnings = warnings; envelope.ok = Boolean(browser && projectConfig);
-    emit(envelope, `Gen2Prod ${data.version}\n${data.runtime}\n${data.platform}\nBrowser: ${browser ?? "missing"}\nConfiguration: ${projectConfig ? "valid" : "missing/invalid"}\nAutomatic.css: ${automaticcss ? `${automaticcss.version}/${automaticcss.mode} (${automaticcss.variables} variables; ${automaticcss.utilityClasses} utility classes)` : "missing"}\nRegistered passes: ${data.registeredPasses}\nPlanner: ${data.externalModelProvider}`);
+    emit(envelope, `Gen2Prod ${data.version}\n${data.runtime}\n${data.platform}\nBrowser: ${browser ?? "missing"}\nConfiguration: ${projectConfig ? "valid" : "missing/invalid"}\nAutomatic.css: ${automaticcss ? `${automaticcss.version}/${automaticcss.mode} (${automaticcss.variables} variables; ${automaticcss.utilityClasses} utility classes)` : "missing"}\nFramework adapters: ${frameworkAdapters ? `${frameworkAdapters.targets.join(", ")} (${frameworkAdapters.policy})` : "missing"}\nRegistered passes: ${data.registeredPasses}\nPlanner: ${data.externalModelProvider}`);
   });
 
 program.parseAsync(process.argv).catch((error: unknown) => {

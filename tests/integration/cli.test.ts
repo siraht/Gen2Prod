@@ -4,7 +4,7 @@ test("exposes the full human and automation command surface", async () => {
   const child = Bun.spawn(["bun", "src/cli.ts", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
   const output = await new Response(child.stdout).text();
   expect(await child.exited).toBe(0);
-  for (const command of ["init", "acss", "synth", "evaluate", "run", "validate", "research", "distill", "report", "doctor"]) expect(output).toContain(command);
+  for (const command of ["init", "acss", "synth", "evaluate", "run", "adapter", "validate", "research", "distill", "report", "doctor"]) expect(output).toContain(command);
 });
 
 test("doctor emits a stable JSON envelope", async () => {
@@ -22,6 +22,18 @@ test("exposes framework adapter selection on production runs", async () => {
   expect(output).toContain("--adapters");
   expect(output).toContain("react,vue,svelte,astro,wordpress,bricks");
 });
+
+test("exposes native adapter emit, evaluate, and research workflows", async () => {
+  const child = Bun.spawn(["bun", "src/cli.ts", "adapter", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
+  const output = await new Response(child.stdout).text();
+  expect(await child.exited).toBe(0);
+  for (const command of ["emit", "evaluate", "research"]) expect(output).toContain(command);
+  const research = Bun.spawn(["bun", "src/cli.ts", "adapter", "research", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
+  const researchOutput = await new Response(research.stdout).text();
+  expect(await research.exited).toBe(0);
+  expect(researchOutput).toContain("--fresh");
+  expect(researchOutput).toContain("--no-capture");
+}, 15_000);
 
 test("exposes naturalistic import and modality ablation controls", async () => {
   const synth = Bun.spawn(["bun", "src/cli.ts", "synth", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
