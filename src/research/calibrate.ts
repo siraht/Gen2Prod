@@ -93,6 +93,18 @@ export function captureEnvironmentFingerprint(environment: Record<string, unknow
   return hashJson({ ...identity, ...(stabilization && Object.keys(stabilization).length ? { stabilization } : {}) });
 }
 
+function fixtureGroupKey(sample: Sample): string {
+  return hashJson({
+    fixtureId: sample.fixture.fixtureId,
+    seed: sample.evaluation.benchmarkCoverage?.seed ?? null,
+    generatorFamily: sample.fixture.generatorFamily ?? null,
+    contentFamily: sample.fixture.contentFamily ?? null,
+    archetype: sample.fixture.archetype ?? null,
+    variantIndex: sample.fixture.variantIndex ?? null,
+    corruptionKinds: [...(sample.fixture.corruptionKinds ?? [])].sort(),
+  });
+}
+
 export function calibrateEvaluationResults(inputs: EvaluationInput[], overrides: Partial<CalibrationRequirements> = {}, rejected: { path: string; reason: string }[] = [], requested: string[] = inputs.map((input) => input.path)): CalibrationReport {
   const requirements = { ...defaultCalibrationRequirements, ...overrides };
   const evaluatorSafe = inputs.filter((input) => input.result.mutationControlRecall === 1);
@@ -100,7 +112,7 @@ export function calibrateEvaluationResults(inputs: EvaluationInput[], overrides:
   const samples: Sample[] = [];
   const seenGroups = new Set<string>();
   for (const sample of rawSamples) {
-    const group = `${sample.evaluation.frozenEvaluatorHash}:${sample.fixture.fixtureId}`;
+    const group = fixtureGroupKey(sample);
     if (seenGroups.has(group)) continue;
     seenGroups.add(group);
     samples.push(sample);

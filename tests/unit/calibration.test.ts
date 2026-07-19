@@ -56,7 +56,7 @@ describe("threshold calibration", () => {
 
   test("deduplicates correlated policy reruns and withholds sparse recommendations", () => {
     const first = evaluation({ id: "a", fixture: "fixture-a", visual: 0.01, bem: 1, token: 1, archetype: "hero", family: "generator-a", content: "saas", seed: 1, split: "train", environment: "chromium-a" });
-    const duplicate = EvaluationResultSchema.parse({ ...first, evaluationId: "duplicate", policyHash: "another-policy" });
+    const duplicate = EvaluationResultSchema.parse({ ...first, evaluationId: "duplicate", policyHash: "another-policy", frozenEvaluatorHash: "revised-evaluator" });
     const second = evaluation({ id: "b", fixture: "fixture-b", visual: 0.03, bem: 0.98, token: 0.97, archetype: "form", family: "generator-b", content: "services", seed: 2, split: "holdout", environment: "chromium-b" });
     const report = calibrateEvaluationResults([{ path: "a.json", result: first }, { path: "duplicate.json", result: duplicate }, { path: "b.json", result: second }]);
 
