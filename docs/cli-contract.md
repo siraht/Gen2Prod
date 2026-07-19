@@ -24,9 +24,12 @@ gen2prod image research [--catalog path] [--captures path] [--budget N]
 gen2prod evaluate [--split validation|holdout|all] [--policy path]
 gen2prod calibrate [evaluation.json ...] [--output path]
 gen2prod run <input> [--mode MODE] [--profile PROFILE] [--visual-target path]
+gen2prod adapter emit <run> [--targets react,vue,svelte,astro,wordpress,bricks] [--policy path] [--no-capture]
+gen2prod adapter evaluate [--fixtures path] [--split train|validation|holdout|all] [--policy path] [--no-capture]
+gen2prod adapter research [--fixtures path] [--budget N] [--split train|validation] [--fresh] [--no-capture]
 gen2prod validate <run-or-output>
 gen2prod research [--fixtures path] [--track policy|pass|verifier] [--budget N] [--naturalistic manifest] [--naturalistic-max-per-project N] [--naturalistic-limit N]
-gen2prod distill [--trajectories path] [--naturalistic path] [--image path...] [--target selector|verifier|planner|all]
+gen2prod distill [--trajectories path] [--naturalistic path] [--image path...] [--adapter path...] [--target selector|verifier|planner|all]
 gen2prod report [run]
 gen2prod doctor
 ```
@@ -45,6 +48,8 @@ Global flags are `--config <path>`, `--workspace <path>`, `--acss <plugin-zip-or
 - `calibrate` groups correlated fixture/policy/evaluator reruns, excludes structurally unsafe samples, audits family/seed/capture-environment coverage, and withholds activatable thresholds until its minimum independent support is met.
 - Image-only manifests declare exactly which hash-bound frames a builder may read. URLs, source/DOM/CSS, live extraction, and link records are quarantined; a post-build `image audit` cannot alter emitted files or policy inputs.
 - Image research searches train projects, promotes only validation improvements without hard regressions, reveals holdout projects only for the final audit, and exports accepted and rejected trajectories. Multiple image JSONLs can be blended with `distill --image`.
+- Adapter emission serializes accepted G2P-NF; it does not re-infer semantics. Each selected target must native-compile/render, preserve content/forms/BEM/token CSS, and pass its canonical-vs-native browser diff before the production Gate A assertion passes.
+- Adapter research freezes evaluator/corpus hashes, changes one policy field at a time, rejects no-op source interventions, preserves mutation-control recall, reveals holdout only after search, and promotes only after exact output-hash replay. `distill --adapter` blends its accepted and rejected trajectories without fixture-group leakage.
 - `image evaluate` separates visual-target acceptance from target quality. A large uniform/sparse capture region becomes an explicit recapture/review action even when the candidate accurately reproduces those pixels.
 
 ## Exit codes

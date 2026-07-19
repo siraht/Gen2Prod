@@ -1058,6 +1058,8 @@ Approved screenshots and mockups may be authoritative visual targets
 Screenshots and mockups are never authoritative source code, semantics, behavior, or token-name evidence
 ```
 
+Executable implementation note (2026-07-19): static HTML/CSS remains the canonical **input** compiler, but accepted G2P-NF now has production-gated **output** adapters for React/JSX, Vue SFC, Svelte, Astro, WordPress block themes, and Bricks. Every target preserves the canonical nested class-only BEM SCSS and ACSS/project token CSS, native-compiles/renders, round-trips semantic/content/form contracts, and browser-diffs against canonical HTML. A frozen one-change adapter research loop improves componentization, metadata, and verified-interaction policy, then promotes only after a sealed holdout and exact source-hash replay. This does not claim direct source-preserving ingestion/patching of an existing dynamic framework project; that separate boundary still requires authority over conditional branches, state, routing, plugin versions, and destination integration.
+
 A screenshot-only input can specify the desired visual state for a viewport, but it cannot reliably prove DOM semantics, behavior, token names, content intent, or responsive rules without corroborating source/design metadata. Treat it as a **visual target**, not a complete product contract. Conversely, source code may contain conditional branches not present in a captured render, so rendered truth is authoritative only for the captured states while source analysis remains necessary for unrendered states.
 
 ### 5.1.1 Input authority matrix
@@ -2223,6 +2225,8 @@ performance audit
 SEO audit
 security/privacy audit
 ```
+
+The executable framework-output gate runs the real React/Vue/Svelte server toolchains, an actual Astro static build, WordPress core-block structural validation, and Bricks/CMS-tree validation. Each rendered target is also compared with canonical output for semantic structure, copy, URLs, forms, BEM coverage, token stylesheet bytes, forbidden selectors, explicit interaction bindings, and browser image difference.
 
 ## C11 — Repair
 
@@ -3704,7 +3708,7 @@ MVP 1C: build + BEM + token gates, basic visual regression, one localized repair
 Defer from MVP 1:
 
 ```txt
-framework adapters beyond static HTML/limited JSX
+direct framework-source ingestion/patch adapters beyond static HTML (native framework/CMS output adapters now run after G2P-NF)
 multi-page consistency
 complex interaction synthesis
 screenshot-only source inference

@@ -1,6 +1,6 @@
 # Gen2Prod styling contract
 
-This contract applies to every clean stylesheet emitted by dirty-HTML compilation, greenfield generation, synthetic gold generation, image-only reconstruction, convergence, and research candidates. Dirty inputs and evaluator mutations may violate it; accepted output may not.
+This contract applies to every clean stylesheet emitted by dirty-HTML compilation, greenfield generation, synthetic gold generation, image-only reconstruction, convergence, native framework/CMS adaptation, and research candidates. Dirty inputs and evaluator mutations may violate it; accepted output may not.
 
 ## Selector architecture
 
@@ -10,6 +10,7 @@ This contract applies to every clean stylesheet emitted by dirty-HTML compilatio
 - Compiled styling selectors must be class-only BEM selectors. Element, universal, ID, attribute, descendant, child, sibling, tag-qualified, cross-block, and utility selectors are hard failures.
 - The supported class grammar is one block, at most one element, and at most one modifier. Multiple BEM classes may be mixed on one HTML node, but generated CSS does not couple those classes in a combined selector.
 - Generated markup contains no Tailwind or ACSS utility classes. The imported ACSS class catalog is used to recognize and remove dirty framework classes; it is not an emission catalog.
+- React, Vue, Svelte, Astro, WordPress, and Bricks components carry the same semantic BEM class graph. Adapters may not replace shared SCSS with CSS-in-JS, scoped-style rewrites, utility props, inline styles, CMS style settings, or framework element selectors.
 
 This is intentionally stricter than allowing global reset selectors. Dirty `html`, `body`, `:host`, and `:root` document foundations are cascade-resolved onto the semantic `.page` block. Universal source foundations are lowered onto every generated primary BEM class because non-inherited properties such as `box-sizing` must retain their geometry without emitting `*`. The output does not style document elements directly.
 
@@ -28,6 +29,8 @@ This is intentionally stricter than allowing global reset selectors. Dirty `html
 Gate B parses both SCSS and compiled CSS. It rejects non-class selectors, invalid BEM, utility selectors, cross-block coupling, top-level element/modifier/state rules, excessive specificity, and orphan selectors.
 
 Gate C requires direct token coverage, complete runtime reference resolution, registered component aliases, no raw governed values, and no `!important`. The same analyzers run inside the image builder before artifacts are written and again in image evaluation.
+
+Framework adapter validation additionally compares `page.scss` and `page.css` to the canonical compiler bytes, builds/renders the target with its native toolchain, reconstructs the semantic DOM, and browser-diffs the native result against canonical HTML. A framework build cannot pass by producing clean-looking source with different pixels, and pixel equality cannot excuse a selector, BEM, token, content, form, or behavior-contract failure.
 
 The frozen verifier injects element selectors, flat BEM rules, utility selectors, unregistered variables, raw governed values, and other independent defects. All mutations must still be caught after every policy or compiler change.
 

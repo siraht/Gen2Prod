@@ -6,13 +6,14 @@ Gen2Prod turns uncertain website artifacts into semantic, BEM-structured, token-
 
 **The problem:** AI-generated pages can look plausible while hiding div soup, utility-class drift, raw design values, broken behavior, weak accessibility, and no reproducible way to decide whether a cleanup actually improved anything.
 
-**The solution:** Gen2Prod recovers a typed canonical normal form, emits HTML/SCSS deterministically, captures browser truth, enforces hard gates, repairs locally, benchmarks policy changes on synthetic and held-out fixtures, and distills accepted/rejected trajectories into smaller selector, verifier, and planner models.
+**The solution:** Gen2Prod recovers a typed canonical normal form, emits canonical HTML/SCSS plus native React, Vue, Svelte, Astro, WordPress, and Bricks bundles, captures browser truth, enforces hard gates, repairs locally, benchmarks policy changes on synthetic and held-out fixtures, and distills accepted/rejected trajectories into smaller selector, verifier, and planner models.
 
 | Capability | Concrete result |
 | --- | --- |
 | Measured compiler | Source, rendered DOM, accessibility tree, computed styles, boxes, screenshots, intent, components, and tokens reconcile into G2P-NF |
 | Hard constraints | Build, BEM, token, inline-style, accessibility, SEO, security, and mode-specific visual failures cannot be outweighed by a soft score |
 | Styling contract | Clean output is nested SCSS with class-only BEM selectors, no utilities or element styling, and 100% direct registered-token coverage |
+| Native adapters | One accepted G2P-NF build fans out to React/JSX, Vue, Svelte, Astro, WordPress, and Bricks; every target is natively built/rendered and browser-diffed against canonical HTML |
 | Reproducibility | Content hashes, manifests, source authority, versioned schemas, replay events, and idempotence checks make every decision attributable |
 | Synthetic curriculum | Ten archetypes plus imported model-generator families produce strategy, page briefs, varied content, rendered mockups, gold code, marked/unmarked dirty inputs, image diffs, dynamic states, lineage, controls, and held-out splits |
 | Strict image-only loop | Live captures or generated mockups become hash-bound visual targets; local OCR/segmentation proposes semantic BEM builds, dirty/target/candidate image diffs score them, and source leakage is forbidden |
@@ -53,7 +54,11 @@ bun run cli -- distill --target all
 bun run cli -- run fixtures/generated/hero-cta/fixture.corrupted.html \
   --css fixtures/generated/hero-cta/corrupted.css \
   --tokens fixtures/generated/hero-cta/fixture.gold.tokens.json \
+  --adapters react,vue,svelte,astro,wordpress,bricks \
   --mode legacy-conversion --profile refactor
+
+# Improve adapter componentization/metadata/interaction policy and promote only after sealed replay.
+bun run cli -- adapter research --fixtures fixtures/generated/manifest.json --budget 3 --fresh
 
 # Generate from strategy/content constraints instead.
 bun run cli -- run examples/project.brief.json \
@@ -151,6 +156,7 @@ Global flags:
 | `evaluate --ablation` | Run controlled evidence configurations A through F | `gen2prod evaluate --split validation --ablation` |
 | `calibrate` | Deduplicate correlated evaluations, audit benchmark coverage, and withhold unsafe threshold activation | `gen2prod calibrate --output .gen2prod/calibration/report.json` |
 | `run <input>` | Execute any production mode | `gen2prod run page.html --css app.css --tokens tokens.json` |
+| `adapter emit/evaluate/research` | Emit native framework/CMS bundles, benchmark them, and promote one-change policy improvements after sealed replay | `gen2prod adapter research --budget 3 --fresh` |
 | `validate <target>` | Run Gates A–J on emitted files | `gen2prod validate .gen2prod/runs/<run-id>` |
 | `research` | Run policy/pass/verifier keep-revert experiments with optional natural-project constraints and sealed holdout promotion | `gen2prod research --track pass --budget 8 --naturalistic .gen2prod/corpus/naturalistic/manifest.json` |
 | `distill` | Export datasets and train selected models | `gen2prod distill --target verifier` |
@@ -192,9 +198,14 @@ validation:
   maxVisualPixelRatio: 0.01
   minBemCoverage: 0.95
   minTokenCoverage: 0.95
+
+adapters:
+  targets: [react, vue, svelte, astro, wordpress, bricks]
+  visualValidation: true
+  captureViewport: 1280
 ```
 
-Precedence is command flags, `GEN2PROD_*` environment variables, project configuration, then built-in defaults. After research accepts an incumbent policy, `run` and `evaluate` automatically prefer `.gen2prod/research/incumbent-policy.json`; an explicit `--policy` always wins.
+Precedence is command flags, `GEN2PROD_*` environment variables, project configuration, then built-in defaults. After research accepts an incumbent policy, `run` and `evaluate` automatically prefer `.gen2prod/research/incumbent-policy.json`; adapter emission similarly prefers `.gen2prod/adapters/research/incumbent-policy.json`. An explicit `--policy` always wins.
 
 Automatic.css is the default runtime design-system authority. `acss prepare` safely reads the plugin ZIP or directory, records version/license/source hashes, compiles the shipped Sass, and writes `.gen2prod/acss/acss.registry.json`, `acss.catalog.json`, `acss.defaults.css`, and `acss.provenance.json`. The plugin source is not copied into the repository. Token authority is, from highest to lowest: an approved `--tokens` registry, project-compiled CSS variables, then version-scoped ACSS release defaults. The release class catalog is used to recognize dirty ACSS utilities, but clean output remains conceptual BEM and emits only referenced token definitions plus their dependency closure.
 
@@ -209,7 +220,7 @@ flowchart TD
   subgraph Production["Production transformation loop"]
     A["Source / brief / visual target"] --> B["Evidence acquisition"]
     B --> C["G2P Normal Form"]
-    C --> D["Deterministic HTML + SCSS"]
+    C --> D["Canonical HTML/SCSS + native adapters"]
     D --> E["Gates A–J"]
     E -->|localized failure| F["Narrow repair plan"]
     F --> D
@@ -265,11 +276,14 @@ Important on-disk artifacts:
     builds/<target>/{page.html,page.scss,evaluation/,required-actions.json}
     research/{incumbent-policy.json,<research-id>/image-trajectories.jsonl}
     synthetic-evaluation/{summary.json,image-trajectories.jsonl}
+  adapters/
+    research/{incumbent-policy.json,research-summary.json,trajectories.jsonl}
+    evaluations/
 ```
 
-The normative designs are [docs/Gen2Prod_plan_v2_3_4_revised.md](docs/Gen2Prod_plan_v2_3_4_revised.md) and [docs/karpathyloop.md](docs/karpathyloop.md). [docs/implementation-matrix.md](docs/implementation-matrix.md) maps each layer to executable evidence. [docs/image-only-loop.md](docs/image-only-loop.md) defines the strict screenshot path and its authority boundary. [docs/dataset-intake.md](docs/dataset-intake.md) defines how to contribute exact, partial, and non-1:1 real examples.
+The normative designs are [docs/Gen2Prod_plan_v2_3_4_revised.md](docs/Gen2Prod_plan_v2_3_4_revised.md) and [docs/karpathyloop.md](docs/karpathyloop.md). [docs/implementation-matrix.md](docs/implementation-matrix.md) maps each layer to executable evidence. [docs/framework-adapters.md](docs/framework-adapters.md) defines native output, validation, and promotion contracts. [docs/image-only-loop.md](docs/image-only-loop.md) defines the strict screenshot path and its authority boundary. [docs/dataset-intake.md](docs/dataset-intake.md) defines how to contribute exact, partial, and non-1:1 real examples.
 
-Both research evaluations and production runs feed `research/trajectories.jsonl`. The former contributes accepted/rejected policy trials; the latter contributes real-run observations, exact idempotence labels, hard-gate labels, and measured evaluator-mutation recall. Distillation deduplicates them by evidence, isolates project/fixture groups across train and holdout, and quarantines any identical evidence/action/output group with conflicting keep/revert labels. Naturalistic output can be added without rewriting the procedural generator:
+Research evaluations, adapter experiments, and production runs feed trajectory ledgers. They contribute accepted/rejected policy trials, real-run observations, exact replay labels, hard-gate labels, and measured evaluator-mutation recall. `distill --adapter` blends framework-adapter trajectories with the main, naturalistic, and image ledgers. Distillation deduplicates them by evidence, isolates project/fixture groups across train and holdout, and quarantines any identical evidence/action/output group with conflicting keep/revert labels. Naturalistic output can be added without rewriting the procedural generator:
 
 ```bash
 gen2prod synth import canonical-spec.json model-page.html \
@@ -346,7 +360,7 @@ gen2prod synth prepare --force
 
 ## Limitations
 
-- Static HTML plus compiled CSS is the production-ready conversion adapter. JSX/TSX, Vue, Svelte, Astro, template, builder, and CMS adapters are represented in the architecture but not yet source-patching implementations.
+- Canonical static HTML/SCSS and native React, Vue, Svelte, Astro, WordPress, and Bricks output are production-gated. Directly ingesting and source-preservingly patching an existing dynamic framework/CMS codebase remains bounded; current adapters serialize accepted G2P-NF rather than reconstructing unobserved application branches or mutating a destination repository.
 - The shipped production planner is deterministic and fixture-proven. The structured HTTP provider contract and naturalistic-import path are available, but selecting an external model, credentials, prompts, and cost ceiling remains a project-owner decision.
 - Automatic accessibility checks do not establish full WCAG conformance. Screen-reader usability, alternative-text quality, reading-order nuance, and cognitive clarity remain human review tasks.
 - Lab performance evidence does not replace field Core Web Vitals data. Real sites must connect segmented RUM before claiming field outcomes.

@@ -84,3 +84,5 @@ Before claiming production outcomes, connect or supply:
 - CSP nonce/hash policy for approved inline JSON-LD or scripts;
 - real form endpoints and privacy/data-handling review;
 - browser/OS release matrix if the site requires more than the default Chrome capture.
+
+Native framework and CMS bundles are emitted and locally gated without human intervention. Merging one into an existing application still requires the destination project to declare its router/layout/head conventions, data and state boundaries, framework/plugin versions, build command, and ownership of conflicting local components. WordPress/Bricks deployment additionally requires a staging site, exact plugin/theme versions, import permissions, sanitization rules, and a reviewed backup/rollback path. These are destination-integration authorities, not reasons to weaken native build or image-diff gates.
