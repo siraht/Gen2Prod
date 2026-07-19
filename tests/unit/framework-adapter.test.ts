@@ -3,6 +3,9 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import ts from "typescript";
+import { parse as parseVue, compileScript as compileVueScript, compileTemplate as compileVueTemplate } from "@vue/compiler-sfc";
+import { compile as compileSvelte } from "svelte/compiler";
+import { transform as compileAstro } from "@astrojs/compiler";
 import { compileStaticPage } from "../../src/compiler/pipeline.ts";
 import { emitFrameworkAdapter } from "../../src/adapters/emit.ts";
 import { defaultFrameworkAdapterPolicy } from "../../src/adapters/policy.ts";
@@ -46,6 +49,33 @@ describe("framework adapters", () => {
         fileName: file.path,
       });
       expect(transpiled.diagnostics ?? []).toHaveLength(0);
+    }
+  });
+
+  test("emits native Vue, Svelte, and Astro component sources", async () => {
+    const { directory, compiled } = await compileDialog();
+    for (const target of ["vue", "svelte", "astro"] as const) {
+      const output = join(directory, target);
+      const manifest = await emitFrameworkAdapter({ compiled, target, outputDirectory: output, policy: defaultFrameworkAdapterPolicy });
+      expect(manifest.componentCount).toBeGreaterThan(1);
+      expect(manifest.interactionBindings).toBe(1);
+      expect(await Bun.file(join(output, "page.scss")).text()).toBe(compiled.scss);
+      expect(await Bun.file(join(output, "page.css")).text()).toBe(compiled.css);
+
+      for (const file of manifest.files) {
+        const source = await Bun.file(join(output, file.path)).text();
+        if (file.path.endsWith(".vue")) {
+          const parsed = parseVue(source, { filename: file.path });
+          expect(parsed.errors).toHaveLength(0);
+          if (parsed.descriptor.scriptSetup) compileVueScript(parsed.descriptor, { id: file.path });
+          if (parsed.descriptor.template) {
+            const result = compileVueTemplate({ source: parsed.descriptor.template.content, filename: file.path, id: file.path, ssr: true });
+            expect(result.errors).toHaveLength(0);
+          }
+        }
+        if (file.path.endsWith(".svelte")) expect(() => compileSvelte(source, { filename: file.path, generate: "server" })).not.toThrow();
+        if (file.path.endsWith(".astro")) expect((await compileAstro(source, { filename: file.path })).diagnostics.filter((item) => item.severity === 1)).toHaveLength(0);
+      }
     }
   });
 });

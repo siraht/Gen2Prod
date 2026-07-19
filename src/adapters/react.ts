@@ -1,6 +1,7 @@
 import type { PlannedNode } from "../compiler/types.ts";
-import { adapterAttributes, BOOLEAN_ATTRIBUTES, componentRoots, dialogBindingCount, orderedNodeParts, pageMetadata, VOID_TAGS } from "./common.ts";
+import { adapterAttributes, BOOLEAN_ATTRIBUTES, componentRoots, dialogBindingCount, directComponentChildren, orderedNodeParts, pageMetadata, VOID_TAGS } from "./common.ts";
 import type { AdapterGenerationContext, ComponentRoot, GeneratedAdapter, GeneratedAdapterFile } from "./types.ts";
+import { verifiedInteractionRuntimeFile } from "./interaction-runtime.ts";
 
 const REACT_ATTRIBUTE_NAMES: Record<string, string> = {
   acceptcharset: "acceptCharset",
@@ -72,31 +73,7 @@ function renderResourceLinks(context: AdapterGenerationContext): string[] {
 
 function interactionFiles(): GeneratedAdapterFile[] {
   return [
-    {
-      path: "interactions/installVerifiedInteractions.ts",
-      role: "interaction",
-      contents: `export function installVerifiedInteractions(root: Document = document): () => void {
-  const disposers: Array<() => void> = [];
-  for (const trigger of root.querySelectorAll<HTMLButtonElement>("[data-g2p-dialog-trigger]")) {
-    const targetId = trigger.dataset.g2pDialogTrigger;
-    const target = targetId ? root.getElementById(targetId) : null;
-    if (!(target instanceof HTMLDialogElement)) continue;
-    const open = () => {
-      target.showModal();
-      trigger.setAttribute("aria-expanded", "true");
-    };
-    const close = () => trigger.setAttribute("aria-expanded", "false");
-    trigger.addEventListener("click", open);
-    target.addEventListener("close", close);
-    disposers.push(() => {
-      trigger.removeEventListener("click", open);
-      target.removeEventListener("close", close);
-    });
-  }
-  return () => disposers.forEach((dispose) => dispose());
-}
-`,
-    },
+    verifiedInteractionRuntimeFile(),
     {
       path: "interactions/ClientInteractions.tsx",
       role: "interaction",
@@ -123,7 +100,7 @@ export function generateReactAdapter(context: AdapterGenerationContext): Generat
   const body = root.tag === "body"
     ? renderNode(root, { replacements, verifiedInteractions: verifiedBindings > 0 })
     : `  <body>\n${renderNode(root, { depth: 2, replacements, verifiedInteractions: verifiedBindings > 0 })}\n  </body>`;
-  const componentImports = components.map((component) => `import ${component.name} from "./components/${component.name}";`);
+  const componentImports = directComponentChildren(root, components).map((component) => `import ${component.name} from "./components/${component.name}";`);
   const clientImport = verifiedBindings > 0 ? ["import ClientInteractions from \"./interactions/ClientInteractions\";"] : [];
   const bodyWithClient = verifiedBindings > 0 ? body.replace(/\n<\/body>$/, "\n    <ClientInteractions />\n</body>") : body;
   const resources = renderResourceLinks(context);
@@ -157,11 +134,14 @@ export default function PageDocument() {
     { path: "PageDocument.tsx", role: "entry", contents: document },
     { path: "page.scss", role: "style", contents: context.compiled.scss },
     { path: "page.css", role: "style", contents: context.compiled.css },
-    ...components.map((component): GeneratedAdapterFile => ({
-      path: `components/${component.name}.tsx`,
-      role: "component",
-      contents: `const ${component.name}Markup = (\n${renderNode(component.node, { depth: 1, replacements, skipReplacement: component.node.nodeId, verifiedInteractions: verifiedBindings > 0 })}\n);\n\nexport default function ${component.name}() {\n  return ${component.name}Markup;\n}\n`,
-    })),
+    ...components.map((component): GeneratedAdapterFile => {
+      const imports = directComponentChildren(component.node, components).map((child) => `import ${child.name} from "./${child.name}";`).join("\n");
+      return {
+        path: `components/${component.name}.tsx`,
+        role: "component",
+        contents: `${imports}${imports ? "\n\n" : ""}const ${component.name}Markup = (\n${renderNode(component.node, { depth: 1, replacements, skipReplacement: component.node.nodeId, verifiedInteractions: verifiedBindings > 0 })}\n);\n\nexport default function ${component.name}() {\n  return ${component.name}Markup;\n}\n`,
+      };
+    }),
     ...(verifiedBindings > 0 ? interactionFiles() : []),
     {
       path: "package.fragment.json",

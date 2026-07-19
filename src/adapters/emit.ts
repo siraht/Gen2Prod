@@ -4,6 +4,9 @@ import { hashJson, sha256 } from "../core/hash.ts";
 import { FrameworkAdapterManifestSchema, type FrameworkAdapterManifest, type FrameworkAdapterPolicy, type FrameworkAdapterTarget } from "../schemas/adapters.ts";
 import type { CompiledPage } from "../compiler/types.ts";
 import { generateReactAdapter } from "./react.ts";
+import { generateAstroAdapter } from "./astro.ts";
+import { generateSvelteAdapter } from "./svelte.ts";
+import { generateVueAdapter } from "./vue.ts";
 import type { GeneratedAdapter } from "./types.ts";
 
 export type EmitFrameworkAdapterOptions = {
@@ -15,6 +18,9 @@ export type EmitFrameworkAdapterOptions = {
 
 function generate(target: FrameworkAdapterTarget, compiled: CompiledPage, policy: FrameworkAdapterPolicy): GeneratedAdapter {
   if (target === "react") return generateReactAdapter({ compiled, policy });
+  if (target === "vue") return generateVueAdapter({ compiled, policy });
+  if (target === "svelte") return generateSvelteAdapter({ compiled, policy });
+  if (target === "astro") return generateAstroAdapter({ compiled, policy });
   throw new Error(`Framework adapter ${target} is not registered`);
 }
 

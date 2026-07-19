@@ -35,6 +35,21 @@ export function componentRoots(compiled: CompiledPage): ComponentRoot[] {
   });
 }
 
+export function directComponentChildren(node: PlannedNode, components: ComponentRoot[]): ComponentRoot[] {
+  const byNode = new Map(components.map((component) => [component.node.nodeId, component]));
+  const found: ComponentRoot[] = [];
+  const visit = (current: PlannedNode): void => {
+    const component = byNode.get(current.nodeId);
+    if (component && current !== node) {
+      found.push(component);
+      return;
+    }
+    for (const child of current.children) visit(child);
+  };
+  for (const child of node.children) visit(child);
+  return found;
+}
+
 export function pageMetadata(compiled: CompiledPage): { title: string; description: string; lang: string; htmlAttributes: Record<string, string> } {
   const nodes = allPlannedNodes(compiled.plan.semantics.root);
   const title = compiled.plan.source.metadata.title.trim() || nodes.find((node) => node.tag === "h1")?.text.trim() || "Production page";
