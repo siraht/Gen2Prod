@@ -72,7 +72,7 @@ export const FrameworkAdapterEvaluationSchema = z.object({
   accepted: z.boolean(),
 });
 
-export const CmsNodeSchema: z.ZodType<{
+export type CmsNodeShape = {
   id: string;
   parentId: string | null;
   tag: string;
@@ -81,8 +81,10 @@ export const CmsNodeSchema: z.ZodType<{
   text: string;
   content: ({ kind: "text"; value: string } | { kind: "child"; nodeId: string })[];
   component: string | null;
-  children: unknown[];
-}> = z.lazy(() => z.object({
+  children: CmsNodeShape[];
+};
+
+export const CmsNodeSchema: z.ZodType<CmsNodeShape> = z.lazy(() => z.object({
   id: z.string(),
   parentId: z.string().nullable(),
   tag: z.string(),
@@ -111,5 +113,5 @@ export type FrameworkAdapterPolicy = z.infer<typeof FrameworkAdapterPolicySchema
 export type FrameworkAdapterManifest = z.infer<typeof FrameworkAdapterManifestSchema>;
 export type FrameworkAdapterValidation = z.infer<typeof FrameworkAdapterValidationSchema>;
 export type FrameworkAdapterEvaluation = z.infer<typeof FrameworkAdapterEvaluationSchema>;
-export type CmsNode = z.infer<typeof CmsNodeSchema>;
+export type CmsNode = CmsNodeShape;
 export type CmsDocument = z.infer<typeof CmsDocumentSchema>;

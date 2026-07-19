@@ -37,14 +37,14 @@ export function generateAstroAdapter(context: AdapterGenerationContext): Generat
     {
       path: "package.fragment.json",
       role: "support",
-      contents: `${JSON.stringify({ dependencies: { astro: "^5.0.0" } }, null, 2)}\n`,
+      contents: `${JSON.stringify({ dependencies: { astro: "^7.0.0" } }, null, 2)}\n`,
     },
   ];
   return {
     target: "astro",
     entry: "Page.astro",
     files,
-    requirements: ["Astro >=5", "an Astro page route"],
+    requirements: ["Astro >=7", "an Astro page route"],
     integrationNotes: [
       "Page.astro is a complete document route and preserves the canonical html/body/head contract.",
       "page.css is imported once; page.scss remains the editable nested BEM source.",

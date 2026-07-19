@@ -12,6 +12,7 @@ import { defaultFrameworkAdapterPolicy } from "../../src/adapters/policy.ts";
 import { createArchetypes } from "../../src/synthetic/archetypes.ts";
 import { renderGold } from "../../src/synthetic/render.ts";
 import { CmsDocumentSchema } from "../../src/schemas/adapters.ts";
+import { validateFrameworkAdapter } from "../../src/adapters/validate.ts";
 
 async function compileDialog() {
   const spec = createArchetypes().find((item) => item.archetype === "dialog")!;
@@ -102,4 +103,23 @@ describe("framework adapters", () => {
       }
     }
   });
+
+  test("native-compiles and round-trips every adapter", async () => {
+    const { directory, compiled } = await compileDialog();
+    for (const target of ["react", "vue", "svelte", "astro", "wordpress", "bricks"] as const) {
+      const output = join(directory, `validated-${target}`);
+      const manifest = await emitFrameworkAdapter({ compiled, target, outputDirectory: output, policy: defaultFrameworkAdapterPolicy });
+      const validation = await validateFrameworkAdapter({ compiled, directory: output, manifest });
+      expect(validation.nativeCompilePassed, `${target}: ${validation.issues.join("; ")}`).toBeTrue();
+      expect(validation.nativeRenderPassed, `${target}: ${validation.issues.join("; ")}`).toBeTrue();
+      expect(validation.structuralEquivalence, `${target}: ${validation.issues.join("; ")}`).toBe(1);
+      expect(validation.textRecall).toBe(1);
+      expect(validation.urlRecall).toBe(1);
+      expect(validation.formRecall).toBe(1);
+      expect(validation.bemCoverage).toBe(1);
+      expect(validation.tokenStylesheetPreserved).toBeTrue();
+      expect(validation.forbiddenSelectorCount).toBe(0);
+      expect(validation.passed, `${target}: ${validation.issues.join("; ")}`).toBeTrue();
+    }
+  }, 60_000);
 });
