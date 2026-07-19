@@ -201,7 +201,7 @@ function renderCmsNode(node: CmsNode): string {
   const opening = `<${node.tag}${Object.keys(attributes).length ? ` ${renderAttributes(attributes)}` : ""}>`;
   if (VOID_TAGS.has(node.tag)) return opening;
   const children = new Map(node.children.map((child) => [child.id, child]));
-  const content = node.content.length
+  const content = node.content.some((part) => part.kind === "text")
     ? node.content.map((part) => part.kind === "text" ? escapeHtml(part.value) : children.has(part.nodeId) ? renderCmsNode(children.get(part.nodeId)!) : "").join("")
     : `${escapeHtml(node.text)}${node.children.map(renderCmsNode).join("")}`;
   return `${opening}${content}</${node.tag}>`;
@@ -318,7 +318,8 @@ async function policyExecutionIssues(directory: string, manifest: FrameworkAdapt
     const contents = new Uint8Array(await Bun.file(join(directory, file.path)).arrayBuffer());
     if (sha256(contents) !== file.sha256) issues.push(`${file.path}: source hash differs from adapter manifest`);
   }
-  const expectedComponents = manifest.policy.componentization === "bem-blocks" ? componentRoots(compiled).length + 1 : 1;
+  const cmsNativeComponents = manifest.target === "wordpress" || manifest.target === "bricks";
+  const expectedComponents = manifest.policy.componentization === "bem-blocks" || cmsNativeComponents ? componentRoots(compiled).length + 1 : 1;
   if (manifest.componentCount !== expectedComponents) issues.push(`Policy requested ${manifest.policy.componentization} componentization but manifest records ${manifest.componentCount}/${expectedComponents} components`);
   const entry = await Bun.file(join(directory, manifest.entry)).text();
   const paths = new Set(manifest.files.map((file) => file.path));

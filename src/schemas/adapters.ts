@@ -93,6 +93,79 @@ export const FrameworkAdapterSuiteSchema = z.object({
   passed: z.boolean(),
 });
 
+export const FrameworkAdapterFitnessSchema = z.object({
+  hardFailures: z.number().nonnegative(),
+  nativeCompileError: z.number().min(0).max(1),
+  nativeRenderError: z.number().min(0).max(1),
+  structuralError: z.number().min(0).max(1),
+  visualLoss: z.number().min(0).max(1),
+  componentizationError: z.number().min(0).max(1),
+  metadataError: z.number().min(0).max(1),
+  interactionError: z.number().min(0).max(1),
+  reviewBurden: z.number().nonnegative(),
+  normalizedComputeCost: z.number().nonnegative(),
+  normalizedSourceSize: z.number().nonnegative(),
+});
+
+export const FrameworkAdapterBenchmarkSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  evaluationId: z.string(),
+  split: z.enum(["train", "validation", "holdout", "all"]),
+  policy: FrameworkAdapterPolicySchema,
+  policyHash: z.string(),
+  evaluatorHash: z.string(),
+  corpusFingerprint: z.string(),
+  fixtureEvaluations: z.array(FrameworkAdapterEvaluationSchema),
+  fitness: FrameworkAdapterFitnessSchema,
+  coverage: z.object({
+    fixtures: z.number().int().nonnegative(),
+    targets: z.number().int().nonnegative(),
+    expectedComponents: z.number().int().nonnegative(),
+    emittedComponents: z.number().int().nonnegative(),
+    expectedInteractionBindings: z.number().int().nonnegative(),
+    emittedInteractionBindings: z.number().int().nonnegative(),
+    nativeMetadataOutputs: z.number().int().nonnegative(),
+    visualComparisons: z.number().int().nonnegative(),
+  }),
+  outputHashes: z.array(z.object({ fixtureId: z.string(), target: FrameworkAdapterTargetSchema, sourceHash: z.string() })),
+  mutationControlRecall: z.number().min(0).max(1),
+  accepted: z.boolean(),
+});
+
+export const FrameworkAdapterExperimentSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  experimentId: z.string(),
+  iteration: z.number().int().nonnegative(),
+  hypothesis: z.string(),
+  changedField: z.string(),
+  before: z.unknown(),
+  after: z.unknown(),
+  candidate: FrameworkAdapterPolicySchema,
+  incumbentFitness: FrameworkAdapterFitnessSchema,
+  candidateFitness: FrameworkAdapterFitnessSchema,
+  effective: z.boolean(),
+  outcome: z.enum(["keep", "revert"]),
+  reason: z.string(),
+});
+
+export const FrameworkAdapterResearchSummarySchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  initialPolicy: FrameworkAdapterPolicySchema,
+  researchIncumbent: FrameworkAdapterPolicySchema,
+  productionIncumbent: FrameworkAdapterPolicySchema,
+  experiments: z.array(FrameworkAdapterExperimentSchema),
+  initialFitness: FrameworkAdapterFitnessSchema,
+  finalFitness: FrameworkAdapterFitnessSchema,
+  baselineHoldoutFitness: FrameworkAdapterFitnessSchema,
+  finalHoldoutFitness: FrameworkAdapterFitnessSchema,
+  accepted: z.number().int().nonnegative(),
+  rejected: z.number().int().nonnegative(),
+  holdoutNonRegression: z.boolean(),
+  promoted: z.boolean(),
+  reason: z.string(),
+  incumbentPath: z.string(),
+});
+
 export type CmsNodeShape = {
   id: string;
   parentId: string | null;
@@ -135,5 +208,9 @@ export type FrameworkAdapterManifest = z.infer<typeof FrameworkAdapterManifestSc
 export type FrameworkAdapterValidation = z.infer<typeof FrameworkAdapterValidationSchema>;
 export type FrameworkAdapterEvaluation = z.infer<typeof FrameworkAdapterEvaluationSchema>;
 export type FrameworkAdapterSuite = z.infer<typeof FrameworkAdapterSuiteSchema>;
+export type FrameworkAdapterFitness = z.infer<typeof FrameworkAdapterFitnessSchema>;
+export type FrameworkAdapterBenchmark = z.infer<typeof FrameworkAdapterBenchmarkSchema>;
+export type FrameworkAdapterExperiment = z.infer<typeof FrameworkAdapterExperimentSchema>;
+export type FrameworkAdapterResearchSummary = z.infer<typeof FrameworkAdapterResearchSummarySchema>;
 export type CmsNode = CmsNodeShape;
 export type CmsDocument = z.infer<typeof CmsDocumentSchema>;

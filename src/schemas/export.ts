@@ -6,7 +6,7 @@ import { NormalFormSchema, TokenRegistrySchema, VisualTargetSchema } from "./nor
 import { GateResultSchema, PassDefinitionSchema, PassEventSchema } from "./pass.ts";
 import { EvaluationResultSchema, ExperimentResultSchema, TrajectorySchema } from "./research.ts";
 import { ImageDerivedContentStrategySchema, ImageOnlyAnalysisSchema, ImageOnlyBuildPlanSchema, ImageOnlyEvaluationSchema, ImageOnlyPolicySchema, ImageOnlyTargetManifestSchema, ImageStateSequenceAnalysisSchema } from "./image-only.ts";
-import { CmsDocumentSchema, FrameworkAdapterEvaluationSchema, FrameworkAdapterManifestSchema, FrameworkAdapterPolicySchema, FrameworkAdapterSuiteSchema, FrameworkAdapterValidationSchema } from "./adapters.ts";
+import { CmsDocumentSchema, FrameworkAdapterBenchmarkSchema, FrameworkAdapterEvaluationSchema, FrameworkAdapterExperimentSchema, FrameworkAdapterManifestSchema, FrameworkAdapterPolicySchema, FrameworkAdapterResearchSummarySchema, FrameworkAdapterSuiteSchema, FrameworkAdapterValidationSchema } from "./adapters.ts";
 
 const SCHEMAS = {
   "artifact-ref": ArtifactRefSchema,
@@ -32,6 +32,9 @@ const SCHEMAS = {
   "framework-adapter-validation": FrameworkAdapterValidationSchema,
   "framework-adapter-evaluation": FrameworkAdapterEvaluationSchema,
   "framework-adapter-suite": FrameworkAdapterSuiteSchema,
+  "framework-adapter-benchmark": FrameworkAdapterBenchmarkSchema,
+  "framework-adapter-experiment": FrameworkAdapterExperimentSchema,
+  "framework-adapter-research-summary": FrameworkAdapterResearchSummarySchema,
   "cms-document": CmsDocumentSchema,
 };
 
