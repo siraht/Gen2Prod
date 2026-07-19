@@ -95,6 +95,15 @@ describe("static compilation", () => {
     expect(output.html).not.toMatch(/class="[a-z0-9-]+__ul"/);
   });
 
+  test("does not promote a document wrapper around a native main landmark", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-native-main-wrapper-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html lang="en"><head><title>Wrapped main</title><meta name="description" content="A page whose main landmark is inside a generic wrapper."></head><body><div class="page-wrap"><header><p>Brand</p></header><main><h1>Wrapped main</h1></main></div></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { schemaVersion: "dtcg-2025-10+gen2prod-0.1.0", conformsTo: ["DTCG Format Module 2025.10"], adapterSchema: "gen2prod-token-adapter-0.1.0", tokens: [] } });
+    expect(output.html.match(/<main\b/g)).toHaveLength(1);
+    expect(output.html).toContain('<main class="page__main">');
+  });
+
   test("lowers embedded and inline CSS into governed BEM output", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-inline-compile-"));
     const htmlPath = join(directory, "page.html");
