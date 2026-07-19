@@ -20,6 +20,7 @@ describe("versioned schema export", () => {
     expect(names).toContain("framework-adapter-manifest.schema.json");
     expect(names).toContain("framework-adapter-validation.schema.json");
     expect(names).toContain("framework-adapter-evaluation.schema.json");
+    expect(names).toContain("framework-adapter-suite.schema.json");
     expect(names).toContain("cms-document.schema.json");
   });
 });

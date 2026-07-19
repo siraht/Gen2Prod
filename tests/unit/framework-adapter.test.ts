@@ -13,6 +13,7 @@ import { createArchetypes } from "../../src/synthetic/archetypes.ts";
 import { renderGold } from "../../src/synthetic/render.ts";
 import { CmsDocumentSchema } from "../../src/schemas/adapters.ts";
 import { validateFrameworkAdapter } from "../../src/adapters/validate.ts";
+import { ALL_FRAMEWORK_ADAPTER_TARGETS, runFrameworkAdapterSuite } from "../../src/adapters/pipeline.ts";
 
 async function compileDialog() {
   const spec = createArchetypes().find((item) => item.archetype === "dialog")!;
@@ -121,5 +122,22 @@ describe("framework adapters", () => {
       expect(validation.forbiddenSelectorCount).toBe(0);
       expect(validation.passed, `${target}: ${validation.issues.join("; ")}`).toBeTrue();
     }
+  }, 60_000);
+
+  test("browser-diffs every native adapter against canonical output", async () => {
+    const { directory, compiled } = await compileDialog();
+    const suite = await runFrameworkAdapterSuite({
+      compiled,
+      outputDirectory: join(directory, "visual-suite"),
+      targets: ALL_FRAMEWORK_ADAPTER_TARGETS,
+      policy: defaultFrameworkAdapterPolicy,
+      capture: { viewport: 720 },
+    });
+    expect(suite.aggregate.nativeCompileRate).toBe(1);
+    expect(suite.aggregate.nativeRenderRate).toBe(1);
+    expect(suite.aggregate.meanStructuralEquivalence).toBe(1);
+    expect(suite.aggregate.meanVisualPixelDifferenceRatio).toBe(0);
+    expect(suite.validations.every((validation) => validation.visualPixelDifferenceRatio === 0)).toBeTrue();
+    expect(suite.passed, suite.validations.flatMap((validation) => validation.issues).join("; ")).toBeTrue();
   }, 60_000);
 });

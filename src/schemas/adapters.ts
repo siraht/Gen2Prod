@@ -72,6 +72,27 @@ export const FrameworkAdapterEvaluationSchema = z.object({
   accepted: z.boolean(),
 });
 
+export const FrameworkAdapterSuiteSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  suiteId: z.string(),
+  policy: FrameworkAdapterPolicySchema,
+  targets: z.array(FrameworkAdapterTargetSchema),
+  manifests: z.array(z.object({ target: FrameworkAdapterTargetSchema, directory: z.string(), manifestPath: z.string(), adapterSourceHash: z.string() })),
+  validations: z.array(FrameworkAdapterValidationSchema),
+  aggregate: z.object({
+    passed: z.number().int().nonnegative(),
+    failed: z.number().int().nonnegative(),
+    nativeCompileRate: z.number().min(0).max(1),
+    nativeRenderRate: z.number().min(0).max(1),
+    meanStructuralEquivalence: z.number().min(0).max(1),
+    meanVisualPixelDifferenceRatio: z.number().min(0).max(1).optional(),
+    totalSourceBytes: z.number().int().nonnegative(),
+    componentCount: z.number().int().nonnegative(),
+  }),
+  canonicalCapture: z.string().optional(),
+  passed: z.boolean(),
+});
+
 export type CmsNodeShape = {
   id: string;
   parentId: string | null;
@@ -113,5 +134,6 @@ export type FrameworkAdapterPolicy = z.infer<typeof FrameworkAdapterPolicySchema
 export type FrameworkAdapterManifest = z.infer<typeof FrameworkAdapterManifestSchema>;
 export type FrameworkAdapterValidation = z.infer<typeof FrameworkAdapterValidationSchema>;
 export type FrameworkAdapterEvaluation = z.infer<typeof FrameworkAdapterEvaluationSchema>;
+export type FrameworkAdapterSuite = z.infer<typeof FrameworkAdapterSuiteSchema>;
 export type CmsNode = CmsNodeShape;
 export type CmsDocument = z.infer<typeof CmsDocumentSchema>;
