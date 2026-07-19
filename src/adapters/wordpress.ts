@@ -4,56 +4,57 @@ import { adapterAttributes, componentRoots, dialogBindingCount, orderedNodeParts
 import { buildCmsDocument } from "./cms.ts";
 import { renderTemplateAttributes, renderTemplateNode } from "./template.ts";
 import type { AdapterGenerationContext, GeneratedAdapter, GeneratedAdapterFile } from "./types.ts";
+import { verifiedInteractionRuntimeJavascriptFile } from "./interaction-runtime.ts";
 
 function commentJson(value: Record<string, unknown>): string {
   const rendered = JSON.stringify(value).replaceAll("--", "\\u002d\\u002d");
   return Object.keys(value).length ? ` ${rendered}` : "";
 }
 
-function leafMarkup(node: PlannedNode, frameworkClass?: string): string {
-  const attributes = adapterAttributes(node, false);
+function leafMarkup(node: PlannedNode, verifiedInteractions: boolean, frameworkClass?: string): string {
+  const attributes = adapterAttributes(node, verifiedInteractions);
   if (frameworkClass) attributes.class = [frameworkClass, attributes.class].filter(Boolean).join(" ");
   const attributeText = renderTemplateAttributes(attributes);
   const opening = `<${node.tag}${attributeText ? ` ${attributeText}` : ""}>`;
   if (VOID_TAGS.has(node.tag)) return opening;
   const parts = orderedNodeParts(node);
-  if (parts.some((part) => part.kind === "child")) return renderTemplateNode(node, { replacements: new Map(), verifiedInteractions: false });
+  if (parts.some((part) => part.kind === "child")) return renderTemplateNode(node, { replacements: new Map(), verifiedInteractions });
   const text = parts.map((part) => part.kind === "text" ? part.value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") : "").join("");
   return `${opening}${text}</${node.tag}>`;
 }
 
-function serializeWordPressBlock(node: PlannedNode, depth = 0): string {
+function serializeWordPressBlock(node: PlannedNode, verifiedInteractions: boolean, depth = 0): string {
   const indent = "  ".repeat(depth);
   const className = node.classes.join(" ");
   if (/^h[1-6]$/.test(node.tag) && node.children.length === 0) {
     const level = Number(node.tag.slice(1));
     const attrs = { level, ...(className ? { className } : {}) };
-    return `${indent}<!-- wp:heading${commentJson(attrs)} -->\n${indent}${leafMarkup(node, "wp-block-heading")}\n${indent}<!-- /wp:heading -->`;
+    return `${indent}<!-- wp:heading${commentJson(attrs)} -->\n${indent}${leafMarkup(node, verifiedInteractions, "wp-block-heading")}\n${indent}<!-- /wp:heading -->`;
   }
   if (node.tag === "p" && node.children.length === 0) {
     const attrs = className ? { className } : {};
-    return `${indent}<!-- wp:paragraph${commentJson(attrs)} -->\n${indent}${leafMarkup(node)}\n${indent}<!-- /wp:paragraph -->`;
+    return `${indent}<!-- wp:paragraph${commentJson(attrs)} -->\n${indent}${leafMarkup(node, verifiedInteractions)}\n${indent}<!-- /wp:paragraph -->`;
   }
   if ((node.tag === "ul" || node.tag === "ol") && node.children.every((child) => child.tag === "li")) {
     const attrs = { ordered: node.tag === "ol", ...(className ? { className } : {}) };
     const listAttributes = adapterAttributes(node, false);
     listAttributes.class = ["wp-block-list", listAttributes.class].filter(Boolean).join(" ");
-    const children = node.children.map((child) => serializeWordPressBlock(child, depth + 1)).join("\n");
+    const children = node.children.map((child) => serializeWordPressBlock(child, verifiedInteractions, depth + 1)).join("\n");
     return `${indent}<!-- wp:list${commentJson(attrs)} -->\n${indent}<${node.tag} ${renderTemplateAttributes(listAttributes)}>\n${children}\n${indent}</${node.tag}>\n${indent}<!-- /wp:list -->`;
   }
   if (node.tag === "li") {
     const attrs = className ? { className } : {};
-    return `${indent}<!-- wp:list-item${commentJson(attrs)} -->\n${indent}${leafMarkup(node)}\n${indent}<!-- /wp:list-item -->`;
+    return `${indent}<!-- wp:list-item${commentJson(attrs)} -->\n${indent}${leafMarkup(node, verifiedInteractions)}\n${indent}<!-- /wp:list-item -->`;
   }
   const groupTags = new Set(["div", "main", "section", "article", "aside", "header", "footer", "nav"]);
   if (groupTags.has(node.tag)) {
     const attrs = { tagName: node.tag, ...(className ? { className } : {}), layout: { type: "default" } };
     const groupAttributes = adapterAttributes(node, false);
     groupAttributes.class = ["wp-block-group", groupAttributes.class].filter(Boolean).join(" ");
-    const children = node.children.map((child) => serializeWordPressBlock(child, depth + 1)).join("\n");
+    const children = node.children.map((child) => serializeWordPressBlock(child, verifiedInteractions, depth + 1)).join("\n");
     return `${indent}<!-- wp:group${commentJson(attrs)} -->\n${indent}<${node.tag} ${renderTemplateAttributes(groupAttributes)}>\n${children}\n${indent}</${node.tag}>\n${indent}<!-- /wp:group -->`;
   }
-  return `${indent}<!-- wp:html -->\n${indent}${renderTemplateNode(node, { replacements: new Map(), verifiedInteractions: false }).trim()}\n${indent}<!-- /wp:html -->`;
+  return `${indent}<!-- wp:html -->\n${indent}${renderTemplateNode(node, { replacements: new Map(), verifiedInteractions }).trim()}\n${indent}<!-- /wp:html -->`;
 }
 
 function phpString(value: string): string {
@@ -63,10 +64,10 @@ function phpString(value: string): string {
 export function generateWordPressAdapter(context: AdapterGenerationContext): GeneratedAdapter {
   const root = context.compiled.plan.semantics.root;
   const metadata = pageMetadata(context.compiled);
-  const bodyBlocks = (root.tag === "body" ? root.children : [root]).map((node) => serializeWordPressBlock(node)).join("\n");
   const verifiedBindings = context.policy.interactionMode === "verified-contracts" ? dialogBindingCount(context.compiled) : 0;
+  const bodyBlocks = (root.tag === "body" ? root.children : [root]).map((node) => serializeWordPressBlock(node, verifiedBindings > 0)).join("\n");
   const bodyClasses = root.classes.map((name) => `'${phpString(name)}'`).join(", ");
-  const cms = buildCmsDocument(context.compiled, "wordpress");
+  const cms = buildCmsDocument(context.compiled, "wordpress", verifiedBindings > 0);
   const files: GeneratedAdapterFile[] = [
     { path: "templates/page.html", role: "entry", contents: `${bodyBlocks}\n` },
     {
@@ -77,12 +78,18 @@ export function generateWordPressAdapter(context: AdapterGenerationContext): Gen
     {
       path: "functions.fragment.php",
       role: "support",
-      contents: `<?php\nadd_action('wp_enqueue_scripts', static function (): void {\n    wp_enqueue_style('gen2prod-page', get_theme_file_uri('/assets/page.css'), [], null);\n});\n${bodyClasses ? `add_filter('body_class', static function (array $classes): array {\n    return array_values(array_unique([...$classes, ${bodyClasses}]));\n});\n` : ""}`,
+      contents: `<?php\nadd_action('wp_enqueue_scripts', static function (): void {\n    wp_enqueue_style('gen2prod-page', get_theme_file_uri('/assets/page.css'), [], null);\n${verifiedBindings > 0 ? "    wp_enqueue_script('gen2prod-interactions', get_theme_file_uri('/assets/interactions.js'), [], null, true);\n" : ""}});\n${bodyClasses ? `add_filter('body_class', static function (array $classes): array {\n    return array_values(array_unique([...$classes, ${bodyClasses}]));\n});\n` : ""}`,
     },
     { path: "page-meta.json", role: "metadata", contents: canonicalJson({ title: metadata.title, description: metadata.description, htmlAttributes: metadata.htmlAttributes, bodyAttributes: adapterAttributes(root, false) }) },
+    ...(context.policy.metadataMode === "framework-native" ? [{
+      path: "wp-head.fragment.php",
+      role: "metadata" as const,
+      contents: `<?php\nadd_action('wp_head', static function (): void {\n    if (!is_page()) return;\n    echo '<meta name="description" content="' . esc_attr('${phpString(metadata.description)}') . '">';\n});\n`,
+    }] : []),
     { path: "cms-content.json", role: "cms-data", contents: canonicalJson(cms) },
     { path: "page.scss", role: "style", contents: context.compiled.scss },
     { path: "assets/page.css", role: "style", contents: context.compiled.css },
+    ...(verifiedBindings > 0 ? [verifiedInteractionRuntimeJavascriptFile("assets/interactions.js")] : []),
   ];
   return {
     target: "wordpress",
@@ -96,6 +103,6 @@ export function generateWordPressAdapter(context: AdapterGenerationContext): Gen
       ...(verifiedBindings > 0 ? ["The dialog contract is retained in cms-content.json but needs an approved WordPress interaction module before activation."] : []),
     ],
     componentCount: componentRoots(context.compiled).length + 1,
-    interactionBindings: 0,
+    interactionBindings: verifiedBindings,
   };
 }

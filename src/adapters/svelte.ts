@@ -24,16 +24,19 @@ export function generateSvelteAdapter(context: AdapterGenerationContext): Genera
     : renderTemplateNode(root, { replacements, verifiedInteractions: verifiedBindings > 0 });
   const rootAttributes = renderTemplateAttributes(adapterAttributes(root, false));
   const links = resourceLinks(context);
+  const nativeHead = context.policy.metadataMode === "framework-native" ? `<svelte:head>\n  <title>${metadata.title.replaceAll("&", "&amp;").replaceAll("<", "&lt;")}</title>\n  <meta name="description" content=${JSON.stringify(metadata.description)}>\n${links}${links ? "\n" : ""}</svelte:head>\n` : "";
   const files: GeneratedAdapterFile[] = [
     {
       path: "Page.svelte",
       role: "entry",
-      contents: `<script lang="ts">\n${imports}\n</script>\n\n<svelte:head>\n  <title>${metadata.title.replaceAll("&", "&amp;").replaceAll("<", "&lt;")}</title>\n  <meta name="description" content=${JSON.stringify(metadata.description)}>\n${links}${links ? "\n" : ""}</svelte:head>\n${markup}\n`,
+      contents: `<script lang="ts">\n${imports}\n</script>\n\n${nativeHead}${markup}\n`,
     },
     {
-      path: "document.ts",
+      path: context.policy.metadataMode === "framework-native" ? "document.ts" : "page-meta.json",
       role: "metadata",
-      contents: `export const documentMetadata = ${JSON.stringify({ title: metadata.title, description: metadata.description, htmlAttributes: metadata.htmlAttributes, bodyAttributes: adapterAttributes(root, false), resourceLinks: context.compiled.plan.source.resourceLinks }, null, 2)} as const;\n`,
+      contents: context.policy.metadataMode === "framework-native"
+        ? `export const documentMetadata = ${JSON.stringify({ title: metadata.title, description: metadata.description, htmlAttributes: metadata.htmlAttributes, bodyAttributes: adapterAttributes(root, false), resourceLinks: context.compiled.plan.source.resourceLinks }, null, 2)} as const;\n`
+        : `${JSON.stringify({ title: metadata.title, description: metadata.description, htmlAttributes: metadata.htmlAttributes, bodyAttributes: adapterAttributes(root, false), resourceLinks: context.compiled.plan.source.resourceLinks }, null, 2)}\n`,
     },
     { path: "page.scss", role: "style", contents: context.compiled.scss },
     { path: "page.css", role: "style", contents: context.compiled.css },

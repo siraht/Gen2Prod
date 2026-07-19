@@ -12,12 +12,12 @@ import { renderToString as renderVueToString } from "vue/server-renderer";
 import type { CompiledPage } from "../compiler/types.ts";
 import type { CaptureSession } from "../evidence/capture.ts";
 import { ensureDirectory, writeJsonAtomic, writeTextAtomic } from "../core/fs.ts";
-import { canonicalJson, hashJson } from "../core/hash.ts";
+import { hashJson, sha256 } from "../core/hash.ts";
 import { FrameworkAdapterManifestSchema, FrameworkAdapterValidationSchema, type CmsDocument, type CmsNode, type FrameworkAdapterManifest, type FrameworkAdapterValidation } from "../schemas/adapters.ts";
 import { analyzeCssSelectorContract, analyzeScssNestingContract } from "../validation/styling-contract.ts";
 import { classes, flatten, parseElements, type ValidationElement } from "../validation/dom.ts";
 import { imageDifference } from "../validation/visual.ts";
-import { adapterAttributes, pageMetadata, VOID_TAGS } from "./common.ts";
+import { adapterAttributes, componentRoots, dialogBindingCount, pageMetadata, VOID_TAGS } from "./common.ts";
 
 type NativeRender = { html: string; nativeCompilePassed: boolean; nativeRenderPassed: boolean; issues: string[] };
 
@@ -312,6 +312,36 @@ function makePreviewRenderable(html: string): string {
     .replaceAll("href='/page.css'", "href='./preview.css'");
 }
 
+async function policyExecutionIssues(directory: string, manifest: FrameworkAdapterManifest, compiled: CompiledPage, preview: string): Promise<string[]> {
+  const issues: string[] = [];
+  for (const file of manifest.files) {
+    const contents = new Uint8Array(await Bun.file(join(directory, file.path)).arrayBuffer());
+    if (sha256(contents) !== file.sha256) issues.push(`${file.path}: source hash differs from adapter manifest`);
+  }
+  const expectedComponents = manifest.policy.componentization === "bem-blocks" ? componentRoots(compiled).length + 1 : 1;
+  if (manifest.componentCount !== expectedComponents) issues.push(`Policy requested ${manifest.policy.componentization} componentization but manifest records ${manifest.componentCount}/${expectedComponents} components`);
+  const entry = await Bun.file(join(directory, manifest.entry)).text();
+  const paths = new Set(manifest.files.map((file) => file.path));
+  const nativeMetadata = manifest.target === "react" ? /export\s+const\s+metadata\b/.test(entry)
+    : manifest.target === "vue" ? paths.has("document.ts")
+      : manifest.target === "svelte" ? entry.includes("<svelte:head>")
+        : manifest.target === "astro" ? entry.includes("<head>")
+          : manifest.target === "wordpress" ? paths.has("wp-head.fragment.php")
+            : /"metaDescription"\s*:/.test(entry);
+  const documentMetadata = paths.has("page-meta.json") || manifest.target === "astro" || manifest.target === "bricks";
+  if (manifest.policy.metadataMode === "framework-native" && !nativeMetadata) issues.push(`${manifest.target}: framework-native metadata policy was not executed`);
+  if (manifest.policy.metadataMode === "document" && !documentMetadata) issues.push(`${manifest.target}: document metadata policy was not executed`);
+  const explicitBindings = dialogBindingCount(compiled);
+  const expectedBindings = manifest.policy.interactionMode === "verified-contracts" ? explicitBindings : 0;
+  if (manifest.interactionBindings !== expectedBindings) issues.push(`Policy requested ${expectedBindings} verified interaction binding(s), manifest records ${manifest.interactionBindings}`);
+  if (expectedBindings > 0) {
+    if (!manifest.files.some((file) => file.role === "interaction")) issues.push("Verified interaction policy emitted no interaction module");
+    if (!preview.includes("data-g2p-dialog-trigger")) issues.push("Verified dialog trigger is missing from the native render");
+  }
+  if (manifest.policy.interactionMode === "native-only" && preview.includes("data-g2p-dialog-trigger")) issues.push("Native-only policy unexpectedly emitted a generated interaction hook");
+  return issues;
+}
+
 export type ValidateFrameworkAdapterOptions = {
   compiled: CompiledPage;
   directory: string;
@@ -325,6 +355,7 @@ export async function validateFrameworkAdapter(options: ValidateFrameworkAdapter
   const rendered = await nativeRender(directory, manifest, options.compiled);
   const issues = [...rendered.issues];
   const preview = makePreviewRenderable(rendered.html);
+  issues.push(...await policyExecutionIssues(directory, manifest, options.compiled, preview));
   await Promise.all([
     writeTextAtomic(join(directory, "preview.html"), preview),
     writeTextAtomic(join(directory, "preview.css"), options.compiled.css),

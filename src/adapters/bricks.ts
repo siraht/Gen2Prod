@@ -3,6 +3,7 @@ import type { PlannedNode } from "../compiler/types.ts";
 import { adapterAttributes, componentRoots, dialogBindingCount, orderedNodeParts, pageMetadata } from "./common.ts";
 import { buildCmsDocument } from "./cms.ts";
 import type { AdapterGenerationContext, GeneratedAdapter, GeneratedAdapterFile } from "./types.ts";
+import { verifiedInteractionRuntimeJavascriptFile } from "./interaction-runtime.ts";
 
 type BricksElement = {
   id: string;
@@ -27,9 +28,9 @@ function bricksName(node: PlannedNode): string {
   return "block";
 }
 
-function flattenElements(node: PlannedNode, parent: string | 0 = 0): BricksElement[] {
+function flattenElements(node: PlannedNode, verifiedInteractions: boolean, parent: string | 0 = 0): BricksElement[] {
   const id = bricksId(node.nodeId);
-  const attributes = adapterAttributes(node, false);
+  const attributes = adapterAttributes(node, verifiedInteractions);
   const text = orderedNodeParts(node).filter((part) => part.kind === "text").map((part) => part.value).join("");
   const settings: Record<string, unknown> = {
     tag: node.tag,
@@ -39,30 +40,31 @@ function flattenElements(node: PlannedNode, parent: string | 0 = 0): BricksEleme
   };
   if (node.tag === "img") settings.image = { url: node.attributes.src ?? "", alt: node.attributes.alt ?? "" };
   const current: BricksElement = { id, name: bricksName(node), parent, children: node.children.map((child) => bricksId(child.nodeId)), settings };
-  return [current, ...node.children.flatMap((child) => flattenElements(child, id))];
+  return [current, ...node.children.flatMap((child) => flattenElements(child, verifiedInteractions, id))];
 }
 
 export function generateBricksAdapter(context: AdapterGenerationContext): GeneratedAdapter {
   const root = context.compiled.plan.semantics.root;
   const metadata = pageMetadata(context.compiled);
-  const cms = buildCmsDocument(context.compiled, "bricks");
+  const explicitDialogs = context.policy.interactionMode === "verified-contracts" ? dialogBindingCount(context.compiled) : 0;
+  const cms = buildCmsDocument(context.compiled, "bricks", explicitDialogs > 0);
   const payload = {
     source: "bricksCopiedElements",
     sourceUrl: "gen2prod://canonical-normal-form",
     version: "1.12",
     globalClasses: [],
     globalElements: [],
-    elements: (root.tag === "body" ? root.children : [root]).flatMap((node) => flattenElements(node)),
+    elements: (root.tag === "body" ? root.children : [root]).flatMap((node) => flattenElements(node, explicitDialogs > 0)),
     pageSettings: { title: metadata.title, metaDescription: metadata.description, bodyClasses: root.classes, stylesheet: "page.css" },
     provenance: { generator: "Gen2Prod", stylingContract: "nested BEM selectors and registered Automatic.css/project tokens only" },
   };
-  const explicitDialogs = context.policy.interactionMode === "verified-contracts" ? dialogBindingCount(context.compiled) : 0;
   const files: GeneratedAdapterFile[] = [
     { path: "bricks-page.json", role: "entry", contents: canonicalJson(payload) },
     { path: "cms-content.json", role: "cms-data", contents: canonicalJson(cms) },
     { path: "page.scss", role: "style", contents: context.compiled.scss },
     { path: "page.css", role: "style", contents: context.compiled.css },
     { path: "integration.json", role: "metadata", contents: canonicalJson({ importMode: "bricksCopiedElements", bodyClasses: root.classes, enqueueStylesheet: "page.css", unresolvedInteractionContracts: explicitDialogs }) },
+    ...(explicitDialogs > 0 ? [verifiedInteractionRuntimeJavascriptFile()] : []),
   ];
   return {
     target: "bricks",
@@ -76,6 +78,6 @@ export function generateBricksAdapter(context: AdapterGenerationContext): Genera
       ...(explicitDialogs > 0 ? ["Dialog contracts remain unresolved until mapped to an approved Bricks interaction component."] : []),
     ],
     componentCount: componentRoots(context.compiled).length + 1,
-    interactionBindings: 0,
+    interactionBindings: explicitDialogs,
   };
 }

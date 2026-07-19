@@ -24,10 +24,14 @@ export function generateVueAdapter(context: AdapterGenerationContext): Generated
       role: "entry",
       contents: `<script setup lang="ts">\n${imports}\n</script>\n\n<template>\n${markup}\n</template>\n`,
     },
-    {
+    context.policy.metadataMode === "framework-native" ? {
       path: "document.ts",
       role: "metadata",
       contents: `export const documentMetadata = ${JSON.stringify({ title: metadata.title, description: metadata.description, htmlAttributes: metadata.htmlAttributes, bodyAttributes: adapterAttributes(root, false), resourceLinks: context.compiled.plan.source.resourceLinks }, null, 2)} as const;\n`,
+    } : {
+      path: "page-meta.json",
+      role: "metadata",
+      contents: `${JSON.stringify({ title: metadata.title, description: metadata.description, htmlAttributes: metadata.htmlAttributes, bodyAttributes: adapterAttributes(root, false), resourceLinks: context.compiled.plan.source.resourceLinks }, null, 2)}\n`,
     },
     { path: "page.scss", role: "style", contents: context.compiled.scss },
     { path: "page.css", role: "style", contents: context.compiled.css },
@@ -51,7 +55,7 @@ export function generateVueAdapter(context: AdapterGenerationContext): Generated
     target: "vue",
     entry: "Page.vue",
     files,
-    requirements: ["Vue >=3.5", "a Vite/Vue SFC build", "the application shell must consume document.ts"],
+    requirements: ["Vue >=3.5", "a Vite/Vue SFC build", `the application shell must consume ${context.policy.metadataMode === "framework-native" ? "document.ts" : "page-meta.json"}`],
     integrationNotes: [
       "Render Page.vue inside the application shell and apply documentMetadata html/body attributes and head entries through the project's router or head manager.",
       "page.css is imported once by the page; page.scss remains the editable nested BEM source.",

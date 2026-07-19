@@ -105,9 +105,10 @@ export function generateReactAdapter(context: AdapterGenerationContext): Generat
   const bodyWithClient = verifiedBindings > 0 ? body.replace(/\n<\/body>$/, "\n    <ClientInteractions />\n</body>") : body;
   const resources = renderResourceLinks(context);
   const htmlAttributes = renderAttributes(metadata.htmlAttributes);
+  const metadataDeclaration = context.policy.metadataMode === "framework-native" ? "export const metadata" : "const metadata";
   const document = `import "./page.css";
 ${[...componentImports, ...clientImport].join("\n")}${componentImports.length || clientImport.length ? "\n" : ""}
-export const metadata = {
+${metadataDeclaration} = {
   title: ${JSON.stringify(metadata.title)},
   description: ${JSON.stringify(metadata.description)},
 } as const;
@@ -134,6 +135,7 @@ export default function PageDocument() {
     { path: "PageDocument.tsx", role: "entry", contents: document },
     { path: "page.scss", role: "style", contents: context.compiled.scss },
     { path: "page.css", role: "style", contents: context.compiled.css },
+    ...(context.policy.metadataMode === "document" ? [{ path: "page-meta.json", role: "metadata" as const, contents: `${JSON.stringify(metadata, null, 2)}\n` }] : []),
     ...components.map((component): GeneratedAdapterFile => {
       const imports = directComponentChildren(component.node, components).map((child) => `import ${child.name} from "./${child.name}";`).join("\n");
       return {

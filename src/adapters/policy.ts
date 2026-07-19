@@ -15,6 +15,6 @@ export const baselineFrameworkAdapterPolicy: FrameworkAdapterPolicy = FrameworkA
   ...defaultFrameworkAdapterPolicy,
   name: "framework-page-baseline-v1",
   componentization: "page",
-  interactionMode: "native-only",
+  interactionMode: "verified-contracts",
   metadataMode: "document",
 });
