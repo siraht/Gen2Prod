@@ -35,10 +35,18 @@
     "zod": "^4.0.5"
   },
   "devDependencies": {
+    "@astrojs/compiler": "^4.0.0",
     "@types/bun": "^1.2.18",
     "@types/culori": "^2.1.1",
     "@types/pngjs": "^6.0.5",
-    "typescript": "^5.8.3"
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vue/compiler-sfc": "^3.5.40",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "svelte": "^5.56.6",
+    "typescript": "^5.8.3",
+    "vue": "^3.5.40"
   },
   "engines": {
     "bun": ">=1.2.0"
