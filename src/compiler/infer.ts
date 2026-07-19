@@ -90,6 +90,21 @@ function testimonialPair(node: DomNode | undefined): boolean {
   return Boolean(quote && attribution && ["div", "span"].includes(quote.tag) && ["div", "span"].includes(attribution.tag) && quoteLike && /[,—–-]/.test(attribution.text));
 }
 
+function longFormArticle(node: DomNode): boolean {
+  const nested = descendants(node);
+  const titledSubregions = nested.filter((child) => attributes(child)["aria-labelledby"] && child.children.some((grandchild) => /^h[2-6]$/.test(grandchild.tag)));
+  return Boolean(attributes(node)["aria-labelledby"] && nested.some((child) => child.tag === "h1") && titledSubregions.length >= 2);
+}
+
+function introductoryHeader(node: DomNode, parent: DomNode | undefined): boolean {
+  const headerHint = /(?:^|-)header$/.test(node.nodeId.toLowerCase()) || oldClasses(node).some((className) => /(?:^|__)header$/.test(className));
+  const startsLongForm = Boolean(
+    parent?.children[0] === node
+    && parent.children.filter((sibling) => attributes(sibling)["aria-labelledby"] && sibling.children.some((child) => /^h[2-6]$/.test(child.tag))).length >= 2,
+  );
+  return (headerHint || startsLongForm) && node.children.some((child) => child.tag === "h1");
+}
+
 function semanticTag(node: DomNode, parent: DomNode | undefined, useStableNodeHints: boolean, preserveExplicitSemantics = false): { tag: string; confidence: "high" | "medium" | "low"; role: string } {
   const id = node.nodeId.toLowerCase();
   const attrs = attributes(node);
@@ -97,12 +112,16 @@ function semanticTag(node: DomNode, parent: DomNode | undefined, useStableNodeHi
   if (node.tag !== "div" && node.tag !== "span") return { tag: node.tag, confidence: "high", role: explicitRole(node) };
   if (!useStableNodeHints) {
     if (inferableDocumentMain(node, parent) || inferableWrappedMain(node, parent)) return { tag: "main", confidence: "medium", role: "main" };
+    if (longFormArticle(node)) return { tag: "article", confidence: "medium", role: "article" };
+    if (introductoryHeader(node, parent)) return { tag: "header", confidence: "medium", role: "header" };
     if (attrs["aria-labelledby"] || node.children.some((child) => /^h[1-6]$/.test(child.tag))) return { tag: "section", confidence: "medium", role: "titled-region" };
     return { tag: node.tag, confidence: "low", role: "generic-container" };
   }
   if ((id === "main" && !nativeMainAlreadyCovers(node, parent)) || inferableDocumentMain(node, parent) || inferableWrappedMain(node, parent)) return { tag: "main", confidence: "high", role: "main" };
   if (id === "site-header") return { tag: "header", confidence: "high", role: "site-header" };
   if (id === "site-footer") return { tag: "footer", confidence: "high", role: "site-footer" };
+  if (longFormArticle(node)) return { tag: "article", confidence: "high", role: "article" };
+  if (introductoryHeader(node, parent)) return { tag: "header", confidence: "high", role: "header" };
   if (id.includes("nav") && (attrs["aria-label"] || node.children.some((child) => child.nodeId.includes("nav-list")))) return { tag: "nav", confidence: "high", role: "navigation" };
   if (id.endsWith("-list") || id === "nav-list") return { tag: "ul", confidence: "high", role: "list" };
   if (/^(feature|plan|nav-item)-?\d+$/.test(id)) return { tag: "li", confidence: "high", role: "list-item" };

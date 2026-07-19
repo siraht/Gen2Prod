@@ -131,6 +131,15 @@ describe("static compilation", () => {
     expect(marked.html).toContain('<div data-g2p-wrapper-for="main"');
   });
 
+  test("recovers long-form article and introductory header semantics", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-long-form-semantics-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html lang="en"><head><title>Field guide</title><meta name="description" content="A detailed field guide with independently titled sections."></head><body><div data-g2p-node="main"><div class="field-guide" aria-labelledby="guide-title"><div class="field-guide__inner"><div class="field-guide__header"><h1 id="guide-title">Field guide</h1><p>Introduction to the complete guide.</p></div><div aria-labelledby="first-title"><h2 id="first-title">First principle</h2><p>First explanation.</p></div><div aria-labelledby="second-title"><h2 id="second-title">Second principle</h2><p>Second explanation.</p></div></div></div></div></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { schemaVersion: "dtcg-2025-10+gen2prod-0.1.0", conformsTo: ["DTCG Format Module 2025.10"], adapterSchema: "gen2prod-token-adapter-0.1.0", tokens: [] } });
+    expect(output.html).toContain('<article aria-labelledby="guide-title" class="field-guide">');
+    expect(output.html).toContain('<header class="field-guide__header">');
+  });
+
   test("lowers embedded and inline CSS into governed BEM output", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-inline-compile-"));
     const htmlPath = join(directory, "page.html");
