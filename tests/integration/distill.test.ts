@@ -3,6 +3,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Trajectory } from "../../src/schemas/research.ts";
+import { buildDatasets } from "../../src/distill/datasets.ts";
 import { distill } from "../../src/distill/train.ts";
 import { loadPlanner, loadSelector, loadVerifier, selectNextAction, verifyCandidate } from "../../src/distill/inference.ts";
 
@@ -56,4 +57,20 @@ test("selector ranks accepted evidence above cheaper never-kept evidence", async
   const selector = await loadSelector(join(directory, "models", "selector.model.json"));
   expect(selector.defaultRanking.indexOf("evidence:reviewed")).toBeLessThan(selector.defaultRanking.indexOf("evidence:cheap-unproven"));
   expect(selector.actions["evidence:cheap-unproven"]!.acceptanceLowerBound).toBe(0);
+});
+
+test("quarantines contradictory policy labels from every distilled dataset", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "gen2prod-distill-contradictions-"));
+  const path = join(directory, "trajectories.jsonl");
+  const chosen = { ...trajectory(200, true), groupId: "fixture:contradiction" };
+  const rejected: Trajectory = { ...chosen, trajectoryId: "contradictory-rejected", accepted: false };
+  const safe = { ...trajectory(202, true), groupId: "fixture:safe" };
+  await Bun.write(path, `${[chosen, rejected, safe].map((row) => JSON.stringify(row)).join("\n")}\n`);
+  const datasets = await buildDatasets(path, join(directory, "datasets"));
+  expect(datasets.trajectories.map((row) => row.trajectoryId)).toEqual([safe.trajectoryId]);
+  expect(datasets.supervised).toHaveLength(1);
+  expect(datasets.verifier).toHaveLength(1);
+  expect(datasets.audit.contradictoryExamples).toBe(1);
+  expect(datasets.audit.contradictoryTrajectoriesQuarantined).toBe(2);
+  expect(datasets.audit.warnings[0]).toContain("quarantined from training");
 });

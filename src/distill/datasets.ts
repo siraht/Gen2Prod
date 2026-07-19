@@ -46,6 +46,7 @@ export type DatasetAudit = {
   groupLeakage: string[];
   mixedDeclaredSplitGroups: string[];
   contradictoryExamples: number;
+  contradictoryTrajectoriesQuarantined: number;
   accepted: number;
   rejected: number;
   sourceKinds: Record<string, number>;
@@ -90,18 +91,25 @@ function contradictionFingerprint(trajectory: Trajectory): string {
 
 function increment(record: Record<string, number>, key: string): void { record[key] = (record[key] ?? 0) + 1; }
 
-function auditTrajectories(raw: Trajectory[], unique: Trajectory[]): DatasetAudit {
-  const split = groupIsolatedSplit(unique);
-  const contradictionLabels = new Map<string, Set<boolean>>();
+function contradictoryFingerprints(unique: Trajectory[]): Set<string> {
+  const labels = new Map<string, Set<boolean>>();
+  for (const trajectory of unique) {
+    const fingerprint = contradictionFingerprint(trajectory);
+    const values = labels.get(fingerprint) ?? new Set<boolean>();
+    values.add(trajectory.accepted);
+    labels.set(fingerprint, values);
+  }
+  return new Set([...labels.entries()].filter(([, values]) => values.size > 1).map(([fingerprint]) => fingerprint));
+}
+
+function auditTrajectories(raw: Trajectory[], unique: Trajectory[], training: Trajectory[], contradictions: Set<string>): DatasetAudit {
+  const split = groupIsolatedSplit(training);
   const sourceKinds: Record<string, number> = {};
   const splitCounts: Record<string, number> = {};
   const actions: DatasetAudit["actions"] = {};
-  for (const trajectory of unique) {
+  for (const trajectory of training) {
     increment(sourceKinds, trajectory.sourceKind ?? "unknown");
     increment(splitCounts, trajectory.split);
-    const labels = contradictionLabels.get(contradictionFingerprint(trajectory)) ?? new Set<boolean>();
-    labels.add(trajectory.accepted);
-    contradictionLabels.set(contradictionFingerprint(trajectory), labels);
     for (const action of new Set(trajectory.actions)) {
       const row = actions[action] ?? { support: 0, accepted: 0, rejected: 0 };
       row.support += 1;
@@ -109,12 +117,13 @@ function auditTrajectories(raw: Trajectory[], unique: Trajectory[]): DatasetAudi
       actions[action] = row;
     }
   }
-  const contradictoryExamples = [...contradictionLabels.values()].filter((labels) => labels.size > 1).length;
+  const contradictoryExamples = contradictions.size;
+  const contradictoryTrajectoriesQuarantined = unique.filter((trajectory) => contradictions.has(contradictionFingerprint(trajectory))).length;
   const warnings = [
     ...(split.leakageGroups.length ? [`${split.leakageGroups.length} group(s) leaked across the derived train/holdout partition.`] : []),
     ...(split.mixedDeclaredSplitGroups.length ? [`${split.mixedDeclaredSplitGroups.length} group(s) were declared in both holdout and non-holdout data and were quarantined to holdout.`] : []),
-    ...(contradictoryExamples ? [`${contradictoryExamples} identical observation/action example(s) carry contradictory acceptance labels.`] : []),
-    ...(unique.length < 50 ? ["Fewer than 50 unique trajectories; distilled metrics are diagnostic, not calibrated."] : []),
+    ...(contradictoryExamples ? [`${contradictoryExamples} identical observation/action group(s) carry contradictory acceptance labels; ${contradictoryTrajectoriesQuarantined} trajectory record(s) were quarantined from training.`] : []),
+    ...(training.length < 50 ? ["Fewer than 50 contradiction-free trajectories; distilled metrics are diagnostic, not calibrated."] : []),
   ];
   return {
     schemaVersion: "0.1.0",
@@ -127,8 +136,9 @@ function auditTrajectories(raw: Trajectory[], unique: Trajectory[]): DatasetAudi
     groupLeakage: split.leakageGroups,
     mixedDeclaredSplitGroups: split.mixedDeclaredSplitGroups,
     contradictoryExamples,
-    accepted: unique.filter((trajectory) => trajectory.accepted).length,
-    rejected: unique.filter((trajectory) => !trajectory.accepted).length,
+    contradictoryTrajectoriesQuarantined,
+    accepted: training.filter((trajectory) => trajectory.accepted).length,
+    rejected: training.filter((trajectory) => !trajectory.accepted).length,
     sourceKinds,
     splitCounts,
     actions: Object.fromEntries(Object.entries(actions).sort(([left], [right]) => left.localeCompare(right))),
@@ -144,8 +154,10 @@ export async function buildDatasets(trajectoryPath: string | string[], outputDir
   const raw = await readTrajectories(trajectoryPath);
   const byEvidence = new Map<string, Trajectory>();
   for (const trajectory of raw) if (!byEvidence.has(evidenceFingerprint(trajectory))) byEvidence.set(evidenceFingerprint(trajectory), trajectory);
-  const trajectories = [...byEvidence.values()];
-  const audit = auditTrajectories(raw, trajectories);
+  const unique = [...byEvidence.values()];
+  const contradictions = contradictoryFingerprints(unique);
+  const trajectories = unique.filter((trajectory) => !contradictions.has(contradictionFingerprint(trajectory)));
+  const audit = auditTrajectories(raw, unique, trajectories, contradictions);
   const supervised: SupervisedExample[] = trajectories.filter((trajectory) => trajectory.accepted && trajectory.verifierLabels.hardGatesPass !== false).map((trajectory) => ({ id: `sft-${trajectory.trajectoryId}`, input: trajectory.observations, target: { actions: trajectory.actions, planSummary: trajectory.planSummary }, weight: 1 / Math.max(trajectory.cost, 0.1) }));
   const byFixture = new Map<string, Trajectory[]>();
   for (const trajectory of trajectories) {

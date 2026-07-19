@@ -7,7 +7,7 @@ import { groupIsolatedSplit } from "./split.ts";
 
 export type DistillTarget = "selector" | "verifier" | "planner" | "all";
 export type DistillationResult = {
-  dataset: { trajectories: number; supervised: number; preferences: number; verifier: number; groups: number; holdoutGroups: number; duplicatesRemoved: number; contradictoryExamples: number; warnings: string[] };
+  dataset: { trajectories: number; supervised: number; preferences: number; verifier: number; groups: number; holdoutGroups: number; duplicatesRemoved: number; contradictoryExamples: number; contradictoryTrajectoriesQuarantined: number; warnings: string[] };
   models: { selector?: SelectorModel; verifier?: VerifierModel; planner?: PlannerModel };
   outputDirectory: string;
 };
@@ -109,6 +109,7 @@ export async function distill(trajectoryPath: string | string[], outputDirectory
     holdoutGroups: datasets.audit.holdoutGroups,
     duplicatesRemoved: datasets.audit.exactDuplicatesRemoved,
     contradictoryExamples: datasets.audit.contradictoryExamples,
+    contradictoryTrajectoriesQuarantined: datasets.audit.contradictoryTrajectoriesQuarantined,
     warnings: datasets.audit.warnings,
   }, models, outputDirectory };
   await writeJsonAtomic(join(outputDirectory, "distillation-report.json"), result);
