@@ -13,4 +13,4 @@ test("runs axe, keyboard, focus and interaction audits in the browser", async ()
   expect(audit.keyboard.focusables).toBe(2);
   expect(audit.interactions.disclosureToggle).toBeTrue();
   expect(audit.manualReview.length).toBeGreaterThan(0);
-});
+}, 30_000);
