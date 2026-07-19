@@ -16,5 +16,9 @@ describe("versioned schema export", () => {
     expect(names).toContain("image-build-plan.schema.json");
     expect(names).toContain("image-policy.schema.json");
     expect(names).toContain("image-evaluation.schema.json");
+    expect(names).toContain("framework-adapter-policy.schema.json");
+    expect(names).toContain("framework-adapter-manifest.schema.json");
+    expect(names).toContain("framework-adapter-validation.schema.json");
+    expect(names).toContain("framework-adapter-evaluation.schema.json");
   });
 });

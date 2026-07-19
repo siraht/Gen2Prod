@@ -53,6 +53,8 @@ export const ArtifactTypeSchema = z.enum([
   "node-correspondence",
   "normal-form",
   "compiled-output",
+  "framework-output",
+  "adapter-validation-report",
   "validation-report",
   "visual-report",
   "performance-report",
