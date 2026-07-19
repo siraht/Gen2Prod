@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { prepareBenchmark } from "../src/research/prepare.ts";
 import { evaluatePolicy } from "../src/research/evaluate.ts";
@@ -32,8 +32,24 @@ for (const fixture of evaluation.fixtureResults) {
 const meanRecovery = evaluation.fixtureResults.reduce((sum, fixture) => sum + (fixture.metrics.visualRecovery ?? 0), 0) / evaluation.fixtureResults.length;
 if (meanRecovery < 0.95) throw new Error(`Acceptance failed: mean visual recovery ${meanRecovery}`);
 if (evaluation.mutationControlRecall !== 1) throw new Error(`Acceptance failed: mutation recall ${evaluation.mutationControlRecall}`);
-const research = await runResearch({ manifestPath: join(fixtures, "manifest.json"), workspace: join(root, "workspace"), track: "policy", budget: 3, split: "validation", hiddenHoldoutEvery: 2 });
+// Seed one known, measurable policy defect so acceptance proves a real keep,
+// sealed promotion, and accepted/rejected preference pair. Starting from the
+// already-dominant production policy would correctly revert every no-op and
+// would not prove that the keep path remains executable.
+const researchWorkspace = join(root, "workspace");
+const seededPolicy = structuredClone(defaultPolicy);
+seededPolicy.name = "acceptance-stable-hints-disabled";
+seededPolicy.compiler.useStableNodeHints = false;
+await mkdir(join(researchWorkspace, "research"), { recursive: true });
+await Bun.write(join(researchWorkspace, "research", "incumbent-policy.json"), JSON.stringify(seededPolicy));
+const research = await runResearch({ manifestPath: join(fixtures, "manifest.json"), workspace: researchWorkspace, track: "pass", budget: 1, split: "validation", hiddenHoldoutEvery: 2 });
 if (research.accepted < 1) throw new Error("Acceptance failed: autoresearch did not keep a measured improvement");
+if (!research.promotion.promoted || !research.productionIncumbent.compiler.useStableNodeHints) throw new Error("Acceptance failed: measured research improvement did not survive sealed promotion");
+// Resume from the promoted incumbent and propose the inverse mutation. It must
+// be reverted with a genuinely different output/fitness context, producing a
+// valid preference pair rather than a contradictory duplicate label.
+const rejectionResearch = await runResearch({ manifestPath: join(fixtures, "manifest.json"), workspace: researchWorkspace, track: "pass", budget: 1, split: "validation", hiddenHoldoutEvery: 2 });
+if (rejectionResearch.rejected < 1 || rejectionResearch.experiments[0]?.intervention.effective !== true) throw new Error("Acceptance failed: autoresearch did not record an effective rejected candidate");
 const distilled = await distill(join(root, "workspace", "research", "trajectories.jsonl"), join(root, "distilled"), "all");
 if (!distilled.models.selector || !distilled.models.verifier || !distilled.models.planner) throw new Error("Acceptance failed: not all distilled models were produced");
 if (distilled.dataset.preferences < 1) throw new Error("Acceptance failed: accepted/rejected preference pairs were not produced");
