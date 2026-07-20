@@ -259,14 +259,15 @@ evidenceCommand
   .command("record <run>")
   .description("merge Lighthouse evidence and an optional validation-page visual waiver into a result manifest")
   .requiredOption("--spec <path>", "canonical SiteSpec artifact")
+  .option("--results <path>", "input result manifest; defaults to results.json in the run")
   .option("--lighthouse <path>", "Lighthouse JSON report")
   .option("--visual-waiver <ref>", "explicit authority reference when no visual target is scoped to the page")
   .option("--output <path>", "updated result manifest; defaults to evidence-results.json in the run")
-  .action(async (run: string, options: { spec: string; lighthouse?: string; visualWaiver?: string; output?: string }) => {
+  .action(async (run: string, options: { spec: string; results?: string; lighthouse?: string; visualWaiver?: string; output?: string }) => {
     if (!options.lighthouse && !options.visualWaiver) throw new UsageError("Pass --lighthouse and/or --visual-waiver to record evidence");
     const runDirectory = resolve(run);
     const output = resolve(options.output ?? join(runDirectory, "evidence-results.json"));
-    const recorded = await recordPageEvidence({ artifact: await siteSpecArtifact(options.spec), results: await readJson<ResultManifest>(join(runDirectory, "results.json")), outputPath: output, ...(options.lighthouse ? { lighthousePath: resolve(options.lighthouse) } : {}), ...(options.visualWaiver ? { visualWaiverAuthority: options.visualWaiver } : {}) });
+    const recorded = await recordPageEvidence({ artifact: await siteSpecArtifact(options.spec), results: await readJson<ResultManifest>(resolve(options.results ?? join(runDirectory, "results.json"))), outputPath: output, ...(options.lighthouse ? { lighthousePath: resolve(options.lighthouse) } : {}), ...(options.visualWaiver ? { visualWaiverAuthority: options.visualWaiver } : {}) });
     const blocking = recorded.requiredActions.filter((action: { severity: string }) => action.severity === "blocking").length;
     const envelope = result("evidence record", { resultsId: recorded.id, output, statuses: recorded.results.map((item: { requirementRef: string; status: string }) => ({ requirementRef: item.requirementRef, status: item.status })), blockingActions: blocking });
     envelope.ok = blocking === 0 && recorded.results.every((item: { status: string }) => ["pass", "waived"].includes(item.status));
