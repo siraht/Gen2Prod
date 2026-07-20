@@ -3,6 +3,7 @@ import type { ProjectContract, ProjectCorrespondence, ProjectPatchPlan, RouteEnt
 import type { ReactCanonicalSurface } from "./react/plan.ts";
 import type { VueCanonicalSurface } from "./vue/plan.ts";
 import type { SvelteCanonicalSurface } from "./svelte/plan.ts";
+import type { AstroCanonicalSurface } from "./astro/plan.ts";
 import type { ProjectSandbox } from "./sandbox.ts";
 import type { ProjectCommandResult } from "./process.ts";
 
@@ -29,7 +30,7 @@ export type ProjectDiscoveryResult = {
 };
 
 export type ProjectedRoute = { route: RouteEntry; roots: SourceProject["roots"]; modules: SourceProject["modules"]; bindingNames: string[]; unresolved: SourceProject["unresolved"] };
-export type ProjectPlanningContext = { root: string; contract: ProjectContract; source: SourceProject; correspondence: ProjectCorrespondence; canonicalOutputHash: string; policyHash: string; mode: Mode; profile: Profile; reactCanonical?: ReactCanonicalSurface; vueCanonical?: VueCanonicalSurface; svelteCanonical?: SvelteCanonicalSurface };
+export type ProjectPlanningContext = { root: string; contract: ProjectContract; source: SourceProject; correspondence: ProjectCorrespondence; canonicalOutputHash: string; policyHash: string; mode: Mode; profile: Profile; reactCanonical?: ReactCanonicalSurface; vueCanonical?: VueCanonicalSurface; svelteCanonical?: SvelteCanonicalSurface; astroCanonical?: AstroCanonicalSurface };
 export type ProjectValidationContext = { sandbox: ProjectSandbox; contract: ProjectContract; includeInstall?: boolean };
 export type NativeProjectResult = { passed: boolean; commands: ProjectCommandResult[] };
 export type ProjectPlannerResult = ProjectPatchPlan;
