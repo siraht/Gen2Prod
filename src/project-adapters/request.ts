@@ -18,7 +18,7 @@ export async function planProjectAdapterRequest(input: { root: string; request: 
 }
 
 export function planningContext(request: ProjectAdapterRunRequest): Omit<ProjectPlanningContext, "root" | "contract" | "source" | "correspondence"> {
-  const canonical = { root: request.canonical.root, scss: request.canonical.scss, css: request.canonical.css, outputHash: request.canonical.outputHash, registeredVariables: request.canonical.registeredVariables };
+  const canonical = { root: request.canonical.root, scss: request.canonical.scss, css: request.canonical.css, outputHash: request.canonical.outputHash, registeredVariables: request.canonical.registeredVariables, ...(request.canonical.metadata ? { metadata: request.canonical.metadata } : {}) };
   const base = { canonicalOutputHash: request.canonical.outputHash, policyHash: request.policyHash, mode: request.mode, profile: request.profile };
   switch (request.canonical.target) {
     case "react": return { ...base, reactCanonical: canonical };

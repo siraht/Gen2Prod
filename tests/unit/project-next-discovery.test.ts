@@ -19,7 +19,7 @@ describe("Next App Router project discovery", () => {
     await Bun.write(join(root, "src", "app", "layout.tsx"), 'import "./globals.scss"; export default function Layout({children}){return <html><body>{children}</body></html>}\n');
     await Bun.write(join(root, "src", "app", "globals.scss"), ".legacy { color: red; }\n");
     await Bun.write(join(root, "src", "app", "blog", "layout.tsx"), "export default function Layout({children}){return <section>{children}</section>}\n");
-    await Bun.write(join(root, "src", "app", "blog", "[slug]", "page.tsx"), 'export const metadata={title:"Post"}; export default async function Page({params}){const post=await fetch("/api"); return <main>Post</main>}\n');
+    await Bun.write(join(root, "src", "app", "blog", "[slug]", "page.tsx"), 'export const metadata={title:"Post",openGraph:{type:"article"}}; export default async function Page({params}){const post=await fetch("/api"); return <main>Post</main>}\n');
     await Bun.write(join(root, "src", "app", "blog", "[slug]", "loading.tsx"), "export default function Loading(){return <p>Loading</p>}\n");
     await Bun.write(join(root, "src", "app", "actions.tsx"), 'export async function save(){"use server"; return true}\n');
     const result = await discoverProject(root);
@@ -36,15 +36,34 @@ describe("Next App Router project discovery", () => {
     const routeRoot = project.roots.find((node) => node.anchor.file.endsWith("page.tsx"))!;
     const correspondence = ProjectCorrespondenceSchema.parse({ schemaVersion: "0.1.0", projectId: project.projectId, sourceProjectHash: project.sourceHash, captureHash: sha256("capture"), mappings: [{ mappingId: "page-root", sourceNodeId: routeRoot.id, kind: "one-to-one", instances: [{ stateId: "default", renderedNodeId: "page", score: 0.9 }], confidence: 0.9, evidence: ["tag"], destructiveAuthorized: true }], unresolved: [] });
     const scss = ".page { color: var(--text-dark); }\n";
-    const plan = await planReactIntegration({ root, contract: result.contract, project, correspondence, canonical: { root: { nodeId: "canonical", originalTag: "main", tag: "main", role: "main", block: "page", classes: ["page"], oldClasses: [], attributes: {}, text: "", children: [] }, scss, css: "", outputHash: sha256(scss), registeredVariables: ["--text-dark"] }, mode: "legacy-conversion", profile: "refactor", policyHash: sha256("policy") });
+    const plan = await planReactIntegration({ root, contract: result.contract, project, correspondence, canonical: { root: { nodeId: "canonical", originalTag: "main", tag: "main", role: "main", block: "page", classes: ["page"], oldClasses: [], attributes: {}, text: "", children: [] }, scss, css: "", outputHash: sha256(scss), registeredVariables: ["--text-dark"], metadata: { title: "Canonical post", description: "Canonical description" } }, mode: "legacy-conversion", profile: "refactor", policyHash: sha256("policy") });
     expect(plan.requiredActions).toEqual([]);
     const prepared = await prepareTextPatch(root, result.contract, project, plan);
     await applyPreparedTextPatch(prepared);
     const patchedPage = await Bun.file(join(root, "src", "app", "blog", "[slug]", "page.tsx")).text();
     expect(patchedPage).toContain("export const metadata");
+    expect(patchedPage).toContain('title:"Canonical post"');
+    expect(patchedPage).toContain('description: "Canonical description"');
+    expect(patchedPage).toContain('openGraph:{type:"article"}');
+    expect(patchedPage).not.toContain("<head>");
     expect(patchedPage).toContain("await fetch");
     expect(patchedPage).not.toContain('"use client"');
     expect(await Bun.file(join(root, "components", "gen2prod", "PageShell.tsx")).text()).not.toContain('"use client"');
     expect((await Bun.file(join(root, "src", "app", "layout.tsx")).text()).match(/globals\.scss/g)).toHaveLength(1);
+  });
+
+  test("fails closed when Next metadata is dynamically generated", async () => {
+    const root = await mkdtemp(join(tmpdir(), "g2p-next-dynamic-metadata-"));
+    await Bun.write(join(root, "package.json"), JSON.stringify({ name: "next-dynamic-metadata", scripts: { build: "next build" }, dependencies: { next: "16.0.0", react: "19.0.0" } }));
+    await Bun.write(join(root, "bun.lock"), "lock");
+    await Bun.write(join(root, "app", "page.tsx"), 'export async function generateMetadata(){return {title:"Runtime"}} export default function Page(){return <main>Page</main>}\n');
+    const discovery = await discoverProject(root);
+    const project = await parseProjectSource(root, discovery);
+    const rootNode = project.roots[0]!;
+    const correspondence = ProjectCorrespondenceSchema.parse({ schemaVersion: "0.1.0", projectId: project.projectId, sourceProjectHash: project.sourceHash, captureHash: sha256("capture"), mappings: [{ mappingId: "root", sourceNodeId: rootNode.id, kind: "one-to-one", instances: [{ stateId: "default", renderedNodeId: "page", score: 0.9 }], confidence: 0.9, evidence: ["tag"], destructiveAuthorized: true }], unresolved: [] });
+    const scss = ".page { color: var(--text-dark); }\n";
+    const plan = await planReactIntegration({ root, contract: discovery.contract, project, correspondence, canonical: { root: { nodeId: "canonical", originalTag: "main", tag: "main", role: "main", block: "page", classes: ["page"], oldClasses: [], attributes: {}, text: "", children: [] }, scss, css: "", outputHash: sha256(scss), registeredVariables: ["--text-dark"], metadata: { title: "Static override" } }, mode: "legacy-conversion", profile: "refactor", policyHash: sha256("policy") });
+    expect(plan.requiredActions.map((item) => item.id)).toContain("next-dynamic-metadata:app/page.tsx");
+    expect(plan.operations.some((operation) => operation.kind === "update-framework-metadata")).toBeFalse();
   });
 });

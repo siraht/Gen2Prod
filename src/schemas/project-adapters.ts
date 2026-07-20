@@ -304,6 +304,7 @@ export const ProjectAdapterRunRequestSchema = z.object({
     css: z.string(),
     outputHash: Sha256Schema,
     registeredVariables: z.array(z.string().regex(/^--[a-z0-9-]+$/)),
+    metadata: z.object({ title: z.string().min(1).optional(), description: z.string().min(1).optional() }).strict().optional(),
   }).strict(),
   policyHash: Sha256Schema,
   mode: ModeSchema,

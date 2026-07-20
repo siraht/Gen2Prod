@@ -10,8 +10,9 @@ import { planImport } from "../rewrite/imports.ts";
 import { planOwnedFile } from "../rewrite/files.ts";
 import { projectOperationGraphHash } from "../rewrite/text-edits.ts";
 import { inventoryProjectStyles, planSharedScss } from "../styles.ts";
+import { sourceAnchor } from "../ir.ts";
 
-export type ReactCanonicalSurface = { root: PlannedNode; scss: string; css: string; outputHash: string; registeredVariables: string[] };
+export type ReactCanonicalSurface = { root: PlannedNode; scss: string; css: string; outputHash: string; registeredVariables: string[]; metadata?: { title?: string | undefined; description?: string | undefined } };
 
 export async function planReactIntegration(input: { root: string; contract: ProjectContract; project: SourceProject; correspondence: ProjectCorrespondence; canonical: ReactCanonicalSurface; mode: Mode; profile: Profile; policyHash: string }): Promise<ProjectPatchPlan> {
   if (input.contract.framework.target !== "react") throw new Error("React planner requires a React destination contract");
@@ -42,6 +43,11 @@ export async function planReactIntegration(input: { root: string; contract: Proj
     if (current !== componentSource) { ownedConflict = true; requiredActions.push({ id: `owned-component-conflict:${componentPath}`, summary: "Resolve the edited generated component", detail: `${componentPath} differs from its canonical projection and will not be overwritten.`, blocking: true }); }
   } else operations.push(planOwnedFile(input.contract, `write-${componentName}`, `${componentName}.tsx`, componentSource));
   const routeSource = await readSourceText(`${input.root}/${route.entry}`);
+  if (input.contract.framework.profile === "next-app" && input.canonical.metadata && Object.keys(input.canonical.metadata).length) {
+    const metadata = planNextMetadata(route.entry, routeSource, input.canonical.metadata);
+    if (metadata.operation) operations.push(metadata.operation);
+    if (metadata.requiredAction) requiredActions.push(metadata.requiredAction);
+  }
   const importPath = modulePath(route.entry, componentPath);
   const componentImport = planImport({ operationId: `import-${componentName}`, path: route.entry, source: routeSource, request: { module: importPath, defaultImport: componentName }, dependencies: existingComponent ? [] : [`write-${componentName}`] });
   if (componentImport) operations.push(componentImport);
@@ -107,3 +113,45 @@ function renderShell(name: string, node: PlannedNode): string {
 }
 
 function reactAttribute(name: string): string { if (name === "for") return "htmlFor"; if (name === "tabindex") return "tabIndex"; return name; }
+
+function planNextMetadata(path: string, source: string, desired: NonNullable<ReactCanonicalSurface["metadata"]>): { operation?: ProjectPatchOperation; requiredAction?: ProjectPatchPlan["requiredActions"][number] } {
+  const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let metadataDeclaration: ts.VariableDeclaration | undefined;
+  let dynamicMetadata = false;
+  for (const statement of file.statements) {
+    if (ts.isFunctionDeclaration(statement) && statement.name?.text === "generateMetadata" && statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) dynamicMetadata = true;
+    if (ts.isVariableStatement(statement) && statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) for (const declaration of statement.declarationList.declarations) if (ts.isIdentifier(declaration.name) && declaration.name.text === "metadata") metadataDeclaration = declaration;
+  }
+  if (!metadataDeclaration && dynamicMetadata) return { requiredAction: { id: `next-dynamic-metadata:${path}`, summary: "Integrate canonical metadata in generateMetadata", detail: "The route computes metadata dynamically. Provide a source-authorized mapping rather than replacing or shadowing generateMetadata.", blocking: true } };
+  const anchor = sourceAnchor(path, source, 0, source.length, "SourceFile", source);
+  let start: number, end: number, before: string, after: string;
+  if (metadataDeclaration) {
+    if (!metadataDeclaration.initializer || !ts.isObjectLiteralExpression(metadataDeclaration.initializer)) return { requiredAction: { id: `next-opaque-metadata:${path}`, summary: "Resolve opaque Next metadata initializer", detail: "Static canonical metadata cannot be merged safely into a non-object metadata export.", blocking: true } };
+    const object = metadataDeclaration.initializer;
+    start = object.getStart(file); end = object.getEnd(); before = source.slice(start, end);
+    const edits: { start: number; end: number; value: string }[] = [];
+    const missing: string[] = [];
+    for (const key of ["title", "description"] as const) {
+      const value = desired[key]; if (!value) continue;
+      const property = object.properties.find((item): item is ts.PropertyAssignment => ts.isPropertyAssignment(item) && ((ts.isIdentifier(item.name) || ts.isStringLiteralLike(item.name)) && item.name.text === key));
+      if (!property) { missing.push(`${key}: ${JSON.stringify(value)}`); continue; }
+      const initializerStart = property.initializer.getStart(file) - start;
+      const initializerEnd = property.initializer.getEnd() - start;
+      if (before.slice(initializerStart, initializerEnd) !== JSON.stringify(value)) edits.push({ start: initializerStart, end: initializerEnd, value: JSON.stringify(value) });
+    }
+    after = before;
+    for (const edit of edits.sort((left, right) => right.start - left.start)) after = `${after.slice(0, edit.start)}${edit.value}${after.slice(edit.end)}`;
+    if (missing.length) {
+      const close = after.lastIndexOf("}");
+      const body = after.slice(1, close).trim();
+      after = `${after.slice(0, close)}${body ? ", " : ""}${missing.join(", ")}${after.slice(close)}`;
+    }
+  } else {
+    start = file.statements.filter(ts.isImportDeclaration).at(-1)?.end ?? 0;
+    end = start; before = "";
+    const fields = (["title", "description"] as const).flatMap((key) => desired[key] ? [`${key}: ${JSON.stringify(desired[key])}`] : []);
+    after = `${start ? "\n" : ""}export const metadata = { ${fields.join(", ")} };\n`;
+  }
+  if (before === after) return {};
+  return { operation: { kind: "update-framework-metadata", operationId: `metadata-${sha256(`${path}:${after}`).slice(0, 12)}`, dependencies: [], path, filePreimageHash: sha256(source), authorities: ["framework-source", "destination-metadata-contract"], preservedRegionHashes: [], blastRadius: "page", expectedPostimageHash: sha256(after), validationObligations: ["next-native-metadata", "native-build", "seo-capture"], skippable: false, start, end, spanPreimageHash: sha256(before), astFingerprint: anchor.astFingerprint, expectedNodeKind: "SourceFile", before, after } };
+}

@@ -52,6 +52,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P10.1 dynamic React project curriculum | Lifted the ten canonical page archetypes and independent content families into two React/Vite starter families with clean/dirty native-buildable projects, conditional navigation, keyed repetition, async states, controlled forms, dialogs, responsive media, client boundary, children composition, strict contracts/Source IR/states, strategies/briefs/content, lineage, eight corruption operations, family splits, and optional gold/dirty/diff browser captures | Eight-fixture structural dogfood proves two content variants remain in each family split, both dirty and gold projects build, dynamic/key/state/ref evidence parses, clean SCSS is nested/tokenized, and no runtime lineage marker leaks; CLI visual dogfood emits two starter projects with eight real screenshots plus four diff images |
 | 2026-07-20 | P2.3 auditable React class migration | Added whole-token semantic BEM replacement over every statically enumerable variant, proof-gated behavior-hook lowering to `data-*`, and fail-closed preservation for framework, unknown, and runtime-generated class surfaces | Unit dogfood covers base/modifier mapping, behavior migration, runtime opacity, and framework-class blockers without substring rewriting or executing destination code |
 | 2026-07-20 | P2.4 rendered-state route projection | Connected each declared rendered HTML/CSS state to the existing static canonical compiler, source/render correspondence, immutable dynamic descendants, BEM block ownership decisions, and safe replacement/wrapper/extraction/slot opportunities in a strict hash-bound artifact | Two-state React dogfood produces distinct canonical outputs, retains rendered inputs, maps preserved dynamics and BEM blocks, and project runtime replay now retains the projection artifact when capture evidence exists |
+| 2026-07-20 | P3.2 Next-native metadata integration | Extended the portable canonical request with optional title/description intent and added a minimal App Router metadata operation that updates or inserts `export const metadata`, preserves unrelated object fields, and blocks on `generateMetadata` or opaque initializers | Next dogfood updates title, inserts description, retains Open Graph data, emits no document tags or client directive, preserves async fetch/server boundaries, and fails closed for dynamic metadata |
 
 ### Additional implementation decisions
 
@@ -85,6 +86,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | D46 | Project curriculum stores static canonical pixels beside, not inside, dynamic source authority | A screenshot can score visual recovery but cannot encode props, branches, keys, handlers, form state, dialog control, or client boundaries | Gold/dirty project source and declared states own behavior; canonical static HTML screenshots own only their captured pixels, and lineage records that distinction explicitly |
 | D47 | Behavior classes become `data-*` only when source evidence proves they are selector-only hooks | A class may be consumed by CSS, JavaScript, a plugin, tests, or analytics, and changing it without a complete reference proof can break behavior | Unproven behavior and framework classes remain opaque blockers; a clean-surface claim is available only when every reachable variant is complete and every token is owned or proven migratable |
 | D48 | Runtime projection compiles captured HTML/CSS per state and overlays source authority afterward | Static canonical inference is useful for semantic/BEM intent but cannot own the dynamic expressions that produced a materialized DOM | Each state keeps its canonical hash and correspondence hash while ownership decisions retain preserved-region IDs; a missing rendered source fails instead of fabricating a projection |
+| D49 | Next metadata intent lowers only through App Router metadata exports | Injecting `<head>` tags or shadowing `generateMetadata` creates duplicate/incorrect server metadata and can silently discard data-driven fields | Static object exports receive a hash-guarded minimal merge; dynamic/opaque metadata requires an explicit source-authorized mapping |
 
 ### Lessons learned
 
@@ -121,6 +123,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L29 | Content variation and structural variation need separate identities | Each starter/archetype pair is a family, while content variants are derivatives assigned to that family's one split; changing copy does not create fake topology independence |
 | L30 | A syntactically BEM-compatible token is not evidence that Gen2Prod owns its runtime meaning | Class migration consumes explicit style/behavior/framework evidence and rewrites complete tokens only; runtime class functions never become guessed variants |
 | L31 | One default render cannot establish dynamic ownership | Projection runs every declared state independently and carries immutable source-region IDs into each canonical block decision; unobserved or low-confidence mappings remain evidence requests |
+| L32 | Preserving a metadata export is not the same as integrating the destination metadata contract | The canonical request now carries explicit metadata intent, Next gets a native operation, and dynamic generators are surfaced as blockers rather than silently ignored |
 
 ## 1. Outcome
 
@@ -1020,7 +1023,7 @@ Dependencies: P3.1.
 Tasks:
 
 - [x] Insert generated components into the correct route/layout boundary.
-- [ ] Emit metadata through Next-native surfaces without duplicating document tags.
+- [x] Emit metadata through Next-native surfaces without duplicating document tags.
 - [x] Keep server actions, async components, route params, and data access verbatim.
 - [x] Keep client components as the smallest existing or required interaction islands.
 - [x] Integrate shared SCSS according to Next import constraints.
