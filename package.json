@@ -18,6 +18,8 @@
   },
   "dependencies": {
     "@tesseract.js-data/eng": "1.0.0",
+    "@astrojs/compiler": "4.0.0",
+    "@vue/compiler-sfc": "3.5.40",
     "axe-core": "^4.10.3",
     "commander": "^14.0.0",
     "culori": "^4.0.2",
@@ -30,23 +32,21 @@
     "postcss": "^8.5.6",
     "postcss-scss": "^4.0.9",
     "sass": "^1.89.2",
+    "svelte": "5.56.6",
     "tesseract.js": "7.0.0",
+    "typescript": "5.9.3",
     "yaml": "^2.8.0",
     "zod": "^4.0.5"
   },
   "devDependencies": {
-    "@astrojs/compiler": "^4.0.0",
     "@types/bun": "^1.2.18",
     "@types/culori": "^2.1.1",
     "@types/pngjs": "^6.0.5",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
-    "@vue/compiler-sfc": "^3.5.40",
     "astro": "^7.1.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "svelte": "^5.56.6",
-    "typescript": "^5.8.3",
     "vue": "^3.5.40"
   },
   "engines": {

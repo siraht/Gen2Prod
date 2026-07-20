@@ -8,9 +8,15 @@ importers:
 
   .:
     dependencies:
+      '@astrojs/compiler':
+        specifier: 4.0.0
+        version: 4.0.0
       '@tesseract.js-data/eng':
         specifier: 1.0.0
         version: 1.0.0
+      '@vue/compiler-sfc':
+        specifier: 3.5.40
+        version: 3.5.40
       axe-core:
         specifier: ^4.10.3
         version: 4.12.1
@@ -47,9 +53,15 @@ importers:
       sass:
         specifier: ^1.89.2
         version: 1.101.0
+      svelte:
+        specifier: 5.56.6
+        version: 5.56.6
       tesseract.js:
         specifier: 7.0.0
         version: 7.0.0
+      typescript:
+        specifier: 5.9.3
+        version: 5.9.3
       yaml:
         specifier: ^2.8.0
         version: 2.9.0
@@ -57,9 +69,6 @@ importers:
         specifier: ^4.0.5
         version: 4.4.3
     devDependencies:
-      '@astrojs/compiler':
-        specifier: ^4.0.0
-        version: 4.0.0
       '@types/bun':
         specifier: ^1.2.18
         version: 1.3.14
@@ -75,9 +84,6 @@ importers:
       '@types/react-dom':
         specifier: ^19.2.3
         version: 19.2.3(@types/react@19.2.17)
-      '@vue/compiler-sfc':
-        specifier: ^3.5.40
-        version: 3.5.40
       astro:
         specifier: ^7.1.1
         version: 7.1.1(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.2)(@types/node@26.1.1)(idb-keyval@6.3.0)(sass@1.101.0)(yaml@2.9.0)
@@ -87,12 +93,6 @@ importers:
       react-dom:
         specifier: ^19.2.7
         version: 19.2.7(react@19.2.7)
-      svelte:
-        specifier: ^5.56.6
-        version: 5.56.6
-      typescript:
-        specifier: ^5.8.3
-        version: 5.9.3
       vue:
         specifier: ^3.5.40
         version: 3.5.40(typescript@5.9.3)

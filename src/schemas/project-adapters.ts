@@ -144,7 +144,7 @@ export const ProjectBindingSchema = z.object({
 
 export type ProjectMarkupNodeShape = {
   id: string;
-  kind: "static" | "expression" | "conditional" | "repetition" | "slot" | "directive" | "opaque";
+  kind: "static" | "text" | "expression" | "conditional" | "repetition" | "slot" | "directive" | "opaque";
   anchor: z.infer<typeof SourceAnchorSchema>;
   tag?: string | undefined;
   attributes: Record<string, string>;
@@ -161,7 +161,7 @@ export type ProjectMarkupNodeShape = {
 
 export const ProjectMarkupNodeSchema: z.ZodType<ProjectMarkupNodeShape> = z.lazy(() => z.object({
   id: z.string().min(1),
-  kind: z.enum(["static", "expression", "conditional", "repetition", "slot", "directive", "opaque"]),
+  kind: z.enum(["static", "text", "expression", "conditional", "repetition", "slot", "directive", "opaque"]),
   anchor: SourceAnchorSchema,
   tag: z.string().optional(),
   attributes: z.record(z.string(), z.string()).default({}),
@@ -181,6 +181,7 @@ export const SourceProjectSchema = z.object({
   projectId: z.string().min(1),
   contractHash: Sha256Schema,
   sourceHash: Sha256Schema,
+  normalizedHash: Sha256Schema,
   parser: z.object({ target: FrameworkAdapterTargetSchema, profile: ProjectFrameworkProfileSchema, name: z.string(), version: z.string() }).strict(),
   files: z.array(z.object({ path: RelativePathSchema, sha256: Sha256Schema, bytes: z.number().int().nonnegative(), role: z.enum(["entry", "component", "layout", "style", "config", "content", "cms", "support", "unknown"]), editable: z.boolean() }).strict()),
   modules: z.array(z.object({ path: RelativePathSchema, imports: z.array(z.string()), exports: z.array(z.string()), symbols: z.array(z.string()), components: z.array(z.string()) }).strict()),
@@ -189,9 +190,24 @@ export const SourceProjectSchema = z.object({
   bindings: z.array(ProjectBindingSchema),
   classVariants: z.array(z.object({ nodeId: z.string(), classes: z.array(z.array(z.string())), complete: z.boolean(), evidence: z.array(z.string()) }).strict()),
   styleSources: z.array(z.object({ path: RelativePathSchema, sha256: Sha256Schema, selectors: z.array(z.string()), scoped: z.boolean(), module: z.boolean() }).strict()),
+  assets: z.array(z.object({ path: RelativePathSchema, sha256: Sha256Schema, mediaType: z.string().min(1), importedBy: z.array(RelativePathSchema) }).strict()),
   metadata: z.record(z.string(), z.unknown()),
   unresolved: z.array(z.object({ id: z.string(), concern: z.string(), evidenceNeeded: z.array(z.string()), blocking: z.boolean() }).strict()),
-}).strict();
+}).strict().superRefine((value, context) => {
+  const ids = new Set<string>();
+  const nodes: ProjectMarkupNodeShape[] = [];
+  const visit = (node: ProjectMarkupNodeShape) => {
+    if (ids.has(node.id)) context.addIssue({ code: "custom", path: ["roots"], message: `duplicate project node id: ${node.id}` });
+    ids.add(node.id);
+    nodes.push(node);
+    node.children.forEach(visit);
+  };
+  value.roots.forEach(visit);
+  for (const node of nodes) {
+    for (const branchId of node.branchIds) if (!ids.has(branchId)) context.addIssue({ code: "custom", path: ["roots"], message: `dangling branch reference: ${branchId}` });
+  }
+  for (const variant of value.classVariants) if (!ids.has(variant.nodeId)) context.addIssue({ code: "custom", path: ["classVariants"], message: `dangling class-variant node reference: ${variant.nodeId}` });
+});
 
 export const ProjectOwnershipMapSchema = z.object({
   schemaVersion: z.literal("0.1.0"),
@@ -291,6 +307,7 @@ export type StateFixture = z.infer<typeof StateFixtureSchema>;
 export type RouteEntry = z.infer<typeof RouteEntrySchema>;
 export type ProjectContract = z.infer<typeof ProjectContractSchema>;
 export type SourceAnchor = z.infer<typeof SourceAnchorSchema>;
+export type ProjectBinding = z.infer<typeof ProjectBindingSchema>;
 export type ProjectMarkupNode = ProjectMarkupNodeShape;
 export type SourceProject = z.infer<typeof SourceProjectSchema>;
 export type ProjectOwnershipMap = z.infer<typeof ProjectOwnershipMapSchema>;
