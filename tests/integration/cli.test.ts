@@ -22,6 +22,10 @@ test("exposes the SiteSpec design, release, and governed production commands", a
   expect(await system.exited).toBe(0);
   expect(systemHelp).toContain("propose");
   expect(systemHelp).toContain("validate");
+  const proposal = Bun.spawn(["bun", "src/cli.ts", "design-system", "propose", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
+  const proposalHelp = await new Response(proposal.stdout).text();
+  expect(await proposal.exited).toBe(0);
+  expect(proposalHelp).toContain("--release-version");
   const build = Bun.spawn(["bun", "src/cli.ts", "build", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
   const buildHelp = await new Response(build.stdout).text();
   expect(await build.exited).toBe(0);
@@ -30,7 +34,7 @@ test("exposes the SiteSpec design, release, and governed production commands", a
   const rolloutHelp = await new Response(rollout.stdout).text();
   expect(await rollout.exited).toBe(0);
   for (const option of ["--spec", "--design-system", "--output"]) expect(rolloutHelp).toContain(option);
-});
+}, 10_000);
 
 test("exposes the complete project command tree and performs read-only inspection", async () => {
   const help = Bun.spawn(["bun", "src/cli.ts", "project", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });

@@ -119,7 +119,7 @@ await cli("bootstrap-import", ["design", "import-candidate", bootstrapCandidateP
 const bootstrapTargetPath = join(root, "bootstrap", "visual-target.json");
 await cli("bootstrap-approve", ["design", "approve-target", bootstrapCandidatePath, "--spec", specPath, "--approval", "qualification://approvals/bootstrap-visual", "--output", bootstrapTargetPath]);
 const bootstrapSystemRoot = join(root, "bootstrap", "design-system");
-const bootstrapProposal = await cli("bootstrap-propose", ["design-system", "propose", "--spec", specPath, "--visual-target", bootstrapTargetPath, "--version", "2.0.0-bootstrap.1", "--output", bootstrapSystemRoot]);
+const bootstrapProposal = await cli("bootstrap-propose", ["design-system", "propose", "--spec", specPath, "--visual-target", bootstrapTargetPath, "--release-version", "2.0.0-bootstrap.1", "--output", bootstrapSystemRoot]);
 const bootstrapReleasePath = String((bootstrapProposal.data as Record<string, unknown>).releasePath);
 const bootstrapBuild = await cli("bootstrap-anchor-build", ["build", "--spec", specPath, "--page", "sitespec://northstar/pages/home", "--design-system", bootstrapReleasePath, "--release-validation", "--output", join(root, "bootstrap", "production")], [3]);
 const bootstrapRun = String((bootstrapBuild.data as Record<string, unknown>).runDirectory);
@@ -132,7 +132,7 @@ await cli("refined-import", ["design", "import-candidate", finalCandidatePath, "
 const finalTargetPath = join(root, "final", "visual-target.json");
 await cli("refined-approve", ["design", "approve-target", finalCandidatePath, "--spec", specPath, "--approval", "qualification://approvals/refined-anchor-visual", "--output", finalTargetPath]);
 const designSystemRoot = join(root, "final", "design-system");
-const proposed = await cli("final-propose", ["design-system", "propose", "--spec", specPath, "--visual-target", finalTargetPath, "--version", "2.0.0-rc.1", "--output", designSystemRoot]);
+const proposed = await cli("final-propose", ["design-system", "propose", "--spec", specPath, "--visual-target", finalTargetPath, "--release-version", "2.0.0-rc.1", "--output", designSystemRoot]);
 const proposalPath = String((proposed.data as Record<string, unknown>).releasePath);
 
 const validationBuild = await cli("validation-build", ["build", "--spec", specPath, "--page", "sitespec://northstar/pages/assessment", "--design-system", proposalPath, "--release-validation", "--output", join(root, "final", "production")], [3]);
@@ -140,7 +140,7 @@ const validationRun = String((validationBuild.data as Record<string, unknown>).r
 const validationLighthouse = await lighthouse("validation", validationRun);
 const validationResultsPath = join(validationRun, "accepted-results.json");
 await cli("validation-evidence", ["evidence", "record", validationRun, "--spec", specPath, "--lighthouse", validationLighthouse, "--visual-waiver", "qualification://approvals/validation-page-no-visual-target", "--output", validationResultsPath]);
-const approved = await cli("release-approval", ["design-system", "validate", "--spec", specPath, "--proposal", proposalPath, "--page", "sitespec://northstar/pages/assessment", "--results", validationResultsPath, "--approval", "qualification://approvals/design-system-2.0.0", "--version", "2.0.0", "--output", designSystemRoot]);
+const approved = await cli("release-approval", ["design-system", "validate", "--spec", specPath, "--proposal", proposalPath, "--page", "sitespec://northstar/pages/assessment", "--results", validationResultsPath, "--approval", "qualification://approvals/design-system-2.0.0", "--release-version", "2.0.0", "--output", designSystemRoot]);
 const approvedReleasePath = String((approved.data as Record<string, unknown>).releasePath);
 
 const anchorBuild = await cli("anchor-build", ["build", "--spec", specPath, "--page", "sitespec://northstar/pages/home", "--design-system", approvedReleasePath, "--output", join(root, "final", "production")], [3]);
@@ -164,7 +164,7 @@ if ((repeatBuild.data as Record<string, unknown>).runId !== (anchorBuild.data as
 const staleGraph = rebuild(graph, (entity) => { if (entity.uid === "sitespec://northstar/pages/home/sections/hero.1/slots/heading") entity.data.content = { kind: "heading", text: "Changed current heading", level: 1 }; });
 const staleSpecPath = join(root, "negative", "stale-site.json");
 await writeJson(staleSpecPath, artifact(staleGraph));
-await cli("reject-stale-target", ["design-system", "propose", "--spec", staleSpecPath, "--visual-target", finalTargetPath, "--version", "2.0.1-rc.1", "--output", join(root, "negative", "stale-system")], [1]);
+await cli("reject-stale-target", ["design-system", "propose", "--spec", staleSpecPath, "--visual-target", finalTargetPath, "--release-version", "2.0.1-rc.1", "--output", join(root, "negative", "stale-system")], [1]);
 const unsupportedPath = join(root, "negative", "unsupported-site.json");
 await writeJson(unsupportedPath, { ...artifact(graph), schemaVersion: "website-ontology/1.0" });
 await cli("reject-unsupported-contract", ["build", "--spec", unsupportedPath, "--page", "sitespec://northstar/pages/home", "--design-system", approvedReleasePath, "--output", join(root, "negative", "unsupported")], [1]);

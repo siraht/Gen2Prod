@@ -196,10 +196,10 @@ designSystemCommand
   .description("synthesize a provisional versioned design system from an approved visual target")
   .requiredOption("--spec <path>", "canonical SiteSpec artifact")
   .requiredOption("--visual-target <path>", "approved visual-target artifact")
-  .requiredOption("--version <semver>", "immutable provisional version")
+  .requiredOption("--release-version <semver>", "immutable provisional version")
   .option("--output <path>", "design-system artifact root", ".gen2prod/sitespec/design-system")
-  .action(async (options: { spec: string; visualTarget: string; version: string; output: string }) => {
-    const proposal = await proposeDesignSystem({ artifact: await siteSpecArtifact(options.spec), visualTarget: await readJson<VisualTarget>(resolve(options.visualTarget)), version: options.version, outputDirectory: resolve(options.output) });
+  .action(async (options: { spec: string; visualTarget: string; releaseVersion: string; output: string }) => {
+    const proposal = await proposeDesignSystem({ artifact: await siteSpecArtifact(options.spec), visualTarget: await readJson<VisualTarget>(resolve(options.visualTarget)), version: options.releaseVersion, outputDirectory: resolve(options.output) });
     emit(result("design-system propose", { id: proposal.release.id, version: proposal.release.version, status: proposal.release.status, releasePath: proposal.releasePath, objectsDirectory: proposal.objectsDirectory }), `Proposed design system ${proposal.release.id} (${proposal.release.version})\nStatus: ${proposal.release.status}\nRelease: ${proposal.releasePath}`);
   });
 designSystemCommand
@@ -210,10 +210,10 @@ designSystemCommand
   .requiredOption("--page <ref>", "designated validation page subject")
   .requiredOption("--results <path>", "current validation-page result manifest")
   .requiredOption("--approval <ref>", "SiteOps/human design-system approval reference")
-  .requiredOption("--version <semver>", "new immutable approved version")
+  .requiredOption("--release-version <semver>", "new immutable approved version")
   .option("--output <path>", "design-system artifact root", ".gen2prod/sitespec/design-system")
-  .action(async (options: { spec: string; proposal: string; page: string; results: string; approval: string; version: string; output: string }) => {
-    const approved = await approveDesignSystemRelease({ proposal: await readJson<DesignSystemRelease>(resolve(options.proposal)), artifact: await siteSpecArtifact(options.spec), validationPageRef: options.page, results: await readJson<ResultManifest>(resolve(options.results)), approvalRef: options.approval, version: options.version, outputDirectory: resolve(options.output) });
+  .action(async (options: { spec: string; proposal: string; page: string; results: string; approval: string; releaseVersion: string; output: string }) => {
+    const approved = await approveDesignSystemRelease({ proposal: await readJson<DesignSystemRelease>(resolve(options.proposal)), artifact: await siteSpecArtifact(options.spec), validationPageRef: options.page, results: await readJson<ResultManifest>(resolve(options.results)), approvalRef: options.approval, version: options.releaseVersion, outputDirectory: resolve(options.output) });
     emit(result("design-system validate", { id: approved.release.id, version: approved.release.version, status: approved.release.status, validationPageRefs: approved.release.validationPageRefs, releasePath: approved.releasePath }), `Approved design system ${approved.release.id} (${approved.release.version})\nValidation page: ${approved.release.validationPageRefs?.join(", ")}\nRelease: ${approved.releasePath}`);
   });
 
