@@ -1,6 +1,7 @@
 import type { Mode, Profile } from "../schemas/artifacts.ts";
 import type { ProjectContract, ProjectCorrespondence, ProjectPatchPlan, RouteEntry, SourceProject } from "../schemas/project-adapters.ts";
 import type { ReactCanonicalSurface } from "./react/plan.ts";
+import type { VueCanonicalSurface } from "./vue/plan.ts";
 import type { ProjectSandbox } from "./sandbox.ts";
 import type { ProjectCommandResult } from "./process.ts";
 
@@ -27,7 +28,7 @@ export type ProjectDiscoveryResult = {
 };
 
 export type ProjectedRoute = { route: RouteEntry; roots: SourceProject["roots"]; modules: SourceProject["modules"]; bindingNames: string[]; unresolved: SourceProject["unresolved"] };
-export type ProjectPlanningContext = { root: string; contract: ProjectContract; source: SourceProject; correspondence: ProjectCorrespondence; canonicalOutputHash: string; policyHash: string; mode: Mode; profile: Profile; reactCanonical?: ReactCanonicalSurface };
+export type ProjectPlanningContext = { root: string; contract: ProjectContract; source: SourceProject; correspondence: ProjectCorrespondence; canonicalOutputHash: string; policyHash: string; mode: Mode; profile: Profile; reactCanonical?: ReactCanonicalSurface; vueCanonical?: VueCanonicalSurface };
 export type ProjectValidationContext = { sandbox: ProjectSandbox; contract: ProjectContract; includeInstall?: boolean };
 export type NativeProjectResult = { passed: boolean; commands: ProjectCommandResult[] };
 export type ProjectPlannerResult = ProjectPatchPlan;

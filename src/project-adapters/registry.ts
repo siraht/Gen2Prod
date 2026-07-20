@@ -9,6 +9,7 @@ import { parseAstroProject } from "./astro/parse.ts";
 import { parseWordPressProject } from "./wordpress/parse.ts";
 import { parseBricksProject } from "./bricks/parse.ts";
 import { planReactIntegration } from "./react/plan.ts";
+import { planVueIntegration } from "./vue/plan.ts";
 import { projectOperationGraphHash } from "./rewrite/text-edits.ts";
 import { runSandboxCommands } from "./sandbox.ts";
 
@@ -31,6 +32,7 @@ function adapter(profile: ProjectFrameworkProfile, target: ProjectSourceAdapter[
     projectRoute: (source, route) => ({ route, roots: source.roots.filter((node) => node.anchor.file === route.entry || route.layoutChain.includes(node.anchor.file)), modules: source.modules.filter((module) => module.path === route.entry || route.layoutChain.includes(module.path)), bindingNames: source.bindings.map((binding) => binding.name), unresolved: source.unresolved }),
     planIntegration: async (context) => {
       if (target === "react" && context.reactCanonical) return planReactIntegration({ root: context.root, contract: context.contract, project: context.source, correspondence: context.correspondence, canonical: context.reactCanonical, mode: context.mode, profile: context.profile, policyHash: context.policyHash });
+      if (target === "vue" && context.vueCanonical) return planVueIntegration({ root: context.root, contract: context.contract, project: context.source, correspondence: context.correspondence, canonical: context.vueCanonical, mode: context.mode, profile: context.profile, policyHash: context.policyHash });
       return unsupportedPlanner(context, profile);
     },
     validateNative: async (context) => { const commands = await runSandboxCommands(context.sandbox, context.contract, { ...(context.includeInstall ? { includeInstall: true } : {}) }); return { passed: commands.length > 0 && commands.every((command) => command.passed), commands }; },
