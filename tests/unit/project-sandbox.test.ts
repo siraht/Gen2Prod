@@ -9,6 +9,7 @@ import { parseProjectSource } from "../../src/project-adapters/registry.ts";
 import { planOwnedFile } from "../../src/project-adapters/rewrite/files.ts";
 import { projectOperationGraphHash } from "../../src/project-adapters/rewrite/text-edits.ts";
 import { createProjectSandbox, runSandboxCommands } from "../../src/project-adapters/sandbox.ts";
+import { runContainerProjectCommand, verifyIsolationProof, createIsolationProof } from "../../src/project-adapters/container.ts";
 import { ProjectContractSchema, ProjectPatchPlanSchema } from "../../src/schemas/project-adapters.ts";
 
 async function runnerFixture() {
@@ -21,6 +22,32 @@ async function runnerFixture() {
 }
 
 describe("safe project process runner and sandbox", () => {
+  test("proves digest-pinned read-only, capability-dropped, network-disabled execution", async () => {
+    const image = "oven/bun@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4";
+    const docker = Bun.which("docker");
+    if (!docker) return;
+    const inspect = Bun.spawn([docker, "image", "inspect", image], { stdout: "ignore", stderr: "ignore" });
+    if (await inspect.exited !== 0) return;
+    const root = await mkdtemp(join(tmpdir(), "g2p-container-runner-"));
+    const artifactsRoot = await mkdtemp(join(tmpdir(), "g2p-container-artifacts-"));
+    await Bun.write(join(root, "bun.lock"), "locked");
+    const lockfileHash = await hashFile(join(root, "bun.lock"));
+    const script = "await Bun.write('result.txt','contained'); let network=false; try { await fetch('https://example.com', { signal: AbortSignal.timeout(500) }); } catch { network=true; } let root=false; try { await Bun.write('/escape.txt','no'); } catch { root=true; } console.log(process.env.SAFE_VALUE); if (!network || !root) process.exit(2);";
+    const command = { executable: "bun", args: ["-e", script], cwd: ".", envKeys: ["SAFE_VALUE"], timeoutMs: 5_000 };
+    const contract = ProjectContractSchema.parse({ schemaVersion: "0.1.0", projectId: "contained", rootHash: sha256("root"), framework: { target: "react", profile: "react-generic", version: "19", rendering: ["csr"], parserVersion: "5" }, packageManager: { name: "bun", lockfile: "bun.lock", lockfileHash }, commands: { build: command }, integration: { routeEntries: [{ route: "/", entry: "src/App.tsx", layoutChain: [], states: ["default"], dynamic: false }], rootLayouts: [], metadataMode: "react", styleEntrypoints: [], generatedDirectory: "src/components/gen2prod", aliases: {} }, authority: { allowedPaths: ["src"], deniedPaths: [".env"], preserveExpressions: true, preserveHandlers: true, preserveDataAccess: true, permitFrozenInstall: false, permittedEnvironmentKeys: ["SAFE_VALUE"] }, states: [], discovery: { facts: {}, inferredDefaults: {}, explicitOverrides: {}, unresolved: [] } });
+    const contained = await runContainerProjectCommand({ root, artifactsRoot, contract, command, image, environment: { SAFE_VALUE: "container-secret" } });
+    const proof = createIsolationProof([contained.proof]);
+    expect(contained.result.passed).toBeTrue();
+    expect(contained.result.stdout).toContain("[REDACTED]");
+    expect(contained.result.stdout).not.toContain("container-secret");
+    expect(await Bun.file(join(root, "result.txt")).text()).toBe("contained");
+    expect(proof).toMatchObject({ backend: "docker", networkMode: "none", readOnlyRoot: true, capabilitiesDropped: "ALL", noNewPrivileges: true, sourceProjectMounted: false });
+    expect(verifyIsolationProof(proof)).toBeTrue();
+    expect(verifyIsolationProof({ ...proof, networkMode: "bridge" } as never)).toBeFalse();
+    const remaining = Bun.spawn([docker, "inspect", contained.proof.command.containerId], { stdout: "ignore", stderr: "ignore" });
+    expect(await remaining.exited).not.toBe(0);
+  }, 15_000);
+
   test("executes only an exact argument-array command, filters env, and redacts values", async () => {
     const value = await runnerFixture();
     const result = await runProjectCommand({ root: value.root, contract: value.contract, command: value.command, environment: { SAFE_VALUE: "super-secret" } });

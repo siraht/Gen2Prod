@@ -370,6 +370,21 @@ export const ProjectValidationReportSchema = z.object({
   accepted: z.boolean(),
 }).strict();
 
+export const ProjectIsolationProofSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  backend: z.literal("docker"),
+  imageReference: z.string().regex(/^[^\s@]+@sha256:[a-f0-9]{64}$/),
+  imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  networkMode: z.literal("none"),
+  readOnlyRoot: z.literal(true),
+  capabilitiesDropped: z.literal("ALL"),
+  noNewPrivileges: z.literal(true),
+  sourceProjectMounted: z.literal(false),
+  projectMount: z.literal("/workspace/project"),
+  commands: z.array(z.object({ containerId: z.string().regex(/^[a-f0-9]{64}$/), commandHash: Sha256Schema, exitCode: z.number().int(), timedOut: z.boolean() }).strict()).min(1),
+  proofHash: Sha256Schema,
+}).strict();
+
 export const ProjectDestinationBundleSchema = z.object({
   schemaVersion: z.literal("0.1.0"),
   projectId: z.string().min(1),
@@ -395,4 +410,5 @@ export type ProjectAdapterRunRequest = z.infer<typeof ProjectAdapterRunRequestSc
 export type ProjectPatchOperation = z.infer<typeof ProjectPatchOperationSchema>;
 export type ProjectPatchPlan = z.infer<typeof ProjectPatchPlanSchema>;
 export type ProjectValidationReport = z.infer<typeof ProjectValidationReportSchema>;
+export type ProjectIsolationProof = z.infer<typeof ProjectIsolationProofSchema>;
 export type ProjectDestinationBundle = z.infer<typeof ProjectDestinationBundleSchema>;
