@@ -54,6 +54,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P2.4 rendered-state route projection | Connected each declared rendered HTML/CSS state to the existing static canonical compiler, source/render correspondence, immutable dynamic descendants, BEM block ownership decisions, and safe replacement/wrapper/extraction/slot opportunities in a strict hash-bound artifact | Two-state React dogfood produces distinct canonical outputs, retains rendered inputs, maps preserved dynamics and BEM blocks, and project runtime replay now retains the projection artifact when capture evidence exists |
 | 2026-07-20 | P3.2 Next-native metadata integration | Extended the portable canonical request with optional title/description intent and added a minimal App Router metadata operation that updates or inserts `export const metadata`, preserves unrelated object fields, and blocks on `generateMetadata` or opaque initializers | Next dogfood updates title, inserts description, retains Open Graph data, emits no document tags or client directive, preserves async fetch/server boundaries, and fails closed for dynamic metadata |
 | 2026-07-20 | P10.2 composable project corruption grammar | Added 24 independently selectable source-shaped corruptions spanning semantic/style/component/metadata, import/handler/branch/key/slot/boundary/layout, CMS parent/revision/settings, and scope/preimage/rollback/idempotence failures with exact field and before/after hashes | Full composition changes 24 unique fields with 24 positive detectors; single-corruption dogfood proves unrelated authority stays exact, tampered overlap fails schema validation, and every generated project now retains the suite beside its concrete dirty/gold trace |
+| 2026-07-20 | P2.7/P10.1 independent React topology curriculum | Split the generated React families into a local-function topology and an imported-child topology, added `clsx` enum/state matrices and exact JSX comment/formatting evidence, and retained the existing props, conditional, keyed, form, dialog, async, ref, handler, and responsive-state matrix | Both dirty and gold variants native-build; parser evidence distinguishes imported `Card` only in the composed family, enumerates dynamic classes, retains comments, and existing stale-preimage/independent-edit/owned-collision fixtures complete the integration matrix; Next nested metadata and WordPress/Bricks dynamic query/condition fixtures cover the remaining dynamic archetypes |
 
 ### Additional implementation decisions
 
@@ -89,6 +90,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | D48 | Runtime projection compiles captured HTML/CSS per state and overlays source authority afterward | Static canonical inference is useful for semantic/BEM intent but cannot own the dynamic expressions that produced a materialized DOM | Each state keeps its canonical hash and correspondence hash while ownership decisions retain preserved-region IDs; a missing rendered source fails instead of fabricating a projection |
 | D49 | Next metadata intent lowers only through App Router metadata exports | Injecting `<head>` tags or shadowing `generateMetadata` creates duplicate/incorrect server metadata and can silently discard data-driven fields | Static object exports receive a hash-guarded minimal merge; dynamic/opaque metadata requires an explicit source-authorized mapping |
 | D50 | Quality corruptions and deliberately invalid gate controls share a grammar but not one dirty build | Import, preimage, rollback, and CMS-revision failures are useful evaluator examples but would make every ordinary dirty project unbuildable | Generated dirty/gold projects retain quality-only concrete source differences, while the adjacent composable suite materializes each hard-failure specimen independently with an expected detector |
+| D51 | Starter-family identity requires a different source graph, not a label in otherwise identical source | Family-isolated splits do not prevent topology leakage if two family IDs emit the same component structure | Function-family cards remain local; composed-family cards are separate imported modules, while content variants remain derivatives within their topology family |
 
 ### Lessons learned
 
@@ -127,6 +129,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L31 | One default render cannot establish dynamic ownership | Projection runs every declared state independently and carries immutable source-region IDs into each canonical block decision; unobserved or low-confidence mappings remain evidence requests |
 | L32 | Preserving a metadata export is not the same as integrating the destination metadata contract | The canonical request now carries explicit metadata intent, Next gets a native operation, and dynamic generators are surfaced as blockers rather than silently ignored |
 | L33 | A corruption name without exact changed-field identity cannot prove independent detector coverage | Grammar reports require one unique field, effective before/after hashes, and a positive named detector per operation; overlap and ineffective mutations are invalid artifacts |
+| L34 | Declaring two starter families without changing their module graph creates false independence | Curriculum tests now assert the imported-component graph and filesystem differ by family in addition to checking split identity |
 
 ## 1. Outcome
 
@@ -984,18 +987,18 @@ Dependencies: P2.1–P2.6.
 
 Minimum fixture families:
 
-- [ ] static Vite route with utilities and inline styling;
-- [ ] props and imported child components;
-- [ ] conditional rendering and enum variants;
-- [ ] keyed list rendering;
-- [ ] form state with validation/error/success states;
-- [ ] dialog with focus/keyboard behavior;
-- [ ] async loading/empty/error/success states;
-- [ ] `clsx`/`classnames` variant matrix;
-- [ ] refs and event callbacks;
-- [ ] source comments and unusual formatting;
-- [ ] stale-plan conflict and independent unrelated edit;
-- [ ] unowned same-name generated-file collision.
+- [x] static Vite route with utilities and inline styling;
+- [x] props and imported child components;
+- [x] conditional rendering and enum variants;
+- [x] keyed list rendering;
+- [x] form state with validation/error/success states;
+- [x] dialog with focus/keyboard behavior;
+- [x] async loading/empty/error/success states;
+- [x] `clsx`/`classnames` variant matrix;
+- [x] refs and event callbacks;
+- [x] source comments and unusual formatting;
+- [x] stale-plan conflict and independent unrelated edit;
+- [x] unowned same-name generated-file collision.
 
 Acceptance criteria:
 
@@ -1299,10 +1302,10 @@ Required dynamic archetypes:
 - [x] controlled forms (server-handled form variants remain with the Next/CMS curriculum extension);
 - [x] dialog/menu/tab disclosure behavior;
 - [x] responsive media and conditional assets;
-- [ ] metadata and nested layouts;
+- [x] metadata and nested layouts;
 - [x] server/client or island boundary;
 - [x] slot/snippet/template-part composition;
-- [ ] CMS query/dynamic block/condition.
+- [x] CMS query/dynamic block/condition.
 
 Acceptance criteria:
 

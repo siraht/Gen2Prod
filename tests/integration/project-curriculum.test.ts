@@ -25,7 +25,7 @@ describe("synthetic dynamic project curriculum", () => {
     const dirtyRoot = join(directory, fixture.artifacts.dirtyProject), goldRoot = join(directory, fixture.artifacts.goldProject);
     const dirtySource = await Bun.file(join(dirtyRoot, "src", "App.tsx")).text();
     const goldSource = await Bun.file(join(goldRoot, "src", "App.tsx")).text();
-    for (const source of [dirtySource, goldSource]) for (const fragment of ["items.map", "key={item.id}", "onSubmit", "dialogRef.current?.showModal", "status === \"loading\"", "children"]) expect(source).toContain(fragment);
+    for (const source of [dirtySource, goldSource]) for (const fragment of ["items.map", "key={item.id}", "onSubmit", "dialogRef.current?.showModal", "status === \"loading\"", "children", "clsx(", "exact curriculum comment"]) expect(source).toContain(fragment);
     expect(dirtySource).toContain("flex p-4 gap-4");
     expect(dirtySource).toContain("style={{");
     expect(goldSource).toContain("page__grid");
@@ -47,6 +47,10 @@ describe("synthetic dynamic project curriculum", () => {
     expect(source.roots.flatMap(flatten).some((node) => node.kind === "repetition" && node.keyExpressionHash)).toBeTrue();
     expect(source.roots.flatMap(flatten).some((node) => node.kind === "conditional")).toBeTrue();
     expect(source.bindings.some((binding) => binding.kind === "state" || binding.kind === "ref")).toBeTrue();
+    const composed = fixture.starterFamily === "react-vite-composed";
+    expect(await Bun.file(join(directory, "dirty-project", "src", "Card.tsx")).exists()).toBe(composed);
+    const graph = source.metadata.reactGraph as { importedComponents: string[] }[];
+    expect(graph.some((entry) => entry.importedComponents.includes("Card"))).toBe(composed);
     for (const projectRoot of [dirtyRoot, goldRoot]) {
       const build = Bun.spawn(["bun", "run", "build"], { cwd: projectRoot, stdout: "pipe", stderr: "pipe" });
       await new Response(build.stdout).text(); await new Response(build.stderr).text();
