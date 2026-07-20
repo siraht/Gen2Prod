@@ -17,6 +17,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P1.1 read-only discovery | Added safe-root and symlink rejection, ignored-directory inventory, deterministic source fingerprinting, exact profile/version/lockfile/route/script discovery, explicit profile override, ambiguity failures, and required-action reporting | Repeated discovery is hash-stable; React/Vite, ambiguity, and symlink tests pass |
 | 2026-07-20 | P0.4 parser fidelity and P1.2 Source Project IR | Added native TSX/Vue/Svelte/Astro parsers, structural WordPress block and Bricks export readers, exact source anchors, text/comment ordering, immutable dynamic regions, assets/styles/modules/routes, graph-integrity checks, normalized offset-independent identity, a versioned capability matrix, and exact-location dogfood fixtures | Typecheck plus React/Vue/Svelte/Astro/WordPress/Bricks parser tests pass; unsupported or invalid locations fail closed |
 | 2026-07-20 | P1.4 hash-guarded text edits | Added full preflight, authority/symlink containment, operation DAG and overlap checks, exact AST-bound unique rebasing, descending in-memory edits, owned-file collision refusal, atomic staged writes, exact snapshot rollback, and second-apply refusal | BOM/CRLF/final-newline, untouched-byte, stale span, ambiguous rebase, overlap, graph tamper, path authority, symlink escape, postimage, collision, apply, rollback, and idempotence tests pass |
+| 2026-07-20 | P1.5 imports and owned files | Added native TypeScript import analysis, equivalent alias/type-only detection, symbol collision refusal, directive/import-boundary insertion without printing, proven-unused minimal removal, generated-directory confinement, and owned-file operations | CRLF/directive/import formatting, partial request, collision, unused-proof, generated path, patch apply, and rollback tests pass |
 
 ### Additional implementation decisions
 
@@ -657,11 +658,11 @@ Dependencies: P1.3–P1.4.
 
 Tasks:
 
-- [ ] Detect equivalent imports, aliases, type-only imports, default/named collisions, and local naming conflicts.
-- [ ] Insert imports at native module boundaries without reprinting unrelated imports.
-- [ ] Create profile-specific owned component paths beneath the contract's generated directory.
-- [ ] Track generated file ownership and refuse overwrite of unowned files.
-- [ ] Remove an import only when native symbol analysis proves it unused after the planned edits.
+- [x] Detect equivalent imports, aliases, type-only imports, default/named collisions, and local naming conflicts.
+- [x] Insert imports at native module boundaries without reprinting unrelated imports.
+- [x] Create profile-specific owned component paths beneath the contract's generated directory.
+- [x] Track generated file ownership and refuse overwrite of unowned files.
+- [x] Remove an import only when native symbol analysis proves it unused after the planned edits.
 
 Acceptance criteria:
 

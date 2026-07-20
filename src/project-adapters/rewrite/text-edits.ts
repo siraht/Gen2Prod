@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, realpath, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { hashJson, sha256 } from "../../core/hash.ts";
+import { sourceAnchor } from "../ir.ts";
 import type { ProjectContract, ProjectPatchOperation, ProjectPatchPlan, SourceAnchor, SourceProject } from "../../schemas/project-adapters.ts";
 
 type TextSpanOperation = Exclude<ProjectPatchOperation, { kind: "write-owned-file" | "update-cms-node" }>;
@@ -48,6 +49,7 @@ export async function prepareTextPatch(root: string, contract: ProjectContract, 
     const existing = await readExistingText(absolute);
     originals.set(path, existing);
     originalFileHashes.set(path, existing === undefined ? undefined : sha256(existing));
+    if (existing !== undefined) anchors.push(sourceAnchor(path, existing, 0, existing.length, "SourceFile", existing));
   }
   const outputs = new Map<string, string>();
   const outputFileHashes = new Map<string, string>();
@@ -104,7 +106,7 @@ function validateSpan(operation: TextSpanOperation, source: string, start: numbe
   if (start < 0 || end < start || end > source.length) throw new Error(`Invalid source span for ${operation.operationId}`);
   const before = source.slice(start, end);
   if (before !== operation.before || sha256(before) !== operation.spanPreimageHash) throw new Error(`Span preimage mismatch for ${operation.operationId}`);
-  const matchingAnchor = anchors.some((anchor) => anchor.file === operation.path && anchor.astFingerprint === operation.astFingerprint && anchor.syntaxKind === operation.expectedNodeKind && (rebased || anchor.start === start && anchor.end === end));
+  const matchingAnchor = anchors.some((anchor) => anchor.file === operation.path && anchor.astFingerprint === operation.astFingerprint && anchor.syntaxKind === operation.expectedNodeKind && (rebased || anchor.syntaxKind === "SourceFile" && anchor.start <= start && anchor.end >= end || anchor.start === start && anchor.end === end));
   if (!matchingAnchor) throw new Error(`AST anchor mismatch for ${operation.operationId}`);
 }
 
