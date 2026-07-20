@@ -14,18 +14,21 @@ This is a living execution ledger. A checked task means executable code and prop
 | Date | Slice | Result | Evidence |
 | --- | --- | --- | --- |
 | 2026-07-20 | P0.1 and P0.2 contract foundation | Added strict project artifact/authority vocabulary, destination/source/ownership/patch/validation schemas, high-risk reversible pass definitions, public schema exports, and negative safety tests | `bun run check`; project schema and schema-export tests pass |
+| 2026-07-20 | P1.1 read-only discovery | Added safe-root and symlink rejection, ignored-directory inventory, deterministic source fingerprinting, exact profile/version/lockfile/route/script discovery, explicit profile override, ambiguity failures, and required-action reporting | Repeated discovery is hash-stable; React/Vite, ambiguity, and symlink tests pass |
 
 ### Additional implementation decisions
 
 | ID | Decision | Rationale | Consequence |
 | --- | --- | --- | --- |
 | D21 | New public project-adapter schemas use strict objects even though older repository schemas are permissive | Project mutation contracts must reject misspelled or smuggled authority fields | Unknown keys fail at the boundary; backward compatibility remains limited to older schema families |
+| D22 | Offline CMS contracts do not carry a fake native build command | WordPress/Bricks export validation is an internal structural operation until a real staging runtime is authorized | Framework contracts require `commands.build`; offline CMS contracts may omit it and remain runtime-unaccepted until staging evidence exists |
 
 ### Lessons learned
 
 | ID | Lesson | Action |
 | --- | --- | --- |
 | L01 | Rejecting shell punctuation is insufficient: an executable field containing whitespace and quoted arguments still represents a shell-shaped command | `CommandSpec.executable` now rejects whitespace, quotes, and shell metacharacters; arguments must be separate array entries |
+| L02 | Framework dependency signals overlap by construction (`next` includes React, Nuxt includes Vue, SvelteKit includes Svelte) | Detection collapses known parent/child profiles before ambiguity checks and requires an explicit profile for genuinely conflicting stacks |
 
 ## 1. Outcome
 
@@ -498,8 +501,8 @@ Tasks:
 
 - [x] Implement `ProjectContractSchema`, `CommandSpecSchema`, route entry, state fixture, package-manager, integration, and CMS contract schemas.
 - [x] Separate discovered facts, inferred defaults, explicit overrides, and unresolved fields.
-- [ ] Add contract hashing and versioning.
-- [ ] Define strict merge precedence: explicit CLI/contract → project artifacts → framework defaults → unresolved.
+- [x] Add contract hashing and versioning.
+- [x] Define strict merge precedence: explicit CLI/contract → project artifacts → framework defaults → unresolved.
 - [x] Export JSON Schema.
 
 Acceptance criteria:
@@ -555,13 +558,13 @@ Dependencies: P0.2.
 
 Tasks:
 
-- [ ] Resolve and validate the project root without following escaping symlinks.
-- [ ] Inventory package manifests, lockfiles, framework configs, TS configs, aliases, source roots, route roots, style entrypoints, and scripts.
-- [ ] Detect React/Vite, Next App Router, Vue/Vite, Nuxt boundary, SvelteKit, Astro, WordPress export/theme, and Bricks export profiles.
-- [ ] Record exact dependency versions from lockfile/package metadata.
-- [ ] Identify candidate build/typecheck/test/preview commands without executing them.
-- [ ] Detect generated/vendor/cache/secret directories and add them to denied paths.
-- [ ] Produce required actions for ambiguity while continuing safe inventory work.
+- [x] Resolve and validate the project root without following escaping symlinks.
+- [x] Inventory package manifests, lockfiles, framework configs, TS configs, aliases, source roots, route roots, style entrypoints, and scripts.
+- [x] Detect React/Vite, Next App Router, Vue/Vite, Nuxt boundary, SvelteKit, Astro, WordPress export/theme, and Bricks export profiles.
+- [x] Record exact dependency versions from lockfile/package metadata.
+- [x] Identify candidate build/typecheck/test/preview commands without executing them.
+- [x] Detect generated/vendor/cache/secret directories and add them to denied paths.
+- [x] Produce required actions for ambiguity while continuing safe inventory work.
 
 Acceptance criteria:
 

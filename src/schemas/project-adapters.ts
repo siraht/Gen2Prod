@@ -88,7 +88,7 @@ export const ProjectContractSchema = z.object({
     install: CommandSpecSchema.optional(),
     typecheck: CommandSpecSchema.optional(),
     test: CommandSpecSchema.optional(),
-    build: CommandSpecSchema,
+    build: CommandSpecSchema.optional(),
     preview: CommandSpecSchema.optional(),
   }).strict(),
   integration: z.object({
@@ -116,7 +116,11 @@ export const ProjectContractSchema = z.object({
     explicitOverrides: z.record(z.string(), z.unknown()),
     unresolved: z.array(z.string()),
   }).strict(),
-}).strict();
+}).strict().superRefine((value, context) => {
+  if (value.framework.target !== "wordpress" && value.framework.target !== "bricks" && !value.commands.build) {
+    context.addIssue({ code: "custom", path: ["commands", "build"], message: "a native build command is required for framework projects" });
+  }
+});
 
 export const SourceAnchorSchema = z.object({
   file: RelativePathSchema,
@@ -284,6 +288,7 @@ export const ProjectValidationReportSchema = z.object({
 export type ProjectFrameworkProfile = z.infer<typeof ProjectFrameworkProfileSchema>;
 export type CommandSpec = z.infer<typeof CommandSpecSchema>;
 export type StateFixture = z.infer<typeof StateFixtureSchema>;
+export type RouteEntry = z.infer<typeof RouteEntrySchema>;
 export type ProjectContract = z.infer<typeof ProjectContractSchema>;
 export type SourceAnchor = z.infer<typeof SourceAnchorSchema>;
 export type ProjectMarkupNode = ProjectMarkupNodeShape;
