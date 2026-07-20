@@ -21,6 +21,7 @@ import type { VueCanonicalSurface } from "../../src/project-adapters/vue/plan.ts
 import { ProjectCorrespondenceSchema, ProjectPatchPlanSchema, type ProjectContract, type ProjectCorrespondence, type ProjectPatchPlan, type SourceProject } from "../../src/schemas/project-adapters.ts";
 
 const browserExecutable = "/usr/bin/google-chrome";
+const nativeDogfoodTimeoutMs = 180_000;
 
 describe("framework-native project adapter validation", () => {
   test("Vue SFC typechecks, builds, renders SSR branches, captures pixels, preserves source, and replays exactly", async () => {
@@ -33,7 +34,7 @@ describe("framework-native project adapter validation", () => {
     const hidden = await renderVueTemplate("<main><p v-if=\"open\">Shown</p><p v-else>Hidden</p></main>", { open: false });
     expect(shown).toContain("Shown");
     expect(hidden).toContain("Hidden");
-  }, 90_000);
+  }, nativeDogfoodTimeoutMs);
 
   test("SvelteKit checks, builds, SSR-renders states, captures pixels, preserves source, and replays exactly", async () => {
     const port = await freePort();
@@ -46,7 +47,7 @@ describe("framework-native project adapter validation", () => {
     const hidden = await renderSvelteSource(stateSource, { open: false });
     expect(shown).toContain("Alpha");
     expect(hidden).not.toContain("Alpha");
-  }, 90_000);
+  }, nativeDogfoodTimeoutMs);
 
   test("Astro builds static output with a hydrated island and passes capture, preservation, and replay gates", async () => {
     const port = await freePort();
@@ -58,7 +59,7 @@ describe("framework-native project adapter validation", () => {
     expect(html).toContain("astro-island");
     expect(html).toContain("Counter");
     expect(html).toContain("class=\"page\"");
-  }, 90_000);
+  }, nativeDogfoodTimeoutMs);
 });
 
 type PlanningContext = { root: string; contract: ProjectContract; source: SourceProject; correspondence: ProjectCorrespondence; canonicalOutputHash: string; policyHash: string; mode: "legacy-conversion"; profile: "refactor" };

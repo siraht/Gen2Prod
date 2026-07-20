@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
+import type { ChildProcessByStdio } from "node:child_process";
+import type { Readable } from "node:stream";
 import { lstat, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { hashFile, hashJson, sha256 } from "../core/hash.ts";
@@ -183,8 +185,8 @@ function authorizedEnvironment(contract: ProjectContract, command: CommandSpec, 
 async function dockerText(docker: string, args: string[]): Promise<string> { const result = await spawnCaptured(docker, args, process.cwd(), { PATH: process.env.PATH ?? "/usr/bin:/bin" }, 30_000); if (result.exitCode !== 0) throw new Error(`Docker command failed: ${result.stderr.slice(-2000)}`); return result.stdout.trim(); }
 
 async function spawnCaptured(executable: string, args: string[], cwd: string, env: Record<string, string>, timeoutMs: number): Promise<{ exitCode: number; stdout: string; stderr: string; stdoutFullHash: string; stderrFullHash: string; stdoutBytes: number; stderrBytes: number; outputTruncated: boolean; timedOut: boolean }> {
+  const child = await spawnWithAllocationRetry(executable, args, cwd, env);
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(executable, args, { cwd, env, shell: false, stdio: ["ignore", "pipe", "pipe"] });
     const stdout = new BoundedOutput(OUTPUT_LIMIT), stderr = new BoundedOutput(OUTPUT_LIMIT);
     let timedOut = false, settled = false;
     const finishError = (error: Error) => { if (settled) return; settled = true; reject(error); };
@@ -192,6 +194,19 @@ async function spawnCaptured(executable: string, args: string[], cwd: string, en
     const timer = setTimeout(() => { timedOut = true; child.kill("SIGTERM"); setTimeout(() => child.kill("SIGKILL"), 500).unref(); }, timeoutMs);
     child.on("close", (code) => { clearTimeout(timer); if (settled) return; settled = true; const out = stdout.finish(), err = stderr.finish(); resolvePromise({ exitCode: code ?? (timedOut ? 124 : 1), stdout: out.text, stderr: err.text, stdoutFullHash: out.fullHash, stderrFullHash: err.fullHash, stdoutBytes: out.bytes, stderrBytes: err.bytes, outputTruncated: out.truncated || err.truncated, timedOut }); });
   });
+}
+
+async function spawnWithAllocationRetry(executable: string, args: string[], cwd: string, env: Record<string, string>): Promise<ChildProcessByStdio<null, Readable, Readable>> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return spawn(executable, args, { cwd, env, shell: false, stdio: ["ignore", "pipe", "pipe"] });
+    } catch (error) {
+      const code = error instanceof Error && "code" in error ? String(error.code) : undefined;
+      if (!code || !["EAGAIN", "EBADF", "EMFILE", "ENFILE"].includes(code) || attempt === 2) throw error;
+      await delay(25 * 2 ** attempt);
+    }
+  }
+  throw new Error("Unreachable Docker process allocation state");
 }
 
 function redact(value: string, secrets: string[]): string { let output = value; for (const secret of [...new Set(secrets.filter((item) => item.length >= 3))].sort((left, right) => right.length - left.length)) output = output.split(secret).join("[REDACTED]"); return output; }
