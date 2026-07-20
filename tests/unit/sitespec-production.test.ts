@@ -2,13 +2,15 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { PNG } from "pngjs";
 import { buildCanonicalGraph, createContractValidator, type CanonicalGraphRuntime, type DesignCandidate, type ResultManifest } from "@website-ontology/contracts";
 import type { CanonicalSiteSpecArtifact } from "../../src/schemas/sitespec.ts";
 import { approveDesignSystemRelease, proposeDesignSystem, selectAnchorPage, selectValidationPage } from "../../src/sitespec/design-system.ts";
 import { approveVisualTarget } from "../../src/sitespec/design.ts";
 import { buildSiteSpecPage } from "../../src/sitespec/production.ts";
 
-async function approvedFixture(): Promise<CanonicalGraphRuntime> {
+async function approvedFixture(assetSource?: string): Promise<CanonicalGraphRuntime> {
   const graph = await Bun.file(new URL(import.meta.resolve("@website-ontology/contracts/fixtures/valid/reference-canonical-graph.json"))).json() as CanonicalGraphRuntime;
   return buildCanonicalGraph({ schemaVersion: graph.schemaVersion, kind: graph.kind, id: graph.id, uid: graph.uid, rootRefs: graph.rootRefs, entities: graph.entities.map(({ revision: _revision, ...entity }) => {
     const next = structuredClone(entity);
@@ -17,6 +19,7 @@ async function approvedFixture(): Promise<CanonicalGraphRuntime> {
       next.data = { ...next.data, destinationRef: "sitespec://northstar/pages/contact" };
       delete next.data.unresolvedBehavior;
     }
+    if (assetSource && next.uid === "sitespec://northstar/assets/hero-home") next.data = { ...next.data, source: assetSource, mediaType: "image/png" };
     return next;
   }) });
 }
@@ -84,5 +87,21 @@ describe("SiteSpec governed page production", () => {
     const provisional = { ...approved, status: "provisional" as const };
     await expect(buildSiteSpecPage({ artifact: current, pageSubjectRef: "sitespec://northstar/pages/assessment", designSystem: provisional, designSystemRoot: root, outputDirectory: join(root, "out"), releaseValidation: true })).resolves.toMatchObject({ pageSubjectRef: "sitespec://northstar/pages/assessment" });
     await expect(buildSiteSpecPage({ artifact: current, pageSubjectRef: "sitespec://northstar/pages/contact", designSystem: provisional, designSystemRoot: root, outputDirectory: join(root, "out"), releaseValidation: true })).rejects.toThrow("bounded");
+  });
+
+  test("copies approved local images, records their hashes, and emits measured intrinsic dimensions", async () => {
+    const root = await mkdtemp(join(tmpdir(), "g2p-production-assets-"));
+    const imagePath = join(root, "approved.png");
+    await Bun.write(imagePath, PNG.sync.write(new PNG({ width: 12, height: 7 })));
+    const graph = await approvedFixture(pathToFileURL(imagePath).href);
+    const current = artifact(graph);
+    const release = await approvedRelease(graph, root);
+    const built = await buildSiteSpecPage({ artifact: current, pageSubjectRef: "sitespec://northstar/pages/home", designSystem: release, designSystemRoot: root, outputDirectory: join(root, "out") });
+    expect(built.html).toContain('width="12"');
+    expect(built.html).toContain('height="7"');
+    const image = built.manifest.artifacts.find((item: { mediaType: string }) => item.mediaType === "image/png");
+    expect(image?.uri).toBe(`artifact://sha256/${image?.hash}`);
+    expect(Bun.file(join(built.runDirectory, "assets", `${image?.hash}.png`)).exists()).resolves.toBeTrue();
+    expect(built.validation.gates.find((gate) => gate.gate === "G")?.passed).toBeTrue();
   });
 });

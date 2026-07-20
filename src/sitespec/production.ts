@@ -1,4 +1,5 @@
 import { compileString } from "sass";
+import { readFile } from "node:fs/promises";
 import {
   createContractValidator,
   sha256,
@@ -9,7 +10,9 @@ import {
   type RequiredAction,
   type ResultManifest,
 } from "@website-ontology/contracts";
-import { join } from "node:path";
+import { dirname, extname, isAbsolute, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { PNG } from "pngjs";
 import { emitHtml, emitScss } from "../compiler/emit.ts";
 import type { CompilationPlan, PlannedNode } from "../compiler/types.ts";
 import { canonicalJson, hashJson } from "../core/hash.ts";
@@ -23,6 +26,7 @@ import { assertDesignSystemCurrent, selectAnchorPage, selectValidationPage } fro
 type ArtifactReference = DesignSystemRelease["tokens"];
 type RevisionInput = { subjectRef: string; revision: string };
 type ContractResult = RequirementResult & { status: "pass" | "fail" | "unresolved" | "error" | "waived" };
+type MaterializedAsset = { relativePath: string; contents: Uint8Array; reference: ArtifactReference; width: number; height: number };
 
 export type SiteSpecPageBuild = {
   runId: string;
@@ -66,6 +70,38 @@ function planned(node: DomNode): PlannedNode {
 
 function nodes(root: DomNode): DomNode[] {
   return [root, ...root.children.flatMap(nodes)];
+}
+
+async function materializeLocalImages(normalForm: NormalForm): Promise<MaterializedAsset[]> {
+  const images = nodes(normalForm.dom).filter((node) => node.tag === "img");
+  const materialized: MaterializedAsset[] = [];
+  for (const [index, image] of images.entries()) {
+    const source = image.attributes.find((attribute) => attribute.name === "src");
+    if (!source) continue;
+    const path = source.value.startsWith("file:") ? fileURLToPath(source.value) : isAbsolute(source.value) ? source.value : undefined;
+    if (!path) continue;
+    const contents = new Uint8Array(await readFile(path));
+    const extension = extname(path).toLowerCase();
+    if (extension !== ".png") throw new Error(`Local production image ${path} requires a supported intrinsic-dimension reader (currently PNG)`);
+    const dimensions = PNG.sync.read(Buffer.from(contents));
+    const hash = sha256(contents);
+    const relativePath = `assets/${hash}${extension}`;
+    source.value = relativePath;
+    image.attributes.push(
+      { name: "width", value: String(dimensions.width) },
+      { name: "height", value: String(dimensions.height) },
+      { name: "loading", value: index === 0 ? "eager" : "lazy" },
+      { name: "decoding", value: "async" },
+    );
+    materialized.push({
+      relativePath,
+      contents,
+      width: dimensions.width,
+      height: dimensions.height,
+      reference: { schemaVersion: "website-ontology-artifacts/2.0", kind: "artifact-ref", id: `page-image-${index + 1}`, hash, uri: `artifact://sha256/${hash}`, mediaType: "image/png", byteLength: contents.byteLength },
+    });
+  }
+  return materialized;
 }
 
 function confidence(binding?: SpecBinding) {
@@ -273,6 +309,16 @@ async function writeStable(path: string, contents: string): Promise<void> {
   await writeTextAtomic(path, contents);
 }
 
+async function writeStableBytes(path: string, contents: Uint8Array): Promise<void> {
+  if (await pathExists(path)) {
+    const existing = new Uint8Array(await Bun.file(path).arrayBuffer());
+    if (sha256(existing) !== sha256(contents)) throw new Error(`Refusing to overwrite reproducible run asset with different content: ${path}`);
+    return;
+  }
+  await ensureDirectory(dirname(path));
+  await Bun.write(path, contents);
+}
+
 export async function buildSiteSpecPage(options: {
   artifact: CanonicalSiteSpecArtifact;
   pageSubjectRef: string;
@@ -291,12 +337,13 @@ export async function buildSiteSpecPage(options: {
   const projection = projectCanonicalSiteSpec(options.artifact, options.pageSubjectRef);
   assertBuildableProjection(projection);
   await assertReleaseCoverage(options.designSystem, options.designSystemRoot, projection);
+  const localImages = await materializeLocalImages(projection.normalForm);
   const plan = planFor(projection, options.designSystem);
   const scss = emitScss(plan);
   const css = compileString(scss, { style: "expanded" }).css;
   const html = emitHtml(plan, "page.css", true);
   const validation = normalizedValidation(await validate({ html, scss, css, plan, mode: "greenfield", thresholds: { minBemCoverage: 0.95, minTokenCoverage: 0.95, maxVisualPixelRatio: 0.03, provisional: true } }));
-  const runId = `${slug(projection.page.id)}-${hashJson({ spec: options.artifact.revision, page: projection.page.revision, designSystem: hashJson(options.designSystem), releaseValidation: Boolean(options.releaseValidation), generator: "sitespec-production-v2" }).slice(0, 16)}`;
+  const runId = `${slug(projection.page.id)}-${hashJson({ spec: options.artifact.revision, page: projection.page.revision, designSystem: hashJson(options.designSystem), assets: localImages.map((asset) => asset.reference.hash), releaseValidation: Boolean(options.releaseValidation), generator: "sitespec-production-v2" }).slice(0, 16)}`;
   const runDirectory = join(options.outputDirectory, "runs", runId);
   await ensureDirectory(runDirectory);
   const normalForm = { ...projection.normalForm, styles: plan.styles, tokens: plan.tokens };
@@ -331,7 +378,7 @@ export async function buildSiteSpecPage(options: {
     id: `${slug(projection.page.id)}-production-manifest`,
     tool: { name: "gen2prod", version: "0.1.0" },
     inputRevisions: normalForm.sitespec!.inputRevisions as ArtifactManifest["inputRevisions"],
-    artifacts: [normalFormRef, htmlRef, scssRef, cssRef, astroRef, validationRef, correspondenceRef, resultsRef] as ArtifactManifest["artifacts"],
+    artifacts: [normalFormRef, htmlRef, scssRef, cssRef, astroRef, ...localImages.map((asset) => asset.reference), validationRef, correspondenceRef, resultsRef] as ArtifactManifest["artifacts"],
     assumptions: [],
     unresolvedDecisions: results.requiredActions.map((action: { reason: string }) => action.reason),
     extensions: { "dev.gen2prod.run": { designSystem: { id: options.designSystem.id, version: options.designSystem.version }, pageSubjectRef: projection.page.uid, runId } },
@@ -348,6 +395,7 @@ export async function buildSiteSpecPage(options: {
     writeStable(join(runDirectory, "correspondence.json"), correspondenceContents),
     writeStable(join(runDirectory, "results.json"), resultsContents),
     writeJsonAtomic(join(runDirectory, "manifest.json"), manifest),
+    ...localImages.map((asset) => writeStableBytes(join(runDirectory, asset.relativePath), asset.contents)),
   ]);
   return { runId, runDirectory, pageSubjectRef: projection.page.uid, normalForm, plan, html, scss, css, validation, correspondence: correspondenceMap, results, manifest };
 }
