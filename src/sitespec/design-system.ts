@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
 import {
   createContractValidator,
   entityDependencyRefs,
@@ -133,7 +132,7 @@ async function immutableJson(root: string, id: string, value: unknown): Promise<
     kind: "artifact-ref",
     id,
     hash,
-    uri: pathToFileURL(path).href,
+    uri: `artifact://sha256/${hash}`,
     mediaType: "application/json",
     byteLength: Buffer.byteLength(contents),
   };
@@ -204,6 +203,15 @@ export async function proposeDesignSystem(options: {
     $schema: "https://tr.designtokens.org/format/",
     $description: `Provisional tokens for ${siteRef}; approval depends on validation-page evidence.`,
     roles: Object.fromEntries(designRoles.map((entity) => [slug(entity.id), roleToken(entity)])),
+    policies: {
+      "surface-on-brand": { $type: "color", $value: "#ffffff", $description: "Readable foreground on the proposed brand surface." },
+      "border-subtle": { $type: "strokeStyle", $value: "solid", $description: "A governed subtle boundary; runtime binding combines the style with currentColor and the baseline width." },
+      "radius-control": { $type: "dimension", $value: "0.25rem", $description: "Control corner policy." },
+      "shadow-raised": { $type: "shadow", $value: { color: "#00000026", offsetX: "0", offsetY: "0.25rem", blur: "1rem", spread: "0" }, $description: "Raised-surface policy." },
+      "focus-ring": { $type: "color", $value: "#f5b700", $description: "Visible keyboard-focus policy." },
+      "motion-standard": { $type: "duration", $value: "180ms", $description: "Non-essential motion duration; reduced-motion disables it." },
+      "breakpoint-wide": { $type: "dimension", $value: "64rem", $description: "Responsive layout policy breakpoint." },
+    },
   });
   const componentContracts = await immutableJson(options.outputDirectory, `${slug(options.version)}-components`, {
     schemaVersion: "g2p-design-system/2.0",

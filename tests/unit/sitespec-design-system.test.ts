@@ -52,8 +52,8 @@ describe("versioned design-system proposal", () => {
     expect(createContractValidator().validate("artifacts", first.release).valid).toBeTrue();
     const refs = [first.release.tokens, first.release.componentContracts, first.release.shells, first.release.layoutPrimitives, first.release.behaviorPolicy, first.release.implementationBindings, first.release.coverage];
     expect(new Set(refs.map((reference) => reference.hash)).size).toBe(7);
-    expect(refs.every((reference) => reference.uri.startsWith("file:") && reference.mediaType === "application/json")).toBeTrue();
-    const coverage = await Bun.file(new URL(first.release.coverage.uri)).json();
+    expect(refs.every((reference) => reference.uri === `artifact://sha256/${reference.hash}` && reference.mediaType === "application/json")).toBeTrue();
+    const coverage = await Bun.file(join(first.objectsDirectory, `${first.release.coverage.hash}.json`)).json();
     expect(coverage.exercised.patterns).toContain("sitespec://northstar/patterns/hero");
     expect(coverage.unexercised.patterns).toContain("sitespec://northstar/patterns/article");
     expect(coverage.promotionRule).toContain("validation page");
