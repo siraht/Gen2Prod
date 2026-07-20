@@ -15,6 +15,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | --- | --- | --- | --- |
 | 2026-07-20 | P0.1 and P0.2 contract foundation | Added strict project artifact/authority vocabulary, destination/source/ownership/patch/validation schemas, high-risk reversible pass definitions, public schema exports, and negative safety tests | `bun run check`; project schema and schema-export tests pass |
 | 2026-07-20 | P1.1 read-only discovery | Added safe-root and symlink rejection, ignored-directory inventory, deterministic source fingerprinting, exact profile/version/lockfile/route/script discovery, explicit profile override, ambiguity failures, and required-action reporting | Repeated discovery is hash-stable; React/Vite, ambiguity, and symlink tests pass |
+| 2026-07-20 | P0.4 parser fidelity and P1.2 Source Project IR | Added native TSX/Vue/Svelte/Astro parsers, structural WordPress block and Bricks export readers, exact source anchors, text/comment ordering, immutable dynamic regions, assets/styles/modules/routes, graph-integrity checks, normalized offset-independent identity, a versioned capability matrix, and exact-location dogfood fixtures | Typecheck plus React/Vue/Svelte/Astro/WordPress/Bricks parser tests pass; unsupported or invalid locations fail closed |
 
 ### Additional implementation decisions
 
@@ -22,6 +23,8 @@ This is a living execution ledger. A checked task means executable code and prop
 | --- | --- | --- | --- |
 | D21 | New public project-adapter schemas use strict objects even though older repository schemas are permissive | Project mutation contracts must reject misspelled or smuggled authority fields | Unknown keys fail at the boundary; backward compatibility remains limited to older schema families |
 | D22 | Offline CMS contracts do not carry a fake native build command | WordPress/Bricks export validation is an internal structural operation until a real staging runtime is authorized | Framework contracts require `commands.build`; offline CMS contracts may omit it and remain runtime-unaccepted until staging evidence exists |
+| D23 | Parser capability claims describe demonstrated safety, not intended future support | A readable export is not automatically safe to rewrite | WordPress and Bricks remain `read`/`preserve` until their versioned patchers and round-trip controls exist; unreliable Astro spans become blocking unresolved evidence |
+| D24 | Preserve text and comments as first-class ordered Source Project IR nodes | Element-only trees lose whitespace, mixed content, and source comments even when their parent span survives | Framework parsers retain exact text/comment spans; dynamic and opaque regions remain immutable by default |
 
 ### Lessons learned
 
@@ -29,6 +32,9 @@ This is a living execution ledger. A checked task means executable code and prop
 | --- | --- | --- |
 | L01 | Rejecting shell punctuation is insufficient: an executable field containing whitespace and quoted arguments still represents a shell-shaped command | `CommandSpec.executable` now rejects whitespace, quotes, and shell metacharacters; arguments must be separate array entries |
 | L02 | Framework dependency signals overlap by construction (`next` includes React, Nuxt includes Vue, SvelteKit includes Svelte) | Detection collapses known parent/child profiles before ambiguity checks and requires an explicit profile for genuinely conflicting stacks |
+| L03 | Vue's transformed template AST rewrites `v-if`/`v-for` structure and changes the offset coordinate system | Source ingestion uses the raw `compiler-sfc` descriptor AST; compilation remains a later native-validation concern |
+| L04 | Astro compiler locations can extend beyond the original source for nested expressions in the currently pinned compiler | Such constructs are recorded as blocking unresolved regions; no guessed offset or regex fallback is allowed |
+| L05 | React JSX nested inside a callback still has a JSX container ancestor beyond the function boundary | Root detection walks to the source file, preventing callback children from appearing twice in the project graph |
 
 ## 1. Outcome
 
@@ -533,11 +539,11 @@ Dependencies: P0.1–P0.2.
 
 Tasks:
 
-- [ ] Build read-only parser spikes for TSX, Vue template/script, Svelte template/script, Astro frontmatter/template, WordPress block export, and Bricks JSON.
-- [ ] Record support for exact offsets, comments/trivia, mixed text ordering, expression boundaries, control-flow blocks, imports, styles, and parse-error recovery.
-- [ ] Build an explicit syntax capability matrix with `read`, `preserve`, `rewrite`, or `unsupported` per construct.
-- [ ] Promote any transitive compiler API used by Gen2Prod to a direct pinned dependency.
-- [ ] Refuse mutation support for constructs without exact location and round-trip evidence.
+- [x] Build read-only parser spikes for TSX, Vue template/script, Svelte template/script, Astro frontmatter/template, WordPress block export, and Bricks JSON.
+- [x] Record support for exact offsets, comments/trivia, mixed text ordering, expression boundaries, control-flow blocks, imports, styles, and parse-error recovery.
+- [x] Build an explicit syntax capability matrix with `read`, `preserve`, `rewrite`, or `unsupported` per construct.
+- [x] Promote any transitive compiler API used by Gen2Prod to a direct pinned dependency.
+- [x] Refuse mutation support for constructs without exact location and round-trip evidence.
 
 Decision/rationale comments:
 
@@ -579,11 +585,11 @@ Dependencies: P0.1.
 
 Tasks:
 
-- [ ] Implement common module, component, route, markup, binding, style, asset, and metadata graph schemas.
-- [ ] Implement dynamic node variants and preservation permissions.
-- [ ] Store exact source text, offsets, syntax kind, symbol references, and fingerprints.
-- [ ] Add recursive graph integrity validation and unique IDs.
-- [ ] Add normalized hashing that ignores offsets but not semantics.
+- [x] Implement common module, component, route, markup, binding, style, asset, and metadata graph schemas.
+- [x] Implement dynamic node variants and preservation permissions.
+- [x] Store exact source text, offsets, syntax kind, symbol references, and fingerprints.
+- [x] Add recursive graph integrity validation and unique IDs.
+- [x] Add normalized hashing that ignores offsets but not semantics.
 
 Acceptance criteria:
 
@@ -610,10 +616,10 @@ interface ProjectSourceAdapter {
 
 Tasks:
 
-- [ ] Implement registry and exact profile selection.
+- [x] Implement registry and exact profile selection.
 - [ ] Require adapters to report consumed and ignored evidence.
-- [ ] Require parser version and source hash in every parse result.
-- [ ] Prohibit adapter-specific direct file writes.
+- [x] Require parser version and source hash in every parse result.
+- [x] Prohibit adapter-specific direct file writes.
 
 Acceptance criteria:
 
