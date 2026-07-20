@@ -27,6 +27,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P2.1/P2.2 and P3 Next source graph | Added inherited tsconfig/JSX/alias resolution, Next route/layout/special-file discovery, React props/hooks/refs/imported-component inventory, async data/metadata/server-action evidence, server/client classification, and Next-safe global style placement | Dynamic-route layout-chain tests pass; Next dogfood preserves metadata/fetch/server boundaries, emits no accidental `use client`, and does not duplicate the root global-style import |
 | 2026-07-20 | P1.3 exact native adapter interface | Expanded the registry to exact profiles with read-only discovery, strict Source Project parsing, route projection, planner dispatch, native sandbox validation, and consumed/ignored evidence reporting | Profile/target mismatch fails closed; route projection and evidence accounting tests pass; profiles without a mutation planner return a typed blocking zero-operation plan |
 | 2026-07-20 | P4 Vue SFC graph and strangler planner vertical slice | Added setup/classic script import and binding analysis, typed props/emits/ref/computed/slot/component/style inventories, exact SFC import anchoring, correspondence-gated semantic shell integration, shared ACSS-tokenized nested BEM SCSS, preservation-region obligations, owned-file conflict handling, and Vue/Nuxt registry dispatch | Parser fixtures distinguish recognized Vue semantics from verbatim preservation; dirty SFC dogfood preserves `v-if` and interpolation source, compiles both edited and generated templates, removes root utilities, and produces an empty second plan |
+| 2026-07-20 | P5 Svelte strangler planner vertical slice | Added version-aware Svelte 5 snippet/legacy slot shells, exact instance-script import anchoring, correspondence-gated root wrapping, shared SCSS integration, owned-file conflict handling, and Svelte/SvelteKit registry dispatch | Dirty Svelte dogfood preserves keyed `{#each}`, `{#if}`, action, event-handler, and expression text; edited and generated components compile; second plan is empty |
 
 ### Additional implementation decisions
 
@@ -38,6 +39,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | D24 | Preserve text and comments as first-class ordered Source Project IR nodes | Element-only trees lose whitespace, mixed content, and source comments even when their parent span survives | Framework parsers retain exact text/comment spans; dynamic and opaque regions remain immutable by default |
 | D25 | A copied working directory plus post-run source hashing is an audited sandbox, not a hardened filesystem boundary | This host has Docker but no pinned Gen2Prod runtime image, and unprivileged mount namespaces are disabled | Local dogfood may run and detect source-project changes; promotion/accepted reports must require a digest-pinned network-disabled container backend before claiming escaped-output prevention |
 | D26 | Vue integration wraps an existing route root in an owned slot shell instead of printing the template AST | Compiler-generated output would churn whitespace and can normalize directive syntax | Only the root element span and native script import boundary change; every child directive, interpolation, listener, binding, and sibling whitespace span is copied verbatim |
+| D27 | Svelte shells use the destination major version's native child-content contract | Svelte 5 passes children as snippets while Svelte 4 and earlier expose slots | Version 5 emits a typed `Snippet` plus `$props()`/`{@render}` shell; older destinations emit `<slot />`, avoiding a framework-upgrade side effect |
 
 ### Lessons learned
 
@@ -53,6 +55,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L08 | Component and style imports commonly share the same zero-width module anchor | React planning coalesces them into one ordered import operation so overlap preflight remains strict and imports are neither duplicated nor applied against different preimages |
 | L09 | Vue compiler SFC block offsets point to block content, while template tag insertion needs the preceding opening-tag boundary | Existing scripts use compiler-verified content spans; scriptless SFCs search backward from the compiler's template-content offset for the unique opening tag |
 | L10 | A setup binding named `props` is not the useful prop inventory when `defineProps` carries a type literal | Vue graph analysis records the literal type's property names while retaining the call source hash; destructured props retain their local binding names |
+| L11 | Svelte's modern AST gives the script element span and a separate exact `content.start` boundary | Imports are inserted inside the existing instance script at that compiler offset, or in a new leading script when no instance script exists; the component AST is never reprinted |
 
 ## 1. Outcome
 
@@ -1020,8 +1023,8 @@ Dependencies: P5.1.
 
 Tasks:
 
-- [ ] Integrate generated BEM components through snippets/slots/props without changing state logic.
-- [ ] Preserve native event/bind/action semantics.
+- [x] Integrate generated BEM components through snippets/slots/props without changing state logic.
+- [x] Preserve native event/bind/action semantics.
 - [ ] Run Svelte compiler, SvelteKit checks/build, SSR state capture, source-preservation and image gates.
 
 Acceptance criteria:

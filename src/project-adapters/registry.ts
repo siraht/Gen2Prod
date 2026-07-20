@@ -10,6 +10,7 @@ import { parseWordPressProject } from "./wordpress/parse.ts";
 import { parseBricksProject } from "./bricks/parse.ts";
 import { planReactIntegration } from "./react/plan.ts";
 import { planVueIntegration } from "./vue/plan.ts";
+import { planSvelteIntegration } from "./svelte/plan.ts";
 import { projectOperationGraphHash } from "./rewrite/text-edits.ts";
 import { runSandboxCommands } from "./sandbox.ts";
 
@@ -33,6 +34,7 @@ function adapter(profile: ProjectFrameworkProfile, target: ProjectSourceAdapter[
     planIntegration: async (context) => {
       if (target === "react" && context.reactCanonical) return planReactIntegration({ root: context.root, contract: context.contract, project: context.source, correspondence: context.correspondence, canonical: context.reactCanonical, mode: context.mode, profile: context.profile, policyHash: context.policyHash });
       if (target === "vue" && context.vueCanonical) return planVueIntegration({ root: context.root, contract: context.contract, project: context.source, correspondence: context.correspondence, canonical: context.vueCanonical, mode: context.mode, profile: context.profile, policyHash: context.policyHash });
+      if (target === "svelte" && context.svelteCanonical) return planSvelteIntegration({ root: context.root, contract: context.contract, project: context.source, correspondence: context.correspondence, canonical: context.svelteCanonical, mode: context.mode, profile: context.profile, policyHash: context.policyHash });
       return unsupportedPlanner(context, profile);
     },
     validateNative: async (context) => { const commands = await runSandboxCommands(context.sandbox, context.contract, { ...(context.includeInstall ? { includeInstall: true } : {}) }); return { passed: commands.length > 0 && commands.every((command) => command.passed), commands }; },
