@@ -123,7 +123,7 @@ const bootstrapProposal = await cli("bootstrap-propose", ["design-system", "prop
 const bootstrapReleasePath = String((bootstrapProposal.data as Record<string, unknown>).releasePath);
 const bootstrapBuild = await cli("bootstrap-anchor-build", ["build", "--spec", specPath, "--page", "sitespec://northstar/pages/home", "--design-system", bootstrapReleasePath, "--release-validation", "--output", join(root, "bootstrap", "production")], [3]);
 const bootstrapRun = String((bootstrapBuild.data as Record<string, unknown>).runDirectory);
-const bootstrapCapture = await cli("bootstrap-anchor-capture", ["evidence", "capture", bootstrapRun, "--spec", specPath, "--visual-target", bootstrapTargetPath, "--viewport", "1280", "--height", "1000", "--threshold", "1", "--output", join(bootstrapRun, "bootstrap-browser-results.json")]);
+const bootstrapCapture = await cli("bootstrap-anchor-capture", ["evidence", "capture", bootstrapRun, "--spec", specPath, "--visual-target", bootstrapTargetPath, "--viewport", "1280", "--height", "1000", "--threshold", "1", "--output", join(bootstrapRun, "bootstrap-browser-results.json")], [3]);
 const refinedScreenshot = String((bootstrapCapture.data as Record<string, unknown>).screenshotPath);
 
 const finalCandidatePath = join(root, "inputs", "refined-candidate.json");
