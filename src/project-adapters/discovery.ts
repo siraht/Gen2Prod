@@ -171,7 +171,7 @@ function allowedDefaults(profile: ProjectFrameworkProfile, files: string[]): str
   const candidates = profile === "next-app" ? ["app", "src/app", "components", "src/components", "styles", "src/styles"]
     : profile === "wordpress-block-theme" ? ["templates", "patterns", "parts", "styles", "style.css", "functions.php", "theme.json"]
       : profile === "bricks-export" ? [...files.filter((path) => /bricks-(?:page|export)\.json$/.test(path)), "gen2prod", "styles"]
-        : ["src", "app", "components", "styles"];
+        : ["src", "app", ...(profile === "nuxt" ? ["app.vue"] : []), "components", "styles", ...(profile === "vue-vite" || profile === "react-vite" ? ["index.html"] : [])];
   return [...new Set(candidates.filter((candidate) => files.some((path) => path === candidate || path.startsWith(`${candidate}/`)) || !extname(candidate)))];
 }
 
