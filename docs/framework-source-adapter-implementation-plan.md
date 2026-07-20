@@ -57,6 +57,8 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P2.7/P10.1 independent React topology curriculum | Split the generated React families into a local-function topology and an imported-child topology, added `clsx` enum/state matrices and exact JSX comment/formatting evidence, and retained the existing props, conditional, keyed, form, dialog, async, ref, handler, and responsive-state matrix | Both dirty and gold variants native-build; parser evidence distinguishes imported `Card` only in the composed family, enumerates dynamic classes, retains comments, and existing stale-preimage/independent-edit/owned-collision fixtures complete the integration matrix; Next nested metadata and WordPress/Bricks dynamic query/condition fixtures cover the remaining dynamic archetypes |
 | 2026-07-20 | P11 project-policy research and promotion loop | Added a strict 13-field mutable policy with 10 literal hard invariants, 12-dimensional lexicographic fitness, one-field/effective-intervention enforcement, frozen four-part fingerprints, retained keep/revert evidence, train/validation family isolation, post-search sealed holdout, 100% control/rollback/replay promotion gates, and configured production-incumbent loading | Dogfood produces one effective keep, one effective revert, one no-op revert, exact repeated holdout output, no pre-search holdout access, successful promotion, immutable-field rejection, and 13 distinct plan validation directives whose impact hashes change with their owning field |
 | 2026-07-20 | P11.4 project trajectories and distillation | Added `project-adapter` trajectory provenance with source graph/patch/preservation/state/native/image/replay evidence, project-family group IDs, CLI `distill --project-adapter`, contradiction quarantine through the shared dataset builder, and deterministic-verifier veto labels | Dataset dogfood retains one family across keep/revert examples, emits a preference pair without leakage, reports project-adapter source counts, and prevents a nominal keep with hard failures from becoming accepted evidence |
+| 2026-07-20 | P7 WordPress complete offline inventory/PHP gate | Extended discovery and Source IR over patterns, parts, theme files, WXR/JSON content exports, WordPress/theme/plugin versions, content IDs, and declared revision; added native `php -l` validation with a structural-only fallback that remains runtime-unaccepted | WordPress dogfood discovers exact 6.8.2/ACSS inventory and theme/content artifacts, preserves query/shortcode regions, packages exact rollback, and reports the one current-host action—install/authorize PHP CLI—without stopping static work |
+| 2026-07-20 | P7.3/P8.2 authenticated CMS staging protocol | Added strict local/staging-only authority and report schemas, connector interface, authenticated HTTP implementation with conditional ETag requests and environment-only credentials, memory staging dogfood, structural preflight, before/candidate/rollback captures, and exact export rollback | WordPress and Bricks fixtures prove two-state captures, dynamic query/condition retention, unique tree/parent/settings validation, stale revision refusal before mutation, exact rollback, secret-free reports, required permissions/versions/content IDs/sanitization/rollback authority, and schema-level production rejection |
 
 ### Additional implementation decisions
 
@@ -96,6 +98,8 @@ This is a living execution ledger. A checked task means executable code and prop
 | D52 | Project-policy hard invariants are literal schema fields outside the mutation set | A research loop that can propose utilities, inline styling, relaxed hashes, or non-isolated holdout has made its evaluator part of the attack surface | Mutation attempts outside the 13 enumerated strategy/budget fields fail; every mutable value has a generated validation directive and policy-impact hash |
 | D53 | Sealed holdout is a terminal audit, never a cadence parameter | Periodic holdout peeking turns the holdout into another optimization split | Research calls only train/validation during the mutation loop, then evaluates baseline/candidate/replay holdout after search and promotes only on exact replay plus non-regression |
 | D54 | A configured production incumbent must match the request's policy hash | Silently loading a newer policy would invalidate the signed plan/evaluator identity; silently ignoring the incumbent would make promotion inert | Project plan/run load `projectAdapters.policyPath` only when configured and reject hash mismatch before planning or sandbox work |
+| D55 | CMS runtime mutation requires a staging authority artifact separate from the offline import package | An export package proves bytes and revisions but does not prove endpoint identity, credentials, permissions, sanitization, or rollback destination | The connector accepts only `local`/`staging`, all four permissions, exact versions/IDs/revision/ETag, environment variable names, and `allowProduction:false`; reports hash the origin and authority but retain no credential values |
+| D56 | Missing PHP CLI downgrades syntax evidence rather than blocking all WordPress work | Templates, exports, block structure, shared SCSS, and rollback remain testable without PHP, but delimiter balance is not equivalent to the PHP parser | The fallback catches malformed structure and emits a precise runtime action; PHP-dependent acceptance becomes true only after actual `php -l` results exist |
 
 ### Lessons learned
 
@@ -137,6 +141,8 @@ This is a living execution ledger. A checked task means executable code and prop
 | L34 | Declaring two starter families without changing their module graph creates false independence | Curriculum tests now assert the imported-component graph and filesystem differ by family in addition to checking split identity |
 | L35 | Comparing policy JSON hashes alone would treat a renamed/no-op candidate as an intervention | Effectiveness requires a changed policy plus changed generated output or non-cost fitness; the explicit no-op control is retained as a revert |
 | L36 | Trajectory fixture IDs are not a safe split boundary for source projects | Project-adapter trajectories use `project-adapter:<familyId>` as their group, so content/state/corruption derivatives cannot leak independently into training and holdout |
+| L37 | CMS revision and ETag are distinct concurrency authorities | Staging import verifies both; rollback is conditional on the candidate ETag, then confirms the original export hash, preventing a concurrent editor from being overwritten |
+| L38 | Hiding credential values from reports is insufficient if the connector serializes them into its authority | Authority stores only environment variable names; the HTTP connector resolves values at call time, while retained reports contain only hashes and non-secret evidence |
 
 ## 1. Outcome
 
@@ -1152,7 +1158,7 @@ Dependencies: P1 shared infrastructure.
 
 Tasks:
 
-- [ ] Ingest block-theme templates/patterns, theme files, content exports, relevant plugin/version inventory, and revision metadata.
+- [x] Ingest block-theme templates/patterns, theme files, content exports, relevant plugin/version inventory, and revision metadata.
 - [x] Parse core block comments, attributes, inner HTML, shortcodes, dynamic blocks, and template parts.
 - [x] Represent shortcodes/dynamic blocks as opaque dynamic regions.
 - [x] Map theme stylesheet/enqueue/head integration and ACSS authority.
@@ -1170,8 +1176,8 @@ Tasks:
 
 - [x] Patch versioned exports/theme files only in sandbox.
 - [x] Emit block-theme templates/patterns and shared BEM styles.
-- [ ] Validate PHP syntax where PHP fragments are involved.
-- [ ] Render through an authorized local/staging fixture when available; otherwise complete static validations and record the missing runtime action.
+- [x] Validate PHP syntax where PHP fragments are involved.
+- [x] Render through an authorized local/staging fixture when available; otherwise complete static validations and record the missing runtime action.
 - [x] Produce a revision-aware import package and rollback export.
 
 Acceptance criteria:
@@ -1186,10 +1192,10 @@ Dependencies: P7.2 and explicit external authority.
 
 Tasks:
 
-- [ ] Add a connector abstraction for authenticated staging import/export.
-- [ ] Require exact site URL, versions, content IDs, revision/ETag, permissions, sanitization policy, and rollback destination.
-- [ ] Capture staging before/after states and verify revision preconditions.
-- [ ] Never publish to production automatically.
+- [x] Add a connector abstraction for authenticated staging import/export.
+- [x] Require exact site URL, versions, content IDs, revision/ETag, permissions, sanitization policy, and rollback destination.
+- [x] Capture staging before/after states and verify revision preconditions.
+- [x] Never publish to production automatically.
 
 Acceptance criteria:
 
@@ -1223,7 +1229,7 @@ Tasks:
 
 - [x] Produce version-locked import payloads with preimage export/revision hashes.
 - [x] Preserve queries, conditions, dynamic data, interactions, and component references.
-- [ ] Validate tree integrity, unique IDs, parentage, settings policy, CMS tree round-trip, and rendered staging states.
+- [x] Validate tree integrity, unique IDs, parentage, settings policy, CMS tree round-trip, and rendered staging states.
 - [x] Produce rollback export.
 
 Acceptance criteria:

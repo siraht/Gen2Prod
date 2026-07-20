@@ -10,7 +10,7 @@ import { ProjectDiscoveryError, type DiscoveryEvidence, type ProjectDiscoveryRes
 
 const IGNORED_DIRECTORIES = [".git", ".gen2prod", "node_modules", "dist", "build", ".next", ".nuxt", ".svelte-kit", ".astro", "coverage", ".cache"];
 const IGNORED_GLOBS = IGNORED_DIRECTORIES.flatMap((directory) => [`${directory}/**`, `**/${directory}/**`]);
-const SOURCE_GLOBS = ["**/*.{js,jsx,ts,tsx,vue,svelte,astro,css,scss,sass,json,html,php,yaml,yml}", "package.json", "bun.lock", "bun.lockb", "pnpm-lock.yaml", "package-lock.json", "yarn.lock"];
+const SOURCE_GLOBS = ["**/*.{js,jsx,ts,tsx,vue,svelte,astro,css,scss,sass,json,html,php,xml,yaml,yml}", "package.json", "bun.lock", "bun.lockb", "pnpm-lock.yaml", "package-lock.json", "yarn.lock"];
 
 type PackageData = { name?: string; scripts?: Record<string, string>; dependencies?: Record<string, string>; devDependencies?: Record<string, string>; packageManager?: string };
 
@@ -209,11 +209,15 @@ export async function discoverProject(inputRoot: string, options: DiscoverProjec
   const defaultManager = manager?.name ?? "bun";
   const stateFixtures = routes.map((route) => ({ id: `${route.route}:default`, route: route.route, viewport: 1280, theme: "light" as const, actions: [{ kind: "goto" as const, path: route.route }], expectedBranches: [], expectedInteractions: [] }));
   const generatedDirectory = options.generatedDirectory ?? (selected.profile === "next-app" ? "components/gen2prod" : selected.target === "wordpress" ? "patterns/gen2prod" : selected.target === "bricks" ? "gen2prod" : "src/components/gen2prod");
+  let cmsInventory: { version?: string; themeVersion?: string; plugins?: Record<string, string>; contentIds?: string[] } = {};
+  if (selected.target === "wordpress" && pathSet.has("wordpress-project.json")) cmsInventory = await Bun.file(join(root, "wordpress-project.json")).json() as typeof cmsInventory;
+  if (selected.target === "bricks") { try { const value = await Bun.file(join(root, routes[0]!.entry)).json() as { version?: string }; if (value.version) cmsInventory.version = value.version; } catch { /* parser records the malformed export */ } }
+  const cmsVersion = cmsInventory.version ?? versionFor(selected.profile, dependencies);
   const contract = ProjectContractSchema.parse({
     schemaVersion: "0.1.0",
     projectId: options.projectId ?? packageData.name ?? basename(root),
     rootHash,
-    framework: { target: selected.target, profile: selected.profile, version: versionFor(selected.profile, dependencies), router: selected.profile, rendering: selected.profile === "astro" ? ["ssg", "islands"] : selected.profile === "next-app" || selected.profile === "sveltekit" ? ["ssr"] : selected.target === "wordpress" || selected.target === "bricks" ? ["ssr"] : ["csr"], parserVersion: parserVersion(selected.profile) },
+    framework: { target: selected.target, profile: selected.profile, version: selected.target === "wordpress" || selected.target === "bricks" ? cmsVersion : versionFor(selected.profile, dependencies), router: selected.profile, rendering: selected.profile === "astro" ? ["ssg", "islands"] : selected.profile === "next-app" || selected.profile === "sveltekit" ? ["ssr"] : selected.target === "wordpress" || selected.target === "bricks" ? ["ssr"] : ["csr"], parserVersion: parserVersion(selected.profile) },
     ...(pm ? { packageManager: pm } : {}),
     commands: {
       ...(manager && options.permitFrozenInstall ? { install: { executable: manager.name, args: manager.name === "npm" ? ["ci"] : ["install", "--frozen-lockfile"], cwd: ".", envKeys: [], timeoutMs: 300_000 } } : {}),
@@ -225,7 +229,7 @@ export async function discoverProject(inputRoot: string, options: DiscoverProjec
     integration: { routeEntries: routes, rootLayouts: paths.filter((path) => /(?:layout\.(?:jsx|tsx)|\+layout\.svelte|Layout\.astro)$/.test(path) || /^src\/layouts\/.+\.astro$/.test(path)), metadataMode: selected.profile, styleEntrypoints: paths.filter((path) => /(?:^|\/)(?:app|global|globals|style|styles)\.(?:css|scss|sass)$/.test(path)), generatedDirectory, aliases: typeScript.aliases },
     authority: { allowedPaths: options.allowedPaths ?? allowedDefaults(selected.profile, paths), deniedPaths: [".env", ".env.local", ".git", "node_modules", ".gen2prod"], preserveExpressions: true, preserveHandlers: true, preserveDataAccess: true, permitFrozenInstall: options.permitFrozenInstall ?? false, permittedEnvironmentKeys: options.permittedEnvironmentKeys ?? [] },
     states: stateFixtures,
-    ...(selected.target === "wordpress" || selected.target === "bricks" ? { cms: { kind: selected.target, exportPath: routes[0]!.entry, version: versionFor(selected.profile, dependencies), pluginVersions: {}, revision: files.find((file) => file.path === routes[0]!.entry)!.sha256, contentIds: [] } } : {}),
+    ...(selected.target === "wordpress" || selected.target === "bricks" ? { cms: { kind: selected.target, exportPath: routes[0]!.entry, version: cmsVersion, pluginVersions: cmsInventory.plugins ?? {}, revision: files.find((file) => file.path === routes[0]!.entry)!.sha256, contentIds: cmsInventory.contentIds ?? [] } } : {}),
     discovery: { facts: { root, detectedProfile: selected.profile, files: files.length, typeScript: typeScript.facts, ...(selected.profile === "next-app" ? { nextSpecialFiles: paths.filter((path) => /\/(?:loading|error|not-found|template)\.(?:jsx|tsx)$/.test(path)) } : {}), ...(selected.profile === "sveltekit" ? { svelteKitSpecialFiles: paths.filter((path) => /\+(?:page|layout)(?:\.server)?\.(?:js|ts)$|\+(?:error|server)\.svelte$/.test(path)) } : {}), ...(selected.profile === "astro" ? { astroLayouts: paths.filter((path) => /^src\/layouts\/.+\.astro$/.test(path)), astroCollections: paths.filter((path) => /^(?:src\/content\.config\.(?:js|ts)|src\/content\/config\.(?:js|ts)|src\/content\/)/.test(path)) } : {}) }, inferredDefaults: { generatedDirectory, packageManager: manager?.name ?? null }, explicitOverrides: options, unresolved: requiredActions.map((item) => item.id) },
   });
   return { contract, contractHash: hashJson(contract), evidence, requiredActions };

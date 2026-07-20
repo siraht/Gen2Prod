@@ -40,6 +40,7 @@ describe("versioned schema export", () => {
     expect(names).toContain("project-route-projection.schema.json");
     expect(names).toContain("project-corruption-grammar-report.schema.json");
     expect(names).toContain("project-adapter-research-summary.schema.json");
+    expect(names).toContain("cms-staging-validation-report.schema.json");
     expect(names).toContain("project-validation-report.schema.json");
   });
 });

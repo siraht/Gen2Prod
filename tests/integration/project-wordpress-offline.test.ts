@@ -10,6 +10,7 @@ import { createProjectSandbox } from "../../src/project-adapters/sandbox.ts";
 import { applyPreparedTextPatch, rollbackPreparedTextPatch } from "../../src/project-adapters/rewrite/text-edits.ts";
 import { buildWordPressImportPackage, type WordPressCanonicalSurface } from "../../src/project-adapters/wordpress/plan.ts";
 import { ProjectCorrespondenceSchema } from "../../src/schemas/project-adapters.ts";
+import { validatePhpSyntax } from "../../src/project-adapters/php.ts";
 
 describe("WordPress offline project adapter", () => {
   test("patches only static block attributes, preserves dynamic regions, rolls back, packages, and replans empty", async () => {
@@ -19,9 +20,20 @@ describe("WordPress offline project adapter", () => {
     await Bun.write(join(root, "style.css"), ".flex { display: flex; }\n.p-4 { padding: 1rem; }\n");
     await Bun.write(join(root, "theme.json"), JSON.stringify({ version: 3, settings: {}, styles: {} }));
     await Bun.write(join(root, "functions.php"), "<?php\nwp_enqueue_style('theme-style', get_stylesheet_uri());\n");
+    await Bun.write(join(root, "parts", "header.html"), '<!-- wp:site-title /-->\n');
+    await Bun.write(join(root, "patterns", "hero.html"), '<!-- wp:heading --><h2>Hero</h2><!-- /wp:heading -->\n');
+    await Bun.write(join(root, "content-export.xml"), '<rss><channel><item><wp:post_id>42</wp:post_id></item></channel></rss>\n');
+    await Bun.write(join(root, "wordpress-project.json"), JSON.stringify({ version: "6.8.2", themeVersion: "1.4.0", plugins: { acss: "4.0.0-rc.3" }, contentIds: ["42"], revision: sha256(source) }));
 
     const discovery = await discoverProject(root);
     const project = await parseProjectSource(root, discovery);
+    expect(discovery.contract.cms).toMatchObject({ version: "6.8.2", pluginVersions: { acss: "4.0.0-rc.3" }, contentIds: ["42"] });
+    expect(project.metadata.pluginInventory).toMatchObject({ wordpressVersion: "6.8.2", themeVersion: "1.4.0", plugins: { acss: "4.0.0-rc.3" }, contentIds: ["42"] });
+    expect(project.metadata.contentExports).toEqual([{ path: "content-export.xml", format: "wxr", sha256: expect.any(String) }]);
+    expect((project.metadata.themeFiles as { path: string }[]).map((item) => item.path)).toEqual(expect.arrayContaining(["parts/header.html", "patterns/hero.html", "templates/index.html", "theme.json", "style.css", "functions.php"]));
+    const php = await validatePhpSyntax(root, ["functions.php"]);
+    expect(php.results[0]?.passed).toBeTrue();
+    if (php.results[0]?.runtime === "structural-fallback") expect(php.requiredAction).toContain("PHP CLI");
     const template = project.roots.find((node) => node.anchor.file === "templates/index.html")!;
     const sourceRoot = template.children.find((node) => node.kind === "static")!;
     const correspondence = ProjectCorrespondenceSchema.parse({ schemaVersion: "0.1.0", projectId: project.projectId, sourceProjectHash: project.sourceHash, captureHash: sha256("wordpress-capture"), mappings: [{ mappingId: "root", sourceNodeId: sourceRoot.id, kind: "one-to-one", instances: [{ stateId: "default", renderedNodeId: "root", score: 0.94 }], confidence: 0.94, evidence: ["block", "layout-visible"], destructiveAuthorized: true }], unresolved: [] });

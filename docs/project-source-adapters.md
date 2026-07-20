@@ -131,7 +131,7 @@ Production acceptance requires `sandbox: container` and `containerImage: name@sh
 
 WordPress and Bricks work from revisioned offline exports. Planners retain unknown/plugin/private fields, dynamic/query/condition/interaction regions, IDs, parentage, and exact original bytes. They emit an import package and rollback export; direct database writes and automatic production publication are prohibited.
 
-Authenticated staging remains a separate authority boundary. Until a connector is configured and proven, the report requests exact staging URL, site/plugin/theme versions, content IDs, revision/ETag, permission scope, sanitization policy, credentials, before/after captures, and rollback destination. Static/offline work continues without inventing those values.
+Authenticated staging remains a separate authority boundary implemented by `CmsStagingConnector`. A connector run requires a strict local/staging authority with exact site URL, CMS/plugin/theme versions, content IDs, revision and ETag, all export/import/capture/rollback permissions, sanitization policy, credential environment-variable names, and rollback destination. It structurally validates before import, captures before/candidate/rollback states, uses conditional requests, proves exact export rollback, retains no credential values, and cannot represent production publication. Static/offline work continues without inventing missing authority. PHP files use native `php -l` when available; a structural fallback records the missing PHP CLI action and cannot grant runtime acceptance.
 
 ## Troubleshooting
 

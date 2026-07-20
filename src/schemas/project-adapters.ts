@@ -544,6 +544,21 @@ export const ProjectAdapterResearchSummarySchema = z.object({
   holdoutOpenedAfterSearch: z.literal(true), holdoutNonRegression: z.boolean(), promoted: z.boolean(), incumbentPath: z.string().min(1), summaryHash: Sha256Schema,
 }).strict();
 
+export const CmsStagingAuthoritySchema = z.object({
+  schemaVersion: z.literal("0.1.0"), kind: z.enum(["wordpress", "bricks"]), environment: z.enum(["local", "staging"]), siteUrl: z.string().url(),
+  versions: z.object({ cms: z.string().min(1), theme: z.string().min(1), plugins: z.record(z.string(), z.string().min(1)) }).strict(),
+  contentIds: z.array(z.string().min(1)).min(1), revision: Sha256Schema, etag: z.string().min(1), permissions: z.array(z.enum(["export", "import", "capture", "rollback"])).length(4),
+  sanitizationPolicy: z.string().min(1), rollbackDestination: z.string().min(1), credentialEnvironmentKeys: z.array(z.string().regex(/^[A-Z_][A-Z0-9_]*$/)).min(1), allowProduction: z.literal(false),
+}).strict().superRefine((value, context) => { if (new Set(value.permissions).size !== 4) context.addIssue({ code: "custom", path: ["permissions"], message: "all four unique staging permissions are required" }); });
+
+export const CmsStagingValidationReportSchema = z.object({
+  schemaVersion: z.literal("0.1.0"), kind: z.enum(["wordpress", "bricks"]), siteOriginHash: Sha256Schema, authorityHash: Sha256Schema,
+  preconditionsPassed: z.boolean(), structuralValidationPassed: z.boolean(), before: z.object({ revision: Sha256Schema, etagHash: Sha256Schema, exportHash: Sha256Schema, captureHashes: z.array(Sha256Schema).min(1) }).strict(),
+  candidate: z.object({ revision: Sha256Schema, etagHash: Sha256Schema, exportHash: Sha256Schema, captureHashes: z.array(Sha256Schema).min(1) }).strict(),
+  rollback: z.object({ revision: Sha256Schema, etagHash: Sha256Schema, exportHash: Sha256Schema, captureHashes: z.array(Sha256Schema).min(1), exact: z.boolean() }).strict(),
+  credentialsRetained: z.literal(false), productionMutationAllowed: z.literal(false), accepted: z.boolean(), reportHash: Sha256Schema,
+}).strict();
+
 export type ProjectFrameworkProfile = z.infer<typeof ProjectFrameworkProfileSchema>;
 export type CommandSpec = z.infer<typeof CommandSpecSchema>;
 export type StateFixture = z.infer<typeof StateFixtureSchema>;
@@ -571,3 +586,5 @@ export type ProjectAdapterPolicy = z.infer<typeof ProjectAdapterPolicySchema>;
 export type ProjectAdapterFitness = z.infer<typeof ProjectAdapterFitnessSchema>;
 export type ProjectAdapterResearchEvaluation = z.infer<typeof ProjectAdapterResearchEvaluationSchema>;
 export type ProjectAdapterResearchSummary = z.infer<typeof ProjectAdapterResearchSummarySchema>;
+export type CmsStagingAuthority = z.infer<typeof CmsStagingAuthoritySchema>;
+export type CmsStagingValidationReport = z.infer<typeof CmsStagingValidationReportSchema>;
