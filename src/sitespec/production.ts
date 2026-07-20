@@ -18,7 +18,7 @@ import type { DomNode, NormalForm, SpecBinding, StyleIntent, TokenRegistry } fro
 import type { CanonicalSiteSpecArtifact } from "../schemas/sitespec.ts";
 import { validate, type ValidationReport } from "../validation/gates.ts";
 import { assertBuildableProjection, projectCanonicalSiteSpec, type SiteSpecProjection } from "./adapter.ts";
-import { assertDesignSystemCurrent } from "./design-system.ts";
+import { assertDesignSystemCurrent, selectAnchorPage, selectValidationPage } from "./design-system.ts";
 
 type ArtifactReference = DesignSystemRelease["tokens"];
 type RevisionInput = { subjectRef: string; revision: string };
@@ -279,9 +279,15 @@ export async function buildSiteSpecPage(options: {
   designSystem: DesignSystemRelease;
   designSystemRoot: string;
   outputDirectory: string;
+  releaseValidation?: boolean;
 }): Promise<SiteSpecPageBuild> {
   assertDesignSystemCurrent(options.designSystem, options.artifact);
-  if (options.designSystem.status !== "approved") throw new Error("Page production requires an approved design-system release");
+  if (options.designSystem.status !== "approved") {
+    if (!options.releaseValidation || options.designSystem.status !== "provisional") throw new Error("Page production requires an approved design-system release");
+    const anchor = selectAnchorPage(options.artifact);
+    const validation = selectValidationPage(options.artifact, anchor);
+    if (![anchor.pageSubjectRef, validation.pageSubjectRef].includes(options.pageSubjectRef)) throw new Error(`Provisional release-validation builds are bounded to ${anchor.pageSubjectRef} and ${validation.pageSubjectRef}`);
+  }
   const projection = projectCanonicalSiteSpec(options.artifact, options.pageSubjectRef);
   assertBuildableProjection(projection);
   await assertReleaseCoverage(options.designSystem, options.designSystemRoot, projection);
@@ -290,7 +296,7 @@ export async function buildSiteSpecPage(options: {
   const css = compileString(scss, { style: "expanded" }).css;
   const html = emitHtml(plan, "page.css", true);
   const validation = normalizedValidation(await validate({ html, scss, css, plan, mode: "greenfield", thresholds: { minBemCoverage: 0.95, minTokenCoverage: 0.95, maxVisualPixelRatio: 0.03, provisional: true } }));
-  const runId = `${slug(projection.page.id)}-${hashJson({ spec: options.artifact.revision, page: projection.page.revision, designSystem: hashJson(options.designSystem), generator: "sitespec-production-v2" }).slice(0, 16)}`;
+  const runId = `${slug(projection.page.id)}-${hashJson({ spec: options.artifact.revision, page: projection.page.revision, designSystem: hashJson(options.designSystem), releaseValidation: Boolean(options.releaseValidation), generator: "sitespec-production-v2" }).slice(0, 16)}`;
   const runDirectory = join(options.outputDirectory, "runs", runId);
   await ensureDirectory(runDirectory);
   const normalForm = { ...projection.normalForm, styles: plan.styles, tokens: plan.tokens };

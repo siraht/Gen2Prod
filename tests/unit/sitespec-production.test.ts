@@ -75,4 +75,14 @@ describe("SiteSpec governed page production", () => {
     await Bun.write(componentPath, `${JSON.stringify(contracts)}\n`);
     await expect(buildSiteSpecPage({ artifact: current, pageSubjectRef: "sitespec://northstar/pages/home", designSystem: release, designSystemRoot: root, outputDirectory: join(root, "out") })).rejects.toThrow("integrity validation");
   });
+
+  test("bounds provisional release-validation builds to the selected anchor and validation page", async () => {
+    const graph = await approvedFixture();
+    const current = artifact(graph);
+    const root = await mkdtemp(join(tmpdir(), "g2p-production-provisional-"));
+    const approved = await approvedRelease(graph, root);
+    const provisional = { ...approved, status: "provisional" as const };
+    await expect(buildSiteSpecPage({ artifact: current, pageSubjectRef: "sitespec://northstar/pages/assessment", designSystem: provisional, designSystemRoot: root, outputDirectory: join(root, "out"), releaseValidation: true })).resolves.toMatchObject({ pageSubjectRef: "sitespec://northstar/pages/assessment" });
+    await expect(buildSiteSpecPage({ artifact: current, pageSubjectRef: "sitespec://northstar/pages/contact", designSystem: provisional, designSystemRoot: root, outputDirectory: join(root, "out"), releaseValidation: true })).rejects.toThrow("bounded");
+  });
 });

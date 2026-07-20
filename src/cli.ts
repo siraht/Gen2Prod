@@ -61,6 +61,7 @@ import { approveVisualTarget, importDesignCandidate } from "./sitespec/design.ts
 import { approveDesignSystemRelease, proposeDesignSystem } from "./sitespec/design-system.ts";
 import { buildSiteSpecPage } from "./sitespec/production.ts";
 import { buildSiteRollout } from "./sitespec/rollout.ts";
+import { recordPageEvidence } from "./sitespec/evidence.ts";
 
 type GlobalOptions = { config: string; workspace: string; acss?: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -223,10 +224,11 @@ program
   .requiredOption("--page <ref>", "page subject reference")
   .requiredOption("--design-system <path>", "approved design-system release")
   .option("--design-system-root <path>", "design-system artifact root; inferred from the release path")
+  .option("--release-validation", "allow a provisional release only for the selected anchor or validation page")
   .option("--output <path>", "production artifact root", ".gen2prod/sitespec/production")
-  .action(async (options: { spec: string; page: string; designSystem: string; designSystemRoot?: string; output: string }) => {
+  .action(async (options: { spec: string; page: string; designSystem: string; designSystemRoot?: string; releaseValidation?: boolean; output: string }) => {
     const releasePath = resolve(options.designSystem);
-    const build = await buildSiteSpecPage({ artifact: await siteSpecArtifact(options.spec), pageSubjectRef: options.page, designSystem: await readJson<DesignSystemRelease>(releasePath), designSystemRoot: resolve(options.designSystemRoot ?? join(dirname(releasePath), "..", "..")), outputDirectory: resolve(options.output) });
+    const build = await buildSiteSpecPage({ artifact: await siteSpecArtifact(options.spec), pageSubjectRef: options.page, designSystem: await readJson<DesignSystemRelease>(releasePath), designSystemRoot: resolve(options.designSystemRoot ?? join(dirname(releasePath), "..", "..")), outputDirectory: resolve(options.output), ...(options.releaseValidation ? { releaseValidation: true } : {}) });
     const envelope = result("build", { runId: build.runId, runDirectory: build.runDirectory, pageSubjectRef: build.pageSubjectRef, validationPassed: build.validation.passed, manifest: join(build.runDirectory, "manifest.json"), results: join(build.runDirectory, "results.json"), correspondence: join(build.runDirectory, "correspondence.json") });
     envelope.runId = build.runId;
     envelope.ok = build.validation.passed && !build.results.requiredActions.some((action: { severity: string }) => action.severity === "blocking");
@@ -249,6 +251,26 @@ program
     envelope.ok = rollout.audit.passed && rollout.requiredActions.length === 0 && blockingEvidence.length === 0;
     envelope.requiredActions.push(...rollout.requiredActions.map((action) => ({ id: action.id, summary: action.reason, detail: `Subject: ${action.subjectRef}; authority: ${action.requiredAuthority}`, blocking: action.severity === "blocking" })), ...blockingEvidence.map((action) => ({ id: action.id, summary: action.reason, detail: "Record the required current evidence and rerun the affected page result.", blocking: true })));
     emit(envelope, `Classified ${rollout.classifications.length} page(s); built ${rollout.builds.length}\nSitewide audits: ${rollout.audit.passed ? "pass" : "fail"}\nWorkflow actions: ${rollout.requiredActions.length}; measurement actions: ${blockingEvidence.length}\nAudit: ${rollout.auditPath}`);
+    if (!envelope.ok) process.exitCode = 3;
+  });
+
+const evidenceCommand = program.command("evidence").description("record external measurements and explicit scoped authority decisions into current requirement results");
+evidenceCommand
+  .command("record <run>")
+  .description("merge Lighthouse evidence and an optional validation-page visual waiver into a result manifest")
+  .requiredOption("--spec <path>", "canonical SiteSpec artifact")
+  .option("--lighthouse <path>", "Lighthouse JSON report")
+  .option("--visual-waiver <ref>", "explicit authority reference when no visual target is scoped to the page")
+  .option("--output <path>", "updated result manifest; defaults to evidence-results.json in the run")
+  .action(async (run: string, options: { spec: string; lighthouse?: string; visualWaiver?: string; output?: string }) => {
+    if (!options.lighthouse && !options.visualWaiver) throw new UsageError("Pass --lighthouse and/or --visual-waiver to record evidence");
+    const runDirectory = resolve(run);
+    const output = resolve(options.output ?? join(runDirectory, "evidence-results.json"));
+    const recorded = await recordPageEvidence({ artifact: await siteSpecArtifact(options.spec), results: await readJson<ResultManifest>(join(runDirectory, "results.json")), outputPath: output, ...(options.lighthouse ? { lighthousePath: resolve(options.lighthouse) } : {}), ...(options.visualWaiver ? { visualWaiverAuthority: options.visualWaiver } : {}) });
+    const blocking = recorded.requiredActions.filter((action: { severity: string }) => action.severity === "blocking").length;
+    const envelope = result("evidence record", { resultsId: recorded.id, output, statuses: recorded.results.map((item: { requirementRef: string; status: string }) => ({ requirementRef: item.requirementRef, status: item.status })), blockingActions: blocking });
+    envelope.ok = blocking === 0 && recorded.results.every((item: { status: string }) => ["pass", "waived"].includes(item.status));
+    emit(envelope, `Recorded external evidence for ${recorded.id}\nBlocking actions: ${blocking}\nResults: ${output}`);
     if (!envelope.ok) process.exitCode = 3;
   });
 
