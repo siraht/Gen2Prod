@@ -50,6 +50,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P0.3/P10.3 frozen project mutation controls | Added an 18-control one-field mutation registry spanning expressions, handlers, keys, branches, slots, utilities, forbidden selectors/raw values, runtime boundaries, scope/preimages, native build, rendered pixels, state behavior, rollback/idempotence, and CMS parent/revision; reports bind registry, evaluator sources, frozen corpus, framework/parser/lockfile/toolchain, and capture environment fingerprints | Every mutation changes exactly one frozen field, has a named detector, produces a unique mutation hash, and reaches 100% recall; validation runs the suite itself, retains a strict content-addressed report/replay input, and no API/CLI recall override remains |
 | 2026-07-20 | P0.3 project-family partitions | Added salt-bound deterministic family assignments, unique project-derivative enforcement, train-only search, validation-only selection, sealed holdout, strict manifests, and fingerprint verification | Thirty shuffled families reproduce byte-equivalent assignments spanning all splits; duplicate project identities and any post-hoc assignment edit fail validation/fingerprint checks |
 | 2026-07-20 | P10.1 dynamic React project curriculum | Lifted the ten canonical page archetypes and independent content families into two React/Vite starter families with clean/dirty native-buildable projects, conditional navigation, keyed repetition, async states, controlled forms, dialogs, responsive media, client boundary, children composition, strict contracts/Source IR/states, strategies/briefs/content, lineage, eight corruption operations, family splits, and optional gold/dirty/diff browser captures | Eight-fixture structural dogfood proves two content variants remain in each family split, both dirty and gold projects build, dynamic/key/state/ref evidence parses, clean SCSS is nested/tokenized, and no runtime lineage marker leaks; CLI visual dogfood emits two starter projects with eight real screenshots plus four diff images |
+| 2026-07-20 | P2.3 auditable React class migration | Added whole-token semantic BEM replacement over every statically enumerable variant, proof-gated behavior-hook lowering to `data-*`, and fail-closed preservation for framework, unknown, and runtime-generated class surfaces | Unit dogfood covers base/modifier mapping, behavior migration, runtime opacity, and framework-class blockers without substring rewriting or executing destination code |
 
 ### Additional implementation decisions
 
@@ -81,6 +82,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | D44 | Project mutation recall is computed from a versioned frozen specimen and explicit one-field interventions | A numeric input would be as untrustworthy as a caller-provided sandbox boolean | Validation owns execution and fingerprinting; a malformed summary, duplicate control, ineffective mutation, detector miss, evaluator edit, toolchain change, or capture-environment change is visible and promotion requires exact recall 1 |
 | D45 | Research partitions are assigned by starter/project family before generating seed/content/corruption derivatives | File-level random splits leak the same template topology into search and holdout | Every derivative project ID belongs to exactly one family assignment; experiments search train, select on validation, and cannot open holdout as another search split |
 | D46 | Project curriculum stores static canonical pixels beside, not inside, dynamic source authority | A screenshot can score visual recovery but cannot encode props, branches, keys, handlers, form state, dialog control, or client boundaries | Gold/dirty project source and declared states own behavior; canonical static HTML screenshots own only their captured pixels, and lineage records that distinction explicitly |
+| D47 | Behavior classes become `data-*` only when source evidence proves they are selector-only hooks | A class may be consumed by CSS, JavaScript, a plugin, tests, or analytics, and changing it without a complete reference proof can break behavior | Unproven behavior and framework classes remain opaque blockers; a clean-surface claim is available only when every reachable variant is complete and every token is owned or proven migratable |
 
 ### Lessons learned
 
@@ -115,6 +117,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L27 | Docker's `--internal` bridge and loopback port publishing are not composable on this host | A live dogfood connection was refused despite a healthy server, so preview isolation uses a no-masquerade/no-ICC bridge plus an explicit failed-egress probe instead of weakening to ordinary bridge networking |
 | L28 | Mutation controls need intervention-effect evidence in addition to detector results | Every control records a distinct before/mutation hash and exactly one changed field; ineffective or multi-field controls cannot masquerade as useful recall evidence |
 | L29 | Content variation and structural variation need separate identities | Each starter/archetype pair is a family, while content variants are derivatives assigned to that family's one split; changing copy does not create fake topology independence |
+| L30 | A syntactically BEM-compatible token is not evidence that Gen2Prod owns its runtime meaning | Class migration consumes explicit style/behavior/framework evidence and rewrites complete tokens only; runtime class functions never become guessed variants |
 
 ## 1. Outcome
 
@@ -895,9 +898,9 @@ Tasks:
 
 - [x] Enumerate reachable class sets without executing project code.
 - [x] classify style, behavior, framework, unknown, and non-style roles with existing CSS/source evidence;
-- [ ] plan semantic BEM base/element/modifier replacements;
-- [ ] migrate behavior hooks to `data-*` where source use proves equivalence;
-- [ ] preserve unknown runtime class generators as opaque and block a clean-surface claim.
+- [x] plan semantic BEM base/element/modifier replacements;
+- [x] migrate behavior hooks to `data-*` where source use proves equivalence;
+- [x] preserve unknown runtime class generators as opaque and block a clean-surface claim.
 
 Acceptance criteria:
 

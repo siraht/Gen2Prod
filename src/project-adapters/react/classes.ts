@@ -2,6 +2,14 @@ import ts from "typescript";
 import { isBemClass, isUtilityClass } from "../../core/classes.ts";
 
 export type ReactClassAnalysis = { variants: string[][]; complete: boolean; reasons: string[] };
+export type ReactClassMigration = {
+  variants: { before: string[]; after: string[] }[];
+  replacements: Record<string, string>;
+  behaviorAttributes: Record<string, string>;
+  preservedOpaque: string[];
+  requiredActions: string[];
+  cleanSurface: boolean;
+};
 
 export function analyzeReactClassBinding(source: string, constants: Record<string, string | string[]> = {}): ReactClassAnalysis {
   const expressionSource = source.trim().replace(/^\{([\s\S]*)\}$/, "$1");
@@ -77,3 +85,45 @@ export function classifyReactClasses(analysis: ReactClassAnalysis, evidence: { s
   for (const name of new Set(analysis.variants.flat())) result[name] = behavior.has(name) ? "behavior" : framework.has(name) ? "framework" : isUtilityClass(name) ? "utility" : style.has(name) ? "style" : isBemClass(name) ? "bem" : "unknown";
   return result;
 }
+
+export function planReactClassMigration(input: {
+  analysis: ReactClassAnalysis;
+  bemBase: string;
+  semanticNames?: Record<string, string>;
+  evidence?: { styleClasses?: Iterable<string>; behaviorClasses?: Iterable<string>; frameworkClasses?: Iterable<string>; selectorOnlyBehaviorClasses?: Iterable<string> };
+}): ReactClassMigration {
+  const roles = classifyReactClasses(input.analysis, input.evidence);
+  const selectorOnly = new Set(input.evidence?.selectorOnlyBehaviorClasses ?? []);
+  const replacements: Record<string, string> = {};
+  const behaviorAttributes: Record<string, string> = {};
+  const preservedOpaque = new Set<string>();
+  const requiredActions = [...input.analysis.reasons];
+  if (!input.analysis.complete) requiredActions.push("Runtime class generator is opaque; preserve it verbatim and do not claim a clean class surface.");
+  for (const [name, role] of Object.entries(roles)) {
+    if (role === "behavior") {
+      if (selectorOnly.has(name)) behaviorAttributes[`data-${dataName(name)}`] = "";
+      else { preservedOpaque.add(name); requiredActions.push(`Behavior class ${name} has unproven runtime consumers and must remain unchanged.`); }
+      continue;
+    }
+    if (role === "framework" || role === "unknown") {
+      preservedOpaque.add(name);
+      requiredActions.push(`${role === "framework" ? "Framework" : "Unknown"} class ${name} cannot be semantically rewritten without destination evidence.`);
+      continue;
+    }
+    if (role === "bem") replacements[name] = input.semanticNames?.[name] ?? (name.includes("__") || name.includes("--") ? name : input.bemBase);
+    else replacements[name] = input.semanticNames?.[name] ?? semanticBemName(input.bemBase, name);
+  }
+  const variants = input.analysis.variants.map((before) => ({ before, after: [...new Set(before.flatMap((name) => {
+    if (roles[name] === "behavior" && selectorOnly.has(name)) return [];
+    return [replacements[name] ?? name];
+  }))] }));
+  return { variants, replacements, behaviorAttributes, preservedOpaque: [...preservedOpaque].sort(), requiredActions: [...new Set(requiredActions)].sort(), cleanSurface: input.analysis.complete && preservedOpaque.size === 0 && requiredActions.length === 0 };
+}
+
+function semanticBemName(base: string, source: string): string {
+  const normalized = source.toLowerCase().replace(/^(?:is|has)-/, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const modifier = /^(?:is|has)-/.test(source) || /(?:active|selected|open|error|featured|disabled)/i.test(source);
+  return modifier ? `${base}--${normalized || "state"}` : `${base}__${normalized || "item"}`;
+}
+
+function dataName(source: string): string { return source.toLowerCase().replace(/^js-/, "behavior-").replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, ""); }
