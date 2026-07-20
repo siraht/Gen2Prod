@@ -40,6 +40,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P9 preview lifecycle | Added an exact-authority, shell-free preview process with environment allowlisting, bounded output, readiness polling, early-exit/timeout errors, and process-group teardown | A live Bun preview fixture becomes reachable only through its declared command and is unreachable after deterministic shutdown |
 | 2026-07-20 | P9 inspect-to-validation project controller | Added isolated baseline/candidate sandboxes, native builds, authorized live preview, declarative full-page Chromium state capture, exact adapter planning/replanning, strict validation, and content-addressed contract/source/plan/sandbox/report/replay artifacts | End-to-end React dogfood retains baseline/candidate screenshots and diff PNG, accepts with zero failures, writes six replay-linked artifact refs, and leaves the source project and its `.gen2prod` path untouched |
 | 2026-07-20 | P9.2 explicit destination apply and rollback | Added a separately invoked acceptance boundary that re-discovers the destination, verifies framework/version/lockfile/root identity, preflights every authorized hash-bound operation before writes, persists a versioned rollback bundle, applies atomically, verifies postimages, and restores exact originals on demand or post-apply races | End-to-end React dogfood proves no implicit source write, accepted apply, generated-file creation, exact changed-file inventory, stale second-apply refusal, exact rollback including generated-file removal, and rejection of an unaccepted report |
+| 2026-07-20 | P9.3 project configuration | Added a strict optional project-adapter config namespace for artifact location, exact profile, frozen-install authority, preview environment names, and explicit copied-audit versus digest-pinned container posture | Existing configuration remains valid; unknown project keys, mutable container tags, missing container digests, and mismatched sandbox/image combinations fail schema validation |
 
 ### Additional implementation decisions
 
@@ -63,6 +64,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | D36 | Preview servers are lifecycle processes, not build commands | Waiting for a server command to exit deadlocks capture, while detaching it without ownership leaks processes | The runtime verifies readiness at an explicit URL, retains bounded logs, and owns deterministic process-group shutdown in success and failure paths |
 | D37 | Baseline native builds and previews run from an empty-plan sandbox | Even an ordinary build writes caches/output and cannot remain a read-only inspection if executed in the destination | Original and candidate evidence come from independent copied roots; only the explicit destination-apply phase may later write accepted changes to the destination |
 | D38 | The inverse bundle is persisted before destination mutation and is independent of sandbox lifetime | An accepted sandbox may be cleaned up or a process may fail immediately after the first rename | Apply has a durable exact-original recovery authority before any write; postimage verification triggers automatic rollback on an observed apply race |
+| D39 | Project adapter configuration names environment variables but never stores their values | Configuration and result artifacts are durable and commonly committed or retained | Preview secrets remain process-local; the runtime may forward only names authorized by both the discovered contract and project configuration |
 
 ### Lessons learned
 
@@ -91,6 +93,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L21 | Killing only the package-manager child can leave its preview server alive | Preview commands start in their own process group on POSIX and shutdown signals the group, with a bounded SIGKILL fallback |
 | L22 | Route-qualified state IDs contain `/` and `:` and are unsafe screenshot filenames | Capture artifacts retain the original state ID in metadata while filenames use a deterministic sanitized representation |
 | L23 | An accepted report is not sufficient if the destination has drifted since inspection | Apply re-runs discovery and patch preparation against the real destination and rejects root, framework, lockfile, path, file, span, AST-anchor, revision, and owned-file precondition drift before mutation |
+| L24 | A container image tag is not a reproducible sandbox identity | The project config accepts only `name@sha256:<digest>` and refuses a container backend without that immutable identity |
 
 ## 1. Outcome
 
@@ -1230,7 +1233,7 @@ Dependencies: P9.1–P9.2.
 Tasks:
 
 - [ ] Add `project` command tree and stable JSON envelopes.
-- [ ] Add project-adapter configuration without weakening existing config validation.
+- [x] Add project-adapter configuration without weakening existing config validation.
 - [ ] Extend `doctor` with parser/compiler/browser/sandbox readiness and supported profiles.
 - [ ] Export all schemas.
 - [ ] Document project contract examples, state fixtures, generated artifacts, safety model, CMS staging, and troubleshooting.

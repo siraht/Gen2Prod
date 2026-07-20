@@ -3,6 +3,20 @@ import { parse } from "yaml";
 import { z } from "zod";
 import { ModeSchema, ProfileSchema } from "../schemas/artifacts.ts";
 import { FrameworkAdapterTargetSchema } from "../schemas/adapters.ts";
+import { ProjectFrameworkProfileSchema } from "../schemas/project-adapters.ts";
+
+export const ProjectAdaptersConfigSchema = z.object({
+  artifacts: z.string().min(1).default(".gen2prod/projects"),
+  profile: ProjectFrameworkProfileSchema.optional(),
+  includeInstall: z.boolean().default(false),
+  previewUrl: z.string().url().optional(),
+  previewEnvironmentKeys: z.array(z.string().regex(/^[A-Z_][A-Z0-9_]*$/)).default([]),
+  sandbox: z.enum(["copy-audit", "container"]).default("copy-audit"),
+  containerImage: z.string().regex(/^[^\s@]+@sha256:[a-f0-9]{64}$/, "must be an immutable image digest").optional(),
+}).strict().superRefine((value, context) => {
+  if (value.sandbox === "container" && !value.containerImage) context.addIssue({ code: "custom", path: ["containerImage"], message: "container sandbox requires a digest-pinned image" });
+  if (value.sandbox === "copy-audit" && value.containerImage) context.addIssue({ code: "custom", path: ["containerImage"], message: "containerImage is only valid for the container sandbox" });
+});
 
 const ConfigSchema = z.object({
   schemaVersion: z.string(),
@@ -31,6 +45,7 @@ const ConfigSchema = z.object({
     visualValidation: z.boolean(),
     captureViewport: z.number().int().positive(),
   }).optional(),
+  projectAdapters: ProjectAdaptersConfigSchema.optional(),
   validation: z.object({
     wcag: z.string(),
     provisionalThresholds: z.boolean(),

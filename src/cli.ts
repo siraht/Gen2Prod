@@ -114,6 +114,7 @@ program
       capture: { viewports: [360, 768, 1280, 1440], themes: ["light"], states: ["default", "focus-visible"], browserExecutable: "auto" },
       policy: { file: "src/research/policy.ts" }, research: { budget: 12, split: "validation", hiddenHoldoutEvery: 5 },
       adapters: { targets: ["react", "vue", "svelte", "astro", "wordpress", "bricks"], visualValidation: true, captureViewport: 1280 },
+      projectAdapters: { artifacts: ".gen2prod/projects", includeInstall: false, previewEnvironmentKeys: [], sandbox: "copy-audit" },
       validation: { wcag: "WCAG2AA", provisionalThresholds: true, maxVisualPixelRatio: 0.01, minBemCoverage: 0.95, minTokenCoverage: 0.95 },
     };
     await ensureDirectory(target);
