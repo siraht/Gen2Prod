@@ -1,11 +1,11 @@
 import { join } from "node:path";
-import { sha256, type ContractEntity, type DesignSystemRelease, type RequiredAction } from "@website-ontology/contracts";
+import { sha256, type ContractEntity, type DesignSystemRelease, type RequiredAction, type VisualTarget } from "@website-ontology/contracts";
 import { canonicalJson } from "../core/hash.ts";
-import { ensureDirectory, writeJsonAtomic } from "../core/fs.ts";
+import { ensureDirectory, pathExists, writeJsonAtomic, writeTextAtomic } from "../core/fs.ts";
 import type { CanonicalSiteSpecArtifact } from "../schemas/sitespec.ts";
 import { flatten, parseElements } from "../validation/dom.ts";
 import { projectCanonicalSiteSpec } from "./adapter.ts";
-import { assertDesignSystemCurrent } from "./design-system.ts";
+import { assertDesignSystemCurrent, proposeDesignSystem } from "./design-system.ts";
 import { buildSiteSpecPage, type SiteSpecPageBuild } from "./production.ts";
 
 export type RolloutClassification = {
@@ -31,6 +31,19 @@ export type SitewideAudit = {
     internalLinks: { passed: boolean; broken: { pageSubjectRef: string; href: string }[] };
     shells: { passed: boolean; invalidPages: string[] };
   };
+};
+
+export type DesignSystemGapProposal = {
+  schemaVersion: "g2p-design-system-gap/2.0";
+  kind: "design-system-gap-proposal";
+  id: string;
+  pageSubjectRef: string;
+  pageRevision: string;
+  reasons: string[];
+  approvalRef: string;
+  baseDesignSystem: { id: string; version: string };
+  proposedDesignSystem: { id: string; version: string; status: "provisional"; componentContractsHash: string };
+  inputRevisions: { subjectRef: string; revision: string }[];
 };
 
 async function object<T>(root: string, reference: DesignSystemRelease["coverage"]): Promise<T> {
@@ -146,4 +159,42 @@ export async function buildSiteRollout(options: { artifact: CanonicalSiteSpecArt
   await ensureDirectory(options.outputDirectory);
   await writeJsonAtomic(auditPath, audit);
   return { classifications, builds, requiredActions, audit, auditPath };
+}
+
+export async function proposeApprovedDesignSystemGap(options: {
+  artifact: CanonicalSiteSpecArtifact;
+  visualTarget: VisualTarget;
+  baseDesignSystem: DesignSystemRelease;
+  baseDesignSystemRoot: string;
+  pageSubjectRef: string;
+  approvalRef: string;
+  version: string;
+  outputDirectory: string;
+}): Promise<{ gapProposal: DesignSystemGapProposal; gapProposalPath: string; release: DesignSystemRelease; releasePath: string }> {
+  if (!options.approvalRef.trim()) throw new Error("A governed design-system gap proposal requires an approval reference");
+  const classification = (await classifySitePages({ artifact: options.artifact, designSystem: options.baseDesignSystem, designSystemRoot: options.baseDesignSystemRoot })).find((item) => item.pageSubjectRef === options.pageSubjectRef);
+  if (!classification) throw new Error(`Unknown SiteSpec page ${options.pageSubjectRef}`);
+  if (classification.category !== "design-system-gap") throw new Error(`Page ${options.pageSubjectRef} is ${classification.category}, not an approved design-system gap`);
+  const proposed = await proposeDesignSystem({ artifact: options.artifact, visualTarget: options.visualTarget, version: options.version, outputDirectory: options.outputDirectory });
+  const inputRevisions = [...new Map([...options.baseDesignSystem.inputRevisions, { subjectRef: classification.pageSubjectRef, revision: classification.pageRevision }].map((item) => [item.subjectRef, item])).values()].sort((left, right) => left.subjectRef.localeCompare(right.subjectRef));
+  const gapProposal: DesignSystemGapProposal = {
+    schemaVersion: "g2p-design-system-gap/2.0",
+    kind: "design-system-gap-proposal",
+    id: `design-system-gap-${classification.pageSubjectRef.split("/").at(-1)}-${options.version}`,
+    pageSubjectRef: classification.pageSubjectRef,
+    pageRevision: classification.pageRevision,
+    reasons: classification.reasons,
+    approvalRef: options.approvalRef,
+    baseDesignSystem: { id: options.baseDesignSystem.id, version: options.baseDesignSystem.version },
+    proposedDesignSystem: { id: proposed.release.id, version: proposed.release.version, status: "provisional", componentContractsHash: proposed.release.componentContracts.hash },
+    inputRevisions,
+  };
+  const contents = canonicalJson(gapProposal);
+  const gapDirectory = join(options.outputDirectory, "gap-proposals");
+  const gapProposalPath = join(gapDirectory, `${sha256(contents)}.json`);
+  await ensureDirectory(gapDirectory);
+  if (await pathExists(gapProposalPath)) {
+    if (await Bun.file(gapProposalPath).text() !== contents) throw new Error("Refusing to overwrite immutable design-system gap proposal");
+  } else await writeTextAtomic(gapProposalPath, contents);
+  return { gapProposal, gapProposalPath, release: proposed.release, releasePath: proposed.releasePath };
 }

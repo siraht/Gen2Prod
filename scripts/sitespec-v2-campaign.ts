@@ -158,6 +158,24 @@ const contactAcceptedResults = join(contactRun, "accepted-results.json");
 await cli("contact-evidence", ["evidence", "record", contactRun, "--spec", specPath, "--lighthouse", contactLighthouse, "--visual-waiver", "qualification://approvals/contact-page-no-visual-target", "--output", contactAcceptedResults]);
 
 const rollout = await cli("site-rollout", ["rollout", "--spec", specPath, "--design-system", approvedReleasePath, "--output", join(root, "final", "rollout")], [3]);
+const approvedRelease = JSON.parse(await readFile(approvedReleasePath, "utf8")) as { id: string; version: string; componentContracts: { id: string; hash: string; uri: string; mediaType: string; byteLength: number }; [key: string]: unknown };
+const approvedContractsPath = join(designSystemRoot, "objects", `${approvedRelease.componentContracts.hash}.json`);
+const approvedContracts = JSON.parse(await readFile(approvedContractsPath, "utf8")) as { components: { subjectRef: string }[]; [key: string]: unknown };
+const limitedContractsContents = canonicalJson({ ...approvedContracts, components: approvedContracts.components.filter((component) => component.subjectRef !== "sitespec://northstar/patterns/article") });
+const limitedContractsHash = sha256(limitedContractsContents);
+await Bun.write(join(designSystemRoot, "objects", `${limitedContractsHash}.json`), limitedContractsContents);
+const limitedRelease = { ...approvedRelease, id: "design-system-1-9-0-limited", version: "1.9.0", componentContracts: { ...approvedRelease.componentContracts, id: "limited-article-components", hash: limitedContractsHash, uri: `artifact://sha256/${limitedContractsHash}`, byteLength: Buffer.byteLength(limitedContractsContents) } };
+const limitedReleasePath = join(root, "gap", "limited-design-system-release.json");
+await writeJson(limitedReleasePath, limitedRelease);
+const gapDetection = await cli("governed-gap-detection", ["rollout", "--spec", specPath, "--design-system", limitedReleasePath, "--design-system-root", designSystemRoot, "--output", join(root, "gap", "detection")], [3]);
+const gapActions = gapDetection.requiredActions as { id?: string; summary?: string }[];
+if (!gapActions.some((action) => action.id === "design-system-gap-heat-pumps" && action.summary?.includes("governed design-system release change"))) throw new Error("Rollout did not return the expected governed article-pattern gap action");
+const governedGap = await cli("governed-gap-proposal", ["design-system", "propose-gap", "--spec", specPath, "--visual-target", finalTargetPath, "--base-release", limitedReleasePath, "--base-root", designSystemRoot, "--page", "sitespec://northstar/pages/heat-pumps", "--approval", "qualification://approvals/article-pattern-gap", "--release-version", "2.1.0-rc.1", "--output", join(root, "gap", "proposed-system")]);
+const gapProposalPath = String((governedGap.data as Record<string, unknown>).gapProposalPath);
+const gapReleasePath = String((governedGap.data as Record<string, unknown>).releasePath);
+const gapRelease = JSON.parse(await readFile(gapReleasePath, "utf8")) as { componentContracts: { hash: string } };
+const gapContracts = JSON.parse(await readFile(join(root, "gap", "proposed-system", "objects", `${gapRelease.componentContracts.hash}.json`), "utf8")) as { components: { subjectRef: string }[] };
+if (!gapContracts.components.some((component) => component.subjectRef === "sitespec://northstar/patterns/article")) throw new Error("Governed gap proposal did not restore the approved article pattern contract");
 const repeatBuild = await cli("anchor-repeat", ["build", "--spec", specPath, "--page", "sitespec://northstar/pages/home", "--design-system", approvedReleasePath, "--output", join(root, "final", "production")], [3]);
 if ((repeatBuild.data as Record<string, unknown>).runId !== (anchorBuild.data as Record<string, unknown>).runId) throw new Error("Unchanged anchor build was not idempotent");
 
@@ -176,7 +194,6 @@ finally { await rename(unavailableAsset, qualificationAsset); }
 
 const corruptRoot = join(root, "negative", "corrupt-design-system");
 await mkdir(join(corruptRoot, "objects"), { recursive: true });
-const approvedRelease = JSON.parse(await readFile(approvedReleasePath, "utf8")) as { componentContracts: { hash: string }; [key: string]: unknown };
 for (const file of await Array.fromAsync(new Bun.Glob("*.json").scan({ cwd: join(designSystemRoot, "objects"), absolute: true }))) await Bun.write(join(corruptRoot, "objects", basename(file)), Bun.file(file));
 await Bun.write(join(corruptRoot, "objects", `${approvedRelease.componentContracts.hash}.json`), "{}\n");
 await cli("reject-conflicting-implementation", ["build", "--spec", specPath, "--page", "sitespec://northstar/pages/home", "--design-system", approvedReleasePath, "--design-system-root", corruptRoot, "--output", join(root, "negative", "corrupt-output")], [1]);
@@ -199,7 +216,7 @@ const manifest = {
   postflight: { repositoryStatus: repositoryStatusAfter.split("\n").filter(Boolean), freeBytes: freeAtEnd, reserveBytes: RESERVE_BYTES },
   toolchain: { bun: Bun.version, lighthouse: LIGHTHOUSE_VERSION },
   commands: records.map((record) => ({ id: record.id, exitCode: record.exitCode, evidence: `commands/${String(records.indexOf(record) + 1).padStart(2, "0")}-${record.id}.json` })),
-  accepted: { spec: specPath, visualTarget: finalTargetPath, designSystem: approvedReleasePath, validationRun, validationResults: validationResultsPath, anchorRun, anchorResults: anchorAcceptedResults, contactRun, contactResults: contactAcceptedResults, rolloutAudit: (rollout.data as Record<string, unknown>).auditPath },
+  accepted: { spec: specPath, visualTarget: finalTargetPath, designSystem: approvedReleasePath, validationRun, validationResults: validationResultsPath, anchorRun, anchorResults: anchorAcceptedResults, contactRun, contactResults: contactAcceptedResults, rolloutAudit: (rollout.data as Record<string, unknown>).auditPath, governedGapProposal: gapProposalPath, governedGapRelease: gapReleasePath },
   negativeControls: records.filter((record) => record.id.startsWith("reject-")).map((record) => ({ id: record.id, exitCode: record.exitCode })),
   idempotence: { anchorRunId: (anchorBuild.data as Record<string, unknown>).runId, repeatedRunId: (repeatBuild.data as Record<string, unknown>).runId },
   boundedChange: { originalContactRunId: (contactBuild.data as Record<string, unknown>).runId, changedContactRunId: (changedContact.data as Record<string, unknown>).runId, changedSubject: "sitespec://northstar/pages/contact/sections/form.1/slots/body" },

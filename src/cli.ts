@@ -60,7 +60,7 @@ import { canonicalSiteSpecArtifactSchema, type CanonicalSiteSpecArtifact } from 
 import { approveVisualTarget, importDesignCandidate } from "./sitespec/design.ts";
 import { approveDesignSystemRelease, proposeDesignSystem } from "./sitespec/design-system.ts";
 import { buildSiteSpecPage } from "./sitespec/production.ts";
-import { buildSiteRollout } from "./sitespec/rollout.ts";
+import { buildSiteRollout, proposeApprovedDesignSystemGap } from "./sitespec/rollout.ts";
 import { capturePageEvidence, recordPageEvidence } from "./sitespec/evidence.ts";
 
 type GlobalOptions = { config: string; workspace: string; acss?: string; json?: boolean; input: boolean; verbose?: boolean };
@@ -201,6 +201,22 @@ designSystemCommand
   .action(async (options: { spec: string; visualTarget: string; releaseVersion: string; output: string }) => {
     const proposal = await proposeDesignSystem({ artifact: await siteSpecArtifact(options.spec), visualTarget: await readJson<VisualTarget>(resolve(options.visualTarget)), version: options.releaseVersion, outputDirectory: resolve(options.output) });
     emit(result("design-system propose", { id: proposal.release.id, version: proposal.release.version, status: proposal.release.status, releasePath: proposal.releasePath, objectsDirectory: proposal.objectsDirectory }), `Proposed design system ${proposal.release.id} (${proposal.release.version})\nStatus: ${proposal.release.status}\nRelease: ${proposal.releasePath}`);
+  });
+designSystemCommand
+  .command("propose-gap")
+  .description("turn an approved rollout gap into an immutable governed design-system release proposal")
+  .requiredOption("--spec <path>", "canonical SiteSpec artifact")
+  .requiredOption("--visual-target <path>", "current approved visual-target artifact")
+  .requiredOption("--base-release <path>", "approved design-system release with the detected gap")
+  .option("--base-root <path>", "base design-system artifact root; inferred from the release path")
+  .requiredOption("--page <ref>", "page subject classified as a design-system gap")
+  .requiredOption("--approval <ref>", "SiteOps/human approval for the governed gap proposal")
+  .requiredOption("--release-version <semver>", "immutable provisional release version")
+  .option("--output <path>", "new design-system artifact root", ".gen2prod/sitespec/design-system")
+  .action(async (options: { spec: string; visualTarget: string; baseRelease: string; baseRoot?: string; page: string; approval: string; releaseVersion: string; output: string }) => {
+    const baseReleasePath = resolve(options.baseRelease);
+    const proposal = await proposeApprovedDesignSystemGap({ artifact: await siteSpecArtifact(options.spec), visualTarget: await readJson<VisualTarget>(resolve(options.visualTarget)), baseDesignSystem: await readJson<DesignSystemRelease>(baseReleasePath), baseDesignSystemRoot: resolve(options.baseRoot ?? join(dirname(baseReleasePath), "..", "..")), pageSubjectRef: options.page, approvalRef: options.approval, version: options.releaseVersion, outputDirectory: resolve(options.output) });
+    emit(result("design-system propose-gap", { id: proposal.release.id, version: proposal.release.version, status: proposal.release.status, releasePath: proposal.releasePath, gapProposalPath: proposal.gapProposalPath, gap: proposal.gapProposal }), `Proposed governed design-system gap release ${proposal.release.version}\nGap: ${proposal.gapProposalPath}\nRelease: ${proposal.releasePath}`);
   });
 designSystemCommand
   .command("validate")

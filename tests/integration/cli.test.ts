@@ -21,6 +21,7 @@ test("exposes the SiteSpec design, release, and governed production commands", a
   const systemHelp = await new Response(system.stdout).text();
   expect(await system.exited).toBe(0);
   expect(systemHelp).toContain("propose");
+  expect(systemHelp).toContain("propose-gap");
   expect(systemHelp).toContain("validate");
   const proposal = Bun.spawn(["bun", "src/cli.ts", "design-system", "propose", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
   const proposalHelp = await new Response(proposal.stdout).text();
