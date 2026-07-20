@@ -5,6 +5,28 @@ Date: 2026-07-20
 Scope owner: Gen2Prod project-adapter layer  
 Related contracts: [Gen2Prod plan](Gen2Prod_plan_v2_3_4_revised.md), [Karpathy loop](karpathyloop.md), [native output adapters](framework-adapters.md), [styling contract](styling-contract.md), [implementation matrix](implementation-matrix.md)
 
+## Implementation progress, decisions, and lessons
+
+This is a living execution ledger. A checked task means executable code and proportionate tests exist; prose or a schema placeholder alone is not sufficient.
+
+### Progress log
+
+| Date | Slice | Result | Evidence |
+| --- | --- | --- | --- |
+| 2026-07-20 | P0.1 and P0.2 contract foundation | Added strict project artifact/authority vocabulary, destination/source/ownership/patch/validation schemas, high-risk reversible pass definitions, public schema exports, and negative safety tests | `bun run check`; project schema and schema-export tests pass |
+
+### Additional implementation decisions
+
+| ID | Decision | Rationale | Consequence |
+| --- | --- | --- | --- |
+| D21 | New public project-adapter schemas use strict objects even though older repository schemas are permissive | Project mutation contracts must reject misspelled or smuggled authority fields | Unknown keys fail at the boundary; backward compatibility remains limited to older schema families |
+
+### Lessons learned
+
+| ID | Lesson | Action |
+| --- | --- | --- |
+| L01 | Rejecting shell punctuation is insufficient: an executable field containing whitespace and quoted arguments still represents a shell-shaped command | `CommandSpec.executable` now rejects whitespace, quotes, and shell metacharacters; arguments must be separate array entries |
+
 ## 1. Outcome
 
 Implement the remaining boundary between Gen2Prod's accepted canonical output and an existing dynamic React/JSX, Vue, Svelte, Astro, WordPress, or Bricks project.
@@ -449,11 +471,11 @@ Dependencies: none.
 
 Tasks:
 
-- [ ] Add artifact types: `project-contract`, `source-project-ir`, `dynamic-region-map`, `project-ownership-map`, `project-patch-plan`, `project-patch`, `project-sandbox`, and `project-validation-report`.
-- [ ] Add authority concerns: `framework-source`, `destination-build-contract`, `runtime-state-fixtures`, `destination-path-ownership`, `cms-export`, and `cms-revision`.
-- [ ] Add pass definitions for discovery, source parsing, state capture, correspondence, patch planning, sandbox application, project validation, rollback, idempotence, and explicit apply.
-- [ ] Mark destination mutation passes high risk, reversible, and site blast radius.
-- [ ] Extend schema export tests.
+- [x] Add artifact types: `project-contract`, `source-project-ir`, `dynamic-region-map`, `project-ownership-map`, `project-patch-plan`, `project-patch`, `project-sandbox`, and `project-validation-report`.
+- [x] Add authority concerns: `framework-source`, `destination-build-contract`, `runtime-state-fixtures`, `destination-path-ownership`, `cms-export`, and `cms-revision`.
+- [x] Add pass definitions for discovery, source parsing, state capture, correspondence, patch planning, sandbox application, project validation, rollback, idempotence, and explicit apply.
+- [x] Mark destination mutation passes high risk, reversible, and site blast radius.
+- [x] Extend schema export tests.
 
 Decision/rationale comments:
 
@@ -474,11 +496,11 @@ Dependencies: P0.1.
 
 Tasks:
 
-- [ ] Implement `ProjectContractSchema`, `CommandSpecSchema`, route entry, state fixture, package-manager, integration, and CMS contract schemas.
-- [ ] Separate discovered facts, inferred defaults, explicit overrides, and unresolved fields.
+- [x] Implement `ProjectContractSchema`, `CommandSpecSchema`, route entry, state fixture, package-manager, integration, and CMS contract schemas.
+- [x] Separate discovered facts, inferred defaults, explicit overrides, and unresolved fields.
 - [ ] Add contract hashing and versioning.
 - [ ] Define strict merge precedence: explicit CLI/contract → project artifacts → framework defaults → unresolved.
-- [ ] Export JSON Schema.
+- [x] Export JSON Schema.
 
 Acceptance criteria:
 

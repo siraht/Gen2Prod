@@ -25,6 +25,12 @@ export const AuthorityConcernSchema = z.enum([
   "approved-content-intent",
   "inferred-patterns",
   "advisory-only",
+  "framework-source",
+  "destination-build-contract",
+  "runtime-state-fixtures",
+  "destination-path-ownership",
+  "cms-export",
+  "cms-revision",
 ]);
 
 export const ArtifactTypeSchema = z.enum([
@@ -55,6 +61,14 @@ export const ArtifactTypeSchema = z.enum([
   "compiled-output",
   "framework-output",
   "adapter-validation-report",
+  "project-contract",
+  "source-project-ir",
+  "dynamic-region-map",
+  "project-ownership-map",
+  "project-patch-plan",
+  "project-patch",
+  "project-sandbox",
+  "project-validation-report",
   "validation-report",
   "visual-report",
   "performance-report",

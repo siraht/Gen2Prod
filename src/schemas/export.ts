@@ -7,6 +7,7 @@ import { GateResultSchema, PassDefinitionSchema, PassEventSchema } from "./pass.
 import { EvaluationResultSchema, ExperimentResultSchema, TrajectorySchema } from "./research.ts";
 import { ImageDerivedContentStrategySchema, ImageOnlyAnalysisSchema, ImageOnlyBuildPlanSchema, ImageOnlyEvaluationSchema, ImageOnlyPolicySchema, ImageOnlyTargetManifestSchema, ImageStateSequenceAnalysisSchema } from "./image-only.ts";
 import { CmsDocumentSchema, FrameworkAdapterBenchmarkSchema, FrameworkAdapterEvaluationSchema, FrameworkAdapterExperimentSchema, FrameworkAdapterManifestSchema, FrameworkAdapterPolicySchema, FrameworkAdapterResearchSummarySchema, FrameworkAdapterSuiteSchema, FrameworkAdapterValidationSchema } from "./adapters.ts";
+import { ProjectContractSchema, ProjectOwnershipMapSchema, ProjectPatchPlanSchema, ProjectValidationReportSchema, SourceProjectSchema } from "./project-adapters.ts";
 
 const SCHEMAS = {
   "artifact-ref": ArtifactRefSchema,
@@ -36,6 +37,11 @@ const SCHEMAS = {
   "framework-adapter-experiment": FrameworkAdapterExperimentSchema,
   "framework-adapter-research-summary": FrameworkAdapterResearchSummarySchema,
   "cms-document": CmsDocumentSchema,
+  "project-contract": ProjectContractSchema,
+  "source-project": SourceProjectSchema,
+  "project-ownership-map": ProjectOwnershipMapSchema,
+  "project-patch-plan": ProjectPatchPlanSchema,
+  "project-validation-report": ProjectValidationReportSchema,
 };
 
 export async function exportSchemas(outputDirectory: string): Promise<string[]> {

@@ -25,5 +25,10 @@ describe("versioned schema export", () => {
     expect(names).toContain("framework-adapter-experiment.schema.json");
     expect(names).toContain("framework-adapter-research-summary.schema.json");
     expect(names).toContain("cms-document.schema.json");
+    expect(names).toContain("project-contract.schema.json");
+    expect(names).toContain("source-project.schema.json");
+    expect(names).toContain("project-ownership-map.schema.json");
+    expect(names).toContain("project-patch-plan.schema.json");
+    expect(names).toContain("project-validation-report.schema.json");
   });
 });
