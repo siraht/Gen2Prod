@@ -18,6 +18,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P0.4 parser fidelity and P1.2 Source Project IR | Added native TSX/Vue/Svelte/Astro parsers, structural WordPress block and Bricks export readers, exact source anchors, text/comment ordering, immutable dynamic regions, assets/styles/modules/routes, graph-integrity checks, normalized offset-independent identity, a versioned capability matrix, and exact-location dogfood fixtures | Typecheck plus React/Vue/Svelte/Astro/WordPress/Bricks parser tests pass; unsupported or invalid locations fail closed |
 | 2026-07-20 | P1.4 hash-guarded text edits | Added full preflight, authority/symlink containment, operation DAG and overlap checks, exact AST-bound unique rebasing, descending in-memory edits, owned-file collision refusal, atomic staged writes, exact snapshot rollback, and second-apply refusal | BOM/CRLF/final-newline, untouched-byte, stale span, ambiguous rebase, overlap, graph tamper, path authority, symlink escape, postimage, collision, apply, rollback, and idempotence tests pass |
 | 2026-07-20 | P1.5 imports and owned files | Added native TypeScript import analysis, equivalent alias/type-only detection, symbol collision refusal, directive/import-boundary insertion without printing, proven-unused minimal removal, generated-directory confinement, and owned-file operations | CRLF/directive/import formatting, partial request, collision, unused-proof, generated path, patch apply, and rollback tests pass |
+| 2026-07-20 | P1.6 ownership and three-way safety | Added strict sidecar entries with base/current/proposed hashes, source symbol/node/fingerprint/BEM ownership, unique-move rebasing, semantic/duplicate conflict classification, and workspace persistence outside runtime output | Stable, offset-moved, semantically changed, duplicate-anchor, sidecar round-trip, and no-runtime-marker tests pass |
 
 ### Additional implementation decisions
 
@@ -676,11 +677,11 @@ Dependencies: P1.2, P1.4.
 
 Tasks:
 
-- [ ] Implement ownership artifact generation and lookup.
-- [ ] Match ownership by file, symbol, normalized AST fingerprint, BEM block, and preimage hash.
-- [ ] Record base, current, and proposed hashes for targeted regions.
-- [ ] Distinguish harmless offset drift from semantic conflicts.
-- [ ] Emit localized conflict actions while keeping unrelated plan work available.
+- [x] Implement ownership artifact generation and lookup.
+- [x] Match ownership by file, symbol, normalized AST fingerprint, BEM block, and preimage hash.
+- [x] Record base, current, and proposed hashes for targeted regions.
+- [x] Distinguish harmless offset drift from semantic conflicts.
+- [x] Emit localized conflict actions while keeping unrelated plan work available.
 
 Acceptance criteria:
 
