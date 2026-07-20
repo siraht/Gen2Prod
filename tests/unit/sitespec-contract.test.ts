@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildCanonicalGraph,
   canonicalize,
+  createContractValidator,
   parseSubjectReference,
   sha256,
   type CanonicalGraphRuntime,
@@ -26,6 +27,18 @@ describe("SiteSpec V2 cross-runtime contract", () => {
     });
   });
 
+  test("Bun accepts every positive boundary fixture", async () => {
+    const validator = createContractValidator();
+    for (const [moduleName, path] of [
+      ["core", "valid/reference-canonical-graph.json"],
+      ["artifacts", "valid/design-candidate.json"],
+      ["correspondence", "valid/correspondence-map.json"],
+      ["results", "valid/result-manifest.json"],
+    ] as const) {
+      expect(validator.validate(moduleName, await fixture(path)).valid, path).toBe(true);
+    }
+  });
+
   test("Zod accepts only revision-matched canonical-site-spec artifacts", async () => {
     const graph = (await fixture("valid/reference-canonical-graph.json")) as CanonicalGraphRuntime;
     expect(
@@ -47,10 +60,13 @@ describe("SiteSpec V2 cross-runtime contract", () => {
   });
 
   test("Bun rejects the same schema and semantic adversarial fixtures", async () => {
-    for (const name of ["unknown-field.json", "invalid-reference.json", "dangling-reference.json"]) {
+    const validator = createContractValidator();
+    for (const name of ["unknown-field.json", "invalid-reference.json", "invalid-id.json", "malformed-result.json"]) {
       const scenario = await fixture(`invalid/${name}`);
-      expect(validateCanonicalSiteSpec(scenario.value).valid, name).toBe(false);
+      expect(validator.validate(scenario.module, scenario.value).valid, name).toBe(false);
     }
+    const dangling = await fixture("invalid/dangling-reference.json");
+    expect(validateCanonicalSiteSpec(dangling.value).valid).toBe(false);
   });
 
   test("rejects stale revisions after semantic content changes", async () => {
