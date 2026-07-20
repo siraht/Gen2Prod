@@ -7,7 +7,7 @@ import { GateResultSchema, PassDefinitionSchema, PassEventSchema } from "./pass.
 import { EvaluationResultSchema, ExperimentResultSchema, TrajectorySchema } from "./research.ts";
 import { ImageDerivedContentStrategySchema, ImageOnlyAnalysisSchema, ImageOnlyBuildPlanSchema, ImageOnlyEvaluationSchema, ImageOnlyPolicySchema, ImageOnlyTargetManifestSchema, ImageStateSequenceAnalysisSchema } from "./image-only.ts";
 import { CmsDocumentSchema, FrameworkAdapterBenchmarkSchema, FrameworkAdapterEvaluationSchema, FrameworkAdapterExperimentSchema, FrameworkAdapterManifestSchema, FrameworkAdapterPolicySchema, FrameworkAdapterResearchSummarySchema, FrameworkAdapterSuiteSchema, FrameworkAdapterValidationSchema } from "./adapters.ts";
-import { CmsStagingAuthoritySchema, CmsStagingValidationReportSchema, ProjectAdapterFitnessSchema, ProjectAdapterPolicySchema, ProjectAdapterResearchEvaluationSchema, ProjectAdapterResearchSummarySchema, ProjectAdapterRunRequestSchema, ProjectContractSchema, ProjectCorrespondenceSchema, ProjectCorruptionGrammarReportSchema, ProjectDestinationBundleSchema, ProjectFamilySplitManifestSchema, ProjectIsolationProofSchema, ProjectMutationControlReportSchema, ProjectOwnershipMapSchema, ProjectPatchPlanSchema, ProjectPreviewIsolationProofSchema, ProjectRouteProjectionSchema, ProjectSyntheticCorruptionTraceSchema, ProjectSyntheticManifestSchema, ProjectValidationReportSchema, SourceProjectSchema } from "./project-adapters.ts";
+import { CmsStagingAuthoritySchema, CmsStagingValidationReportSchema, NaturalisticBenchmarkManifestSchema, NaturalisticProjectAuthoritySchema, ProjectAdapterFitnessSchema, ProjectAdapterPolicySchema, ProjectAdapterResearchEvaluationSchema, ProjectAdapterResearchSummarySchema, ProjectAdapterRunRequestSchema, ProjectArtifactCacheKeySchema, ProjectArtifactCacheRecordSchema, ProjectContractSchema, ProjectCorrespondenceSchema, ProjectCorruptionGrammarReportSchema, ProjectCrossProfileAcceptanceMatrixSchema, ProjectDestinationBundleSchema, ProjectFamilySplitManifestSchema, ProjectIsolationProofSchema, ProjectMutationControlReportSchema, ProjectOwnershipMapSchema, ProjectParallelExecutionReportSchema, ProjectPatchPlanSchema, ProjectPerformanceTelemetrySchema, ProjectPreviewIsolationProofSchema, ProjectRouteProjectionSchema, ProjectSyntheticCorruptionTraceSchema, ProjectSyntheticManifestSchema, ProjectValidationReportSchema, SourceProjectSchema } from "./project-adapters.ts";
 
 const SCHEMAS = {
   "artifact-ref": ArtifactRefSchema,
@@ -59,6 +59,13 @@ const SCHEMAS = {
   "project-adapter-research-summary": ProjectAdapterResearchSummarySchema,
   "cms-staging-authority": CmsStagingAuthoritySchema,
   "cms-staging-validation-report": CmsStagingValidationReportSchema,
+  "project-cross-profile-acceptance-matrix": ProjectCrossProfileAcceptanceMatrixSchema,
+  "naturalistic-project-authority": NaturalisticProjectAuthoritySchema,
+  "naturalistic-benchmark-manifest": NaturalisticBenchmarkManifestSchema,
+  "project-artifact-cache-key": ProjectArtifactCacheKeySchema,
+  "project-artifact-cache-record": ProjectArtifactCacheRecordSchema,
+  "project-performance-telemetry": ProjectPerformanceTelemetrySchema,
+  "project-parallel-execution-report": ProjectParallelExecutionReportSchema,
 };
 
 export async function exportSchemas(outputDirectory: string): Promise<string[]> {

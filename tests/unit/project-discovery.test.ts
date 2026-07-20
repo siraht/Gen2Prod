@@ -45,6 +45,14 @@ describe("project discovery", () => {
     await expect(discoverProject(link)).rejects.toBeInstanceOf(ProjectDiscoveryError);
   });
 
+  test("fails with retained authority actions when source inventory bounds are exceeded", async () => {
+    const root = await reactProject();
+    try { await discoverProject(root, { inventoryLimits: { files: 1, bytes: 1_000_000 } }); throw new Error("expected file bound rejection"); }
+    catch (error) { expect(error).toBeInstanceOf(ProjectDiscoveryError); expect((error as ProjectDiscoveryError).requiredActions[0]?.id).toBe("project-inventory-file-limit"); }
+    try { await discoverProject(root, { inventoryLimits: { files: 100, bytes: 8 } }); throw new Error("expected byte bound rejection"); }
+    catch (error) { expect(error).toBeInstanceOf(ProjectDiscoveryError); expect((error as ProjectDiscoveryError).requiredActions[0]?.id).toBe("project-inventory-byte-limit"); }
+  });
+
   test("selects an exact profile adapter and reports consumed/ignored evidence", async () => {
     const root = await reactProject();
     await Bun.write(join(root, "src", "support.json"), "{}\n");

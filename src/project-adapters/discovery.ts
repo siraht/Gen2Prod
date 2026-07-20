@@ -11,6 +11,7 @@ import { ProjectDiscoveryError, type DiscoveryEvidence, type ProjectDiscoveryRes
 const IGNORED_DIRECTORIES = [".git", ".gen2prod", "node_modules", "dist", "build", ".next", ".nuxt", ".svelte-kit", ".astro", "coverage", ".cache"];
 const IGNORED_GLOBS = IGNORED_DIRECTORIES.flatMap((directory) => [`${directory}/**`, `**/${directory}/**`]);
 const SOURCE_GLOBS = ["**/*.{js,jsx,ts,tsx,vue,svelte,astro,css,scss,sass,json,html,php,xml,yaml,yml}", "package.json", "bun.lock", "bun.lockb", "pnpm-lock.yaml", "package-lock.json", "yarn.lock"];
+export const PROJECT_DISCOVERY_LIMITS = { files: 20_000, bytes: 2 * 1024 * 1024 * 1024 } as const;
 
 type PackageData = { name?: string; scripts?: Record<string, string>; dependencies?: Record<string, string>; devDependencies?: Record<string, string>; packageManager?: string };
 
@@ -21,6 +22,7 @@ export type DiscoverProjectOptions = {
   allowedPaths?: string[] | undefined;
   permitFrozenInstall?: boolean | undefined;
   permittedEnvironmentKeys?: string[] | undefined;
+  inventoryLimits?: { files: number; bytes: number } | undefined;
 };
 
 function posix(path: string): string { return path.split(sep).join("/"); }
@@ -34,14 +36,20 @@ async function safeRoot(input: string): Promise<string> {
   return resolved;
 }
 
-async function inventory(root: string): Promise<DiscoveryEvidence["files"]> {
+async function inventory(root: string, requested?: { files: number; bytes: number }): Promise<DiscoveryEvidence["files"]> {
+  const limits = { files: Math.min(requested?.files ?? PROJECT_DISCOVERY_LIMITS.files, PROJECT_DISCOVERY_LIMITS.files), bytes: Math.min(requested?.bytes ?? PROJECT_DISCOVERY_LIMITS.bytes, PROJECT_DISCOVERY_LIMITS.bytes) };
+  if (!Number.isInteger(limits.files) || limits.files < 1 || !Number.isInteger(limits.bytes) || limits.bytes < 1) throw new Error("Project inventory limits must be positive integers");
   const paths = await fg(SOURCE_GLOBS, { cwd: root, onlyFiles: true, dot: true, followSymbolicLinks: false, ignore: IGNORED_GLOBS, unique: true });
+  if (paths.length > limits.files) throw new ProjectDiscoveryError("Project source inventory exceeds the bounded file limit", [{ id: "project-inventory-file-limit", summary: "Narrow the project source authority", detail: `Discovery found ${paths.length} source files; the audited limit is ${limits.files}.`, blocking: true }], { root, ignoredDirectories: IGNORED_DIRECTORIES });
   const files = [];
+  let totalBytes = 0;
   for (const raw of paths.sort()) {
     const path = posix(raw);
     const absolute = join(root, path);
     const stat = await lstat(absolute);
     if (stat.isSymbolicLink()) continue;
+    totalBytes += stat.size;
+    if (totalBytes > limits.bytes) throw new ProjectDiscoveryError("Project source inventory exceeds the bounded byte limit", [{ id: "project-inventory-byte-limit", summary: "Narrow the project source authority", detail: `Discovery exceeded ${limits.bytes} source bytes before hashing could complete.`, blocking: true }], { root, files, ignoredDirectories: IGNORED_DIRECTORIES });
     files.push({ path, sha256: await hashFile(absolute), bytes: stat.size });
   }
   return files;
@@ -177,7 +185,7 @@ function allowedDefaults(profile: ProjectFrameworkProfile, files: string[]): str
 
 export async function discoverProject(inputRoot: string, options: DiscoverProjectOptions = {}): Promise<ProjectDiscoveryResult> {
   const root = await safeRoot(inputRoot);
-  const files = await inventory(root);
+  const files = await inventory(root, options.inventoryLimits);
   const paths = files.map((file) => file.path);
   const pathSet = new Set(paths);
   const packagePath = pathSet.has("package.json") ? join(root, "package.json") : undefined;

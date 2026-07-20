@@ -3,8 +3,9 @@ import { lstat, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { hashFile, hashJson, sha256 } from "../core/hash.ts";
 import type { CommandSpec, ProjectContract } from "../schemas/project-adapters.ts";
+import { BoundedOutput, PROJECT_OUTPUT_RETAIN_LIMIT } from "./bounded-output.ts";
 
-const OUTPUT_LIMIT = 10 * 1024 * 1024;
+const OUTPUT_LIMIT = PROJECT_OUTPUT_RETAIN_LIMIT;
 
 export type ProjectCommandResult = {
   command: string;
@@ -14,6 +15,11 @@ export type ProjectCommandResult = {
   stderr: string;
   stdoutHash: string;
   stderrHash: string;
+  stdoutFullHash: string;
+  stderrFullHash: string;
+  stdoutBytes: number;
+  stderrBytes: number;
+  outputTruncated: boolean;
   passed: boolean;
   timedOut: boolean;
   runtimeVersions: Record<string, string>;
@@ -66,9 +72,9 @@ export async function runProjectCommand(input: { root: string; contract: Project
   const lockAfter = lockPath ? await hashFile(lockPath) : undefined;
   if (lockBefore !== lockAfter) throw new Error(`Lockfile drift detected after ${input.command.executable}`);
   const secrets = [...(input.redactValues ?? []), ...Object.values(input.environment ?? {}).filter((value): value is string => Boolean(value))];
-  const stdout = redact(output.stdout, secrets);
-  const stderr = redact(output.stderr, secrets);
-  return { command: [input.command.executable, ...input.command.args].join(" "), exitCode: output.exitCode, durationMs: Date.now() - started, stdout, stderr, stdoutHash: sha256(stdout), stderrHash: sha256(stderr), passed: output.exitCode === 0 && !output.timedOut, timedOut: output.timedOut, runtimeVersions: { bun: Bun.version, node: process.versions.node, platform: process.platform, arch: process.arch } };
+  const stdout = redact(output.stdout.text, secrets);
+  const stderr = redact(output.stderr.text, secrets);
+  return { command: [input.command.executable, ...input.command.args].join(" "), exitCode: output.exitCode, durationMs: Date.now() - started, stdout, stderr, stdoutHash: sha256(stdout), stderrHash: sha256(stderr), stdoutFullHash: output.stdout.fullHash, stderrFullHash: output.stderr.fullHash, stdoutBytes: output.stdout.bytes, stderrBytes: output.stderr.bytes, outputTruncated: output.stdout.truncated || output.stderr.truncated, passed: output.exitCode === 0 && !output.timedOut, timedOut: output.timedOut, runtimeVersions: { bun: Bun.version, node: process.versions.node, platform: process.platform, arch: process.arch } };
 }
 
 function authorizedEnvironment(contract: ProjectContract, command: CommandSpec, provided?: Record<string, string | undefined>): Record<string, string> { const environment: Record<string, string> = { PATH: process.env.PATH ?? "/usr/bin:/bin", LANG: "C.UTF-8", LC_ALL: "C.UTF-8", TZ: "UTC", CI: "1" }; for (const [key, value] of Object.entries(provided ?? {})) { if (value === undefined) continue; if (!command.envKeys.includes(key) || !contract.authority.permittedEnvironmentKeys.includes(key)) throw new Error(`Unauthorized command environment key: ${key}`); environment[key] = value; } return environment; }
@@ -80,23 +86,17 @@ function authorizeCommand(contract: ProjectContract, command: CommandSpec): void
   if (!declared.some((value) => hashJson(value) === hashJson(command))) throw new Error("Command is not declared by the destination contract");
 }
 
-async function spawnCaptured(executable: string, args: string[], cwd: string, env: Record<string, string>, timeoutMs: number): Promise<{ exitCode: number; stdout: string; stderr: string; timedOut: boolean }> {
+async function spawnCaptured(executable: string, args: string[], cwd: string, env: Record<string, string>, timeoutMs: number): Promise<{ exitCode: number; stdout: ReturnType<BoundedOutput["finish"]>; stderr: ReturnType<BoundedOutput["finish"]>; timedOut: boolean }> {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(executable, args, { cwd, env, shell: false, stdio: ["ignore", "pipe", "pipe"] });
-    const stdout: Buffer[] = [];
-    const stderr: Buffer[] = [];
-    let bytes = 0;
+    const stdout = new BoundedOutput(OUTPUT_LIMIT);
+    const stderr = new BoundedOutput(OUTPUT_LIMIT);
     let timedOut = false;
-    const collect = (target: Buffer[], chunk: Buffer) => {
-      bytes += chunk.length;
-      if (bytes > OUTPUT_LIMIT) { child.kill("SIGKILL"); reject(new Error("Project command output exceeded the capture limit")); return; }
-      target.push(chunk);
-    };
-    child.stdout.on("data", (chunk: Buffer) => collect(stdout, chunk));
-    child.stderr.on("data", (chunk: Buffer) => collect(stderr, chunk));
+    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
     child.on("error", reject);
     const timer = setTimeout(() => { timedOut = true; child.kill("SIGTERM"); setTimeout(() => child.kill("SIGKILL"), 500).unref(); }, timeoutMs);
-    child.on("close", (code) => { clearTimeout(timer); resolvePromise({ exitCode: code ?? (timedOut ? 124 : 1), stdout: Buffer.concat(stdout).toString("utf8"), stderr: Buffer.concat(stderr).toString("utf8"), timedOut }); });
+    child.on("close", (code) => { clearTimeout(timer); resolvePromise({ exitCode: code ?? (timedOut ? 124 : 1), stdout: stdout.finish(), stderr: stderr.finish(), timedOut }); });
   });
 }
 

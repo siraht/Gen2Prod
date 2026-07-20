@@ -11,6 +11,7 @@ import { projectOperationGraphHash } from "../../src/project-adapters/rewrite/te
 import { createProjectSandbox, runSandboxCommands } from "../../src/project-adapters/sandbox.ts";
 import { runContainerProjectCommand, verifyIsolationProof, createIsolationProof, startContainerProjectPreview, verifyPreviewIsolationProof } from "../../src/project-adapters/container.ts";
 import { ProjectContractSchema, ProjectPatchPlanSchema } from "../../src/schemas/project-adapters.ts";
+import { BoundedOutput } from "../../src/project-adapters/bounded-output.ts";
 
 async function runnerFixture() {
   const root = await mkdtemp(join(tmpdir(), "g2p-runner-"));
@@ -78,8 +79,25 @@ describe("safe project process runner and sandbox", () => {
     expect(result.passed).toBeTrue();
     expect(result.stdout).toContain("[REDACTED]");
     expect(result.stdout).not.toContain("super-secret");
+    expect(result.outputTruncated).toBeFalse();
+    expect(result.stdoutBytes).toBeGreaterThan(0);
+    expect(result.stdoutFullHash).toMatch(/^[a-f0-9]{64}$/);
     expect(runProjectCommand({ root: value.root, contract: value.contract, command: { ...value.command, args: ["--version"] } })).rejects.toThrow("not declared");
     expect(runProjectCommand({ root: value.root, contract: value.contract, command: value.command, environment: { HOME: "/tmp" } })).rejects.toThrow("Unauthorized");
+  });
+
+  test("bounds retained logs while preserving byte counts and a full-stream evidence hash", () => {
+    const output = new BoundedOutput(64);
+    const source = Buffer.from("head-" + "x".repeat(100) + "-tail");
+    output.push(source.subarray(0, 37));
+    output.push(source.subarray(37));
+    const evidence = output.finish();
+    expect(evidence.truncated).toBeTrue();
+    expect(evidence.bytes).toBe(source.length);
+    expect(evidence.fullHash).toBe(sha256(source));
+    expect(evidence.text).toStartWith("head-");
+    expect(evidence.text).toEndWith("-tail");
+    expect(evidence.text).toContain("FULL SHA256 RETAINED");
   });
 
   test("enforces timeout and rejects lockfile drift", async () => {

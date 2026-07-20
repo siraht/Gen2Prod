@@ -46,7 +46,7 @@ export async function validateProjectPatch(input: ProjectValidationInput): Promi
   if (!dataBindingsPreserved) hardFailures.push("data/state binding hashes changed");
 
   const nativeResult = await projectSourceAdapter(input.contract).validateNative({ sandbox: input.sandbox, contract: input.contract, ...(input.includeInstall ? { includeInstall: true } : {}), ...(input.containerImage ? { containerImage: input.containerImage } : {}) });
-  const native = nativeResult.commands.map(({ command, exitCode, durationMs, stdoutHash, stderrHash, passed }) => ({ command, exitCode, durationMs, stdoutHash, stderrHash, passed }));
+  const native = nativeResult.commands.map(({ command, exitCode, durationMs, stdoutHash, stderrHash, stdoutFullHash, stderrFullHash, stdoutBytes, stderrBytes, outputTruncated, passed }) => ({ command, exitCode, durationMs, stdoutHash, stderrHash, stdoutFullHash, stderrFullHash, stdoutBytes, stderrBytes, outputTruncated, passed }));
   if (!nativeResult.passed && input.contract.framework.target !== "wordpress" && input.contract.framework.target !== "bricks") hardFailures.push("native project commands did not all pass");
   if (!native.length && input.requireRuntime) hardFailures.push("runtime/native validation evidence is required but absent");
   else if (!native.length) warnings.push("offline CMS validation has no authorized runtime/staging evidence");

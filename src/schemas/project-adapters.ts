@@ -376,7 +376,7 @@ export const ProjectValidationReportSchema = z.object({
   dynamicRegionsPreserved: z.boolean(),
   handlerBindingsPreserved: z.boolean(),
   dataBindingsPreserved: z.boolean(),
-  native: z.array(z.object({ command: z.string(), exitCode: z.number().int(), durationMs: z.number().nonnegative(), stdoutHash: Sha256Schema, stderrHash: Sha256Schema, passed: z.boolean() }).strict()),
+  native: z.array(z.object({ command: z.string(), exitCode: z.number().int(), durationMs: z.number().nonnegative(), stdoutHash: Sha256Schema, stderrHash: Sha256Schema, stdoutFullHash: Sha256Schema, stderrFullHash: Sha256Schema, stdoutBytes: z.number().int().nonnegative(), stderrBytes: z.number().int().nonnegative(), outputTruncated: z.boolean(), passed: z.boolean() }).strict()),
   stateCoverage: z.object({ declared: z.number().int().nonnegative(), captured: z.number().int().nonnegative(), branchesExpected: z.number().int().nonnegative(), branchesObserved: z.number().int().nonnegative(), interactionsExpected: z.number().int().nonnegative(), interactionsObserved: z.number().int().nonnegative() }).strict(),
   metrics: z.object({ structuralEquivalence: z.number().min(0).max(1), textRecall: z.number().min(0).max(1), urlRecall: z.number().min(0).max(1), formRecall: z.number().min(0).max(1), interactionRecall: z.number().min(0).max(1), accessibilityError: z.number().nonnegative(), bemCoverage: z.number().min(0).max(1), tokenCoverage: z.number().min(0).max(1), forbiddenSelectorCount: z.number().int().nonnegative(), visualLoss: z.number().min(0).max(1), lockedVisualRegression: z.number().min(0).max(1), sourceChurnBytes: z.number().int().nonnegative() }).strict(),
   visualConditions: z.array(z.object({ stateId: z.string(), viewport: z.number().int().positive(), baseline: z.string().optional(), candidate: z.string(), target: z.string().optional(), baselineDiff: z.string().optional(), targetDiff: z.string().optional(), pixelDifferenceRatio: z.number().min(0).max(1), lockedRegressionRatio: z.number().min(0).max(1) }).strict()),
@@ -528,12 +528,15 @@ export const ProjectAdapterPolicySchema = z.object({
 }).strict();
 
 export const ProjectAdapterFitnessSchema = z.object({
-  patchFailures: z.number().nonnegative(), nativeFailures: z.number().nonnegative(), preservationError: z.number().nonnegative(), stateCoverageError: z.number().nonnegative(), semanticError: z.number().nonnegative(), stylingError: z.number().nonnegative(), lockedVisualRegression: z.number().nonnegative(), targetVisualLoss: z.number().nonnegative(), ownershipError: z.number().nonnegative(), reviewBurden: z.number().nonnegative(), sourceChurn: z.number().nonnegative(), normalizedCost: z.number().nonnegative(),
+  patchFailures: z.number().nonnegative(), nativeFailures: z.number().nonnegative(), preservationError: z.number().nonnegative(), stateCoverageError: z.number().nonnegative(), semanticError: z.number().nonnegative(), stylingError: z.number().nonnegative(), lockedVisualRegression: z.number().nonnegative(), targetVisualLoss: z.number().nonnegative(), ownershipError: z.number().nonnegative(), reviewBurden: z.number().nonnegative(), sourceChurn: z.number().nonnegative(), normalizedCost: z.number().nonnegative(), normalizedLatency: z.number().nonnegative(),
 }).strict();
+
+export const ProjectPerformanceTelemetrySchema = z.object({ wallTimeMs: z.number().nonnegative(), buildTimeMs: z.number().nonnegative(), captureTimeMs: z.number().nonnegative(), cacheHits: z.number().int().nonnegative(), cacheMisses: z.number().int().nonnegative(), computeCost: z.number().nonnegative(), sampleCount: z.number().int().positive(), telemetryHash: Sha256Schema }).strict();
 
 export const ProjectAdapterResearchEvaluationSchema = z.object({
   split: z.enum(["train", "validation", "holdout"]), policyHash: Sha256Schema, outputHash: Sha256Schema, fitness: ProjectAdapterFitnessSchema,
   mutationControlRecall: z.number().min(0).max(1), rollbackPassed: z.boolean(), replaySourceStable: z.boolean(), familyIds: z.array(z.string().min(1)).min(1),
+  telemetry: ProjectPerformanceTelemetrySchema,
   fingerprints: z.object({ evaluator: Sha256Schema, corpus: Sha256Schema, toolchain: Sha256Schema, capture: Sha256Schema }).strict(),
 }).strict();
 
@@ -630,6 +633,17 @@ export const NaturalisticBenchmarkManifestSchema = z.object({
   manifestHash: Sha256Schema,
 }).strict();
 
+export const ProjectArtifactCacheKeySchema = z.object({
+  schemaVersion: z.literal("0.1.0"), category: z.enum(["parse-graph", "source-hash", "dependency-graph", "build", "capture"]), profile: ProjectFrameworkProfileSchema,
+  route: z.string().startsWith("/").optional(), state: z.string().min(1).optional(), inputHashes: z.record(z.string().min(1), Sha256Schema), toolchainHash: Sha256Schema, configurationHash: Sha256Schema, keyHash: Sha256Schema,
+}).strict();
+export const ProjectArtifactCacheRecordSchema = z.object({ schemaVersion: z.literal("0.1.0"), key: ProjectArtifactCacheKeySchema, valueHash: Sha256Schema, value: z.unknown(), recordHash: Sha256Schema }).strict();
+export const ProjectParallelExecutionReportSchema = z.object({
+  schemaVersion: z.literal("0.1.0"), concurrency: z.number().int().positive(), peakConcurrency: z.number().int().positive(),
+  results: z.array(z.object({ taskId: z.string().min(1), route: z.string().startsWith("/"), state: z.string().min(1), inputHash: Sha256Schema, sandboxHash: Sha256Schema, outputHash: Sha256Schema, durationMs: z.number().nonnegative(), cacheHits: z.number().int().nonnegative(), cacheMisses: z.number().int().nonnegative() }).strict()),
+  telemetry: ProjectPerformanceTelemetrySchema, reportHash: Sha256Schema,
+}).strict().superRefine((value, context) => { if (new Set(value.results.map((item) => item.taskId)).size !== value.results.length) context.addIssue({ code: "custom", path: ["results"], message: "parallel task IDs must be unique" }); if (new Set(value.results.map((item) => item.sandboxHash)).size !== value.results.length) context.addIssue({ code: "custom", path: ["results"], message: "parallel tasks must use distinct sandboxes" }); });
+
 export type ProjectFrameworkProfile = z.infer<typeof ProjectFrameworkProfileSchema>;
 export type CommandSpec = z.infer<typeof CommandSpecSchema>;
 export type StateFixture = z.infer<typeof StateFixtureSchema>;
@@ -665,3 +679,7 @@ export type ProjectProfileAcceptance = z.infer<typeof ProjectProfileAcceptanceSc
 export type ProjectCrossProfileAcceptanceMatrix = z.infer<typeof ProjectCrossProfileAcceptanceMatrixSchema>;
 export type NaturalisticProjectAuthority = z.infer<typeof NaturalisticProjectAuthoritySchema>;
 export type NaturalisticBenchmarkManifest = z.infer<typeof NaturalisticBenchmarkManifestSchema>;
+export type ProjectPerformanceTelemetry = z.infer<typeof ProjectPerformanceTelemetrySchema>;
+export type ProjectArtifactCacheKey = z.infer<typeof ProjectArtifactCacheKeySchema>;
+export type ProjectArtifactCacheRecord = z.infer<typeof ProjectArtifactCacheRecordSchema>;
+export type ProjectParallelExecutionReport = z.infer<typeof ProjectParallelExecutionReportSchema>;

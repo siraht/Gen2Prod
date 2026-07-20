@@ -63,6 +63,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P4.2/P5.2/P6.2 framework-native validation | Added pinned Vue/Vite, SvelteKit, and Astro+React-island projects that run actual typecheck/check/build/preview commands, capture baseline/candidate/target pixels, execute Vue/Svelte server compilers across conditional states, and feed the shared source/semantic/style/image/rollback/idempotence validator | All three native projects pass their commands, declared state capture, zero pixel diffs, source/binding preservation, 100% frozen controls, exact rollback/replay, and empty replanning; copied-audit runs retain only the previously declared hardened-isolation action rather than claiming promotion readiness |
 | 2026-07-20 | P12.1 cross-profile acceptance matrix | Added strict per-profile/per-capability evidence, explicit exception authority, five shared invariants, deterministic aggregation, and exact coverage enforcement across all ten supported profiles and nine scenario classes | The matrix indexes hashed executable tests for every profile/capability, is order-stable, accepts the complete inventory, and rejects a missing scenario, duplicate profile, hidden exception, or inconsistent verdict |
 | 2026-07-20 | P12.2 naturalistic benchmark | Added mandatory identity/license/data authority, exact-vs-preference labeling, bounded no-symlink import, secret omission/redaction, executable quarantine, HTML event/script/form/network neutralization, binary hashing/copying, family-isolated splits, coverage/calibration, and separate natural/procedural/combined hashes | Adversarial fixtures prove no secret or executable side effect reaches output and exact targets require pair authority; `userdata/*` dogfood imports 6 families/96 files/48 routes/28 captures as planner evidence with 3 train, 1 validation, 2 sealed holdout families and remains correctly provisional at 1 framework, 1 version, 4 generators, and 1 browser |
+| 2026-07-20 | P12.3 performance and scale | Added exact content/toolchain/config keyed caching for parse graphs, source hashes, dependency graphs, builds, and captures; isolated bounded-concurrency route/state scheduling; hash-bound cost/latency telemetry as the final two research dimensions; bounded discovery; and bounded log retention with total bytes/full-stream hashes | Five cache classes prove miss→hit replay and exact invalidation; cached/fresh task outputs match under 1/2/3 workers while every task has a distinct sandbox; corrupt cache data fails; research derives normalized resource fitness from telemetry; inventory-limit actions and log head/tail/full-hash evidence are tested |
 
 ### Additional implementation decisions
 
@@ -108,6 +109,8 @@ This is a living execution ledger. A checked task means executable code and prop
 | D58 | Framework-native completion is measured through the shared validator with real destination commands and captures | Parser-only compilation can miss package graph, SSR adapter, bundler, preview, hydration, pixel, and replay failures | Vue runs `vue-tsc` and Vite, SvelteKit runs sync/check plus its SSR build, Astro emits a hydrated React island, and all three retain the same deterministic validation fields; sandbox isolation remains an orthogonal promotion authority |
 | D59 | Cross-profile completeness is an evidence matrix, not a framework-name checklist | A profile can have a parser and planner while still lacking forms, conflict refusal, dynamic states, or rollback proof | Each of ten exact profiles must provide hashed executable evidence for all nine shared scenario classes and all five styling/preservation invariants; exceptions require a rationale, alternate evidence, and proof that shared invariants are unchanged |
 | D60 | User-provided mockups without an authority-bound 1:1 source pair are preference/planner evidence | Treating an edited concept, alternate copy, or screenshot as an exact target would train false equivalence and penalize legitimate source behavior | Exact-target imports require a pair-authority hash; current `userdata/*` families are labeled `planner-evidence`, retain identity/license/data authority, and cannot enter exact pixel calibration |
+| D61 | Cache identity includes exact categorized inputs, destination profile, route/state scope, toolchain, and configuration | Path- or timestamp-based caches can silently reuse a parse/build/capture across lockfile, browser, parser, policy, or state changes | Every cache record verifies key, value, and record hashes on read; source/config/toolchain changes produce distinct misses and cached/fresh output hashes must match |
+| D62 | Wall-clock latency is retained but normalized per sample before entering lexicographic research fitness | Raw elapsed time varies with fixture count and cannot be compared to runs of different size | Evaluation rejects corrupt telemetry or fitness values not derived from `computeCost/sampleCount` and `wallTime/sampleCount`; hard correctness remains ahead of cost and latency in the 13-dimension order |
 
 ### Lessons learned
 
@@ -157,6 +160,8 @@ This is a living execution ledger. A checked task means executable code and prop
 | L42 | A single aggregate "framework passed" bit hides which behavioral archetype is absent | Capability identity is unique and exhaustive inside each profile row, and profile identity is unique and exhaustive inside the matrix; both levels recompute their verdict instead of trusting a caller flag |
 | L43 | Sanitizing credential values is insufficient if imported HTML can still execute requests | Naturalistic HTML removes all scripts and inline event handlers, disables form actions, neutralizes external resource URLs/CSS, quarantines code files, and reports every transformation while preserving original hashes as non-executable evidence |
 | L44 | A deterministic hash split can place every small corpus family in train by chance | The frozen naturalistic salt was selected before evaluation using family IDs only to ensure train/validation/holdout presence; complete repository families remain indivisible and the selected salt hash is retained in the split manifest |
+| L45 | Killing a command when retained logs fill loses the very evidence needed to explain a scale failure | Local and container runners retain bounded head/tail text, total byte counts, a truncation marker, and SHA-256 of each complete stream; execution continues under its independent timeout/resource limits |
+| L46 | Parallel state capture is unsafe when workers share one patched tree or framework build cache | The scheduler creates one real sandbox directory and one deterministic sandbox identity per route/state task; only immutable content-addressed cache records are shared |
 
 ## 1. Outcome
 
@@ -1541,11 +1546,11 @@ Dependencies: correctness complete.
 
 Tasks:
 
-- [ ] Cache parse graphs, source hashes, dependency graphs, builds, and unchanged captures.
-- [ ] Invalidate caches by exact inputs and toolchain fingerprints.
-- [ ] Parallelize independent routes/states without sharing mutable sandboxes.
-- [ ] Add cost/latency telemetry to research fitness.
-- [ ] Bound source inventory and build logs without dropping validation evidence.
+- [x] Cache parse graphs, source hashes, dependency graphs, builds, and unchanged captures.
+- [x] Invalidate caches by exact inputs and toolchain fingerprints.
+- [x] Parallelize independent routes/states without sharing mutable sandboxes.
+- [x] Add cost/latency telemetry to research fitness.
+- [x] Bound source inventory and build logs without dropping validation evidence.
 
 Acceptance criteria:
 

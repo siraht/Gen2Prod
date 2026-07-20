@@ -17,7 +17,7 @@ describe("project-adapter self-improvement research", () => {
       const nativeFailures = policy.importPlacement === "configured-alias" ? 1 : 0;
       const ownershipError = policy.componentExtractionThreshold <= 8 ? 0 : 1;
       const fitness = vector({ nativeFailures, ownershipError });
-      return { split, policyHash: hashJson(policy), outputHash: hashJson({ split, threshold: policy.componentExtractionThreshold, imports: policy.importPlacement }), fitness, mutationControlRecall: 1, rollbackPassed: true, replaySourceStable: true, familyIds: [`${split}-family-a`, `${split}-family-b`], fingerprints: { evaluator: sha256("evaluator"), corpus: sha256("corpus"), toolchain: sha256("toolchain"), capture: sha256("capture") } };
+      return { split, policyHash: hashJson(policy), outputHash: hashJson({ split, threshold: policy.componentExtractionThreshold, imports: policy.importPlacement }), fitness, mutationControlRecall: 1, rollbackPassed: true, replaySourceStable: true, familyIds: [`${split}-family-a`, `${split}-family-b`], telemetry: telemetry(), fingerprints: { evaluator: sha256("evaluator"), corpus: sha256("corpus"), toolchain: sha256("toolchain"), capture: sha256("capture") } };
     };
     const summary = await runProjectAdapterResearch({ workspace, evaluate, fresh: true, mutations: [
       { field: "componentExtractionThreshold", value: 8, hypothesis: "Extract repeated stable blocks." },
@@ -34,14 +34,16 @@ describe("project-adapter self-improvement research", () => {
     expect(await Bun.file(join(workspace, "project-adapter-research", "sealed-holdout", "audit.json")).exists()).toBeTrue();
   });
 
-  test("orders all twelve dimensions lexicographically and rejects immutable mutations", async () => {
-    expect(PROJECT_FITNESS_ORDER).toHaveLength(12);
+  test("orders all thirteen dimensions lexicographically and rejects immutable mutations", async () => {
+    expect(PROJECT_FITNESS_ORDER).toHaveLength(13);
     expect(compareProjectAdapterFitness(vector({ patchFailures: 1, normalizedCost: 0 }), vector({ patchFailures: 0, normalizedCost: 999 }))).toBe(1);
+    expect(compareProjectAdapterFitness(vector({ normalizedLatency: 0.5 }), vector({ normalizedLatency: 1 }))).toBe(-1);
     const workspace = await mkdtemp(join(tmpdir(), "g2p-project-research-invariant-"));
-    const evaluate = async (policy: ProjectAdapterPolicy, split: ProjectAdapterResearchEvaluation["split"]): Promise<ProjectAdapterResearchEvaluation> => ({ split, policyHash: hashJson(policy), outputHash: sha256(split), fitness: vector({}), mutationControlRecall: 1, rollbackPassed: true, replaySourceStable: true, familyIds: [`${split}-family`], fingerprints: { evaluator: sha256("e"), corpus: sha256("c"), toolchain: sha256("t"), capture: sha256("b") } });
+    const evaluate = async (policy: ProjectAdapterPolicy, split: ProjectAdapterResearchEvaluation["split"]): Promise<ProjectAdapterResearchEvaluation> => ({ split, policyHash: hashJson(policy), outputHash: sha256(split), fitness: vector({}), mutationControlRecall: 1, rollbackPassed: true, replaySourceStable: true, familyIds: [`${split}-family`], telemetry: telemetry(), fingerprints: { evaluator: sha256("e"), corpus: sha256("c"), toolchain: sha256("t"), capture: sha256("b") } });
     await expect(runProjectAdapterResearch({ workspace, evaluate, fresh: true, mutations: [{ field: "classMode", value: "bem-only", hypothesis: "Attempt immutable mutation." }] })).rejects.toThrow("immutable hard invariant");
     expect(conservativeProjectAdapterPolicy.classMode).toBe("bem-only");
   });
 });
 
-function vector(overrides: Partial<ProjectAdapterFitness>): ProjectAdapterFitness { return { patchFailures: 0, nativeFailures: 0, preservationError: 0, stateCoverageError: 0, semanticError: 0, stylingError: 0, lockedVisualRegression: 0, targetVisualLoss: 0, ownershipError: 0, reviewBurden: 0, sourceChurn: 0, normalizedCost: 1, ...overrides }; }
+function vector(overrides: Partial<ProjectAdapterFitness>): ProjectAdapterFitness { return { patchFailures: 0, nativeFailures: 0, preservationError: 0, stateCoverageError: 0, semanticError: 0, stylingError: 0, lockedVisualRegression: 0, targetVisualLoss: 0, ownershipError: 0, reviewBurden: 0, sourceChurn: 0, normalizedCost: 1, normalizedLatency: 1, ...overrides }; }
+function telemetry() { const base = { wallTimeMs: 2_000, buildTimeMs: 800, captureTimeMs: 600, cacheHits: 2, cacheMisses: 1, computeCost: 2, sampleCount: 2 }; return { ...base, telemetryHash: hashJson(base) }; }

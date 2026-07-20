@@ -5,8 +5,9 @@ import { isAbsolute, relative, resolve } from "node:path";
 import { hashFile, hashJson, sha256 } from "../core/hash.ts";
 import { ProjectIsolationProofSchema, ProjectPreviewIsolationProofSchema, type CommandSpec, type ProjectContract, type ProjectIsolationProof, type ProjectPreviewIsolationProof } from "../schemas/project-adapters.ts";
 import type { ProjectCommandResult, ProjectPreview } from "./process.ts";
+import { BoundedOutput, PROJECT_OUTPUT_RETAIN_LIMIT } from "./bounded-output.ts";
 
-const OUTPUT_LIMIT = 10 * 1024 * 1024;
+const OUTPUT_LIMIT = PROJECT_OUTPUT_RETAIN_LIMIT;
 const IMAGE_PATTERN = /^[^\s@]+@sha256:[a-f0-9]{64}$/;
 
 export async function runContainerProjectCommand(input: { root: string; artifactsRoot: string; contract: ProjectContract; command: CommandSpec; image: string; environment?: Record<string, string | undefined>; redactValues?: string[]; totalDeadlineAt?: number }): Promise<{ result: ProjectCommandResult; proof: Omit<ProjectIsolationProof, "commands" | "proofHash"> & { command: ProjectIsolationProof["commands"][number] } }> {
@@ -50,7 +51,7 @@ export async function runContainerProjectCommand(input: { root: string; artifact
     const secrets = [...(input.redactValues ?? []), ...Object.values(input.environment ?? {}).filter((value): value is string => Boolean(value))];
     const stdout = redact(output.stdout, secrets);
     const stderr = redact(output.stderr, secrets);
-    const result: ProjectCommandResult = { command: [input.command.executable, ...input.command.args].join(" "), exitCode, durationMs: Date.now() - started, stdout, stderr, stdoutHash: sha256(stdout), stderrHash: sha256(stderr), passed: exitCode === 0 && !output.timedOut, timedOut: output.timedOut, runtimeVersions: { containerImage: input.image, containerImageId: image.imageId, platform: "linux-container" } };
+    const result: ProjectCommandResult = { command: [input.command.executable, ...input.command.args].join(" "), exitCode, durationMs: Date.now() - started, stdout, stderr, stdoutHash: sha256(stdout), stderrHash: sha256(stderr), stdoutFullHash: output.stdoutFullHash, stderrFullHash: output.stderrFullHash, stdoutBytes: output.stdoutBytes, stderrBytes: output.stderrBytes, outputTruncated: output.outputTruncated, passed: exitCode === 0 && !output.timedOut, timedOut: output.timedOut, runtimeVersions: { containerImage: input.image, containerImageId: image.imageId, platform: "linux-container" } };
     return { result, proof: { schemaVersion: "0.1.0", backend: "docker", imageReference: input.image, imageId: image.imageId, ...constraints, sourceProjectMounted: false, projectMount: "/workspace/project", command: { containerId, commandHash: hashJson(input.command), exitCode, timedOut: output.timedOut } } };
   } finally {
     await spawnCaptured(docker, ["rm", "--force", containerId], process.cwd(), { PATH: process.env.PATH ?? "/usr/bin:/bin" }, 10_000).catch(() => undefined);
@@ -181,16 +182,15 @@ function authorizeCommand(contract: ProjectContract, command: CommandSpec): void
 function authorizedEnvironment(contract: ProjectContract, command: CommandSpec, provided?: Record<string, string | undefined>): Record<string, string> { const environment: Record<string, string> = { LANG: "C.UTF-8", LC_ALL: "C.UTF-8", TZ: "UTC", CI: "1" }; for (const [key, value] of Object.entries(provided ?? {})) { if (value === undefined) continue; if (!command.envKeys.includes(key) || !contract.authority.permittedEnvironmentKeys.includes(key)) throw new Error(`Unauthorized command environment key: ${key}`); environment[key] = value; } return environment; }
 async function dockerText(docker: string, args: string[]): Promise<string> { const result = await spawnCaptured(docker, args, process.cwd(), { PATH: process.env.PATH ?? "/usr/bin:/bin" }, 30_000); if (result.exitCode !== 0) throw new Error(`Docker command failed: ${result.stderr.slice(-2000)}`); return result.stdout.trim(); }
 
-async function spawnCaptured(executable: string, args: string[], cwd: string, env: Record<string, string>, timeoutMs: number): Promise<{ exitCode: number; stdout: string; stderr: string; timedOut: boolean }> {
+async function spawnCaptured(executable: string, args: string[], cwd: string, env: Record<string, string>, timeoutMs: number): Promise<{ exitCode: number; stdout: string; stderr: string; stdoutFullHash: string; stderrFullHash: string; stdoutBytes: number; stderrBytes: number; outputTruncated: boolean; timedOut: boolean }> {
   return new Promise((resolvePromise, reject) => {
     const child = spawn(executable, args, { cwd, env, shell: false, stdio: ["ignore", "pipe", "pipe"] });
-    const stdout: Buffer[] = [], stderr: Buffer[] = [];
-    let bytes = 0, timedOut = false, settled = false;
+    const stdout = new BoundedOutput(OUTPUT_LIMIT), stderr = new BoundedOutput(OUTPUT_LIMIT);
+    let timedOut = false, settled = false;
     const finishError = (error: Error) => { if (settled) return; settled = true; reject(error); };
-    const collect = (target: Buffer[], chunk: Buffer) => { bytes += chunk.length; if (bytes > OUTPUT_LIMIT) { child.kill("SIGKILL"); finishError(new Error("Docker command output exceeded the capture limit")); return; } target.push(chunk); };
-    child.stdout.on("data", (chunk: Buffer) => collect(stdout, chunk)); child.stderr.on("data", (chunk: Buffer) => collect(stderr, chunk)); child.on("error", finishError);
+    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk)); child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk)); child.on("error", finishError);
     const timer = setTimeout(() => { timedOut = true; child.kill("SIGTERM"); setTimeout(() => child.kill("SIGKILL"), 500).unref(); }, timeoutMs);
-    child.on("close", (code) => { clearTimeout(timer); if (settled) return; settled = true; resolvePromise({ exitCode: code ?? (timedOut ? 124 : 1), stdout: Buffer.concat(stdout).toString("utf8"), stderr: Buffer.concat(stderr).toString("utf8"), timedOut }); });
+    child.on("close", (code) => { clearTimeout(timer); if (settled) return; settled = true; const out = stdout.finish(), err = stderr.finish(); resolvePromise({ exitCode: code ?? (timedOut ? 124 : 1), stdout: out.text, stderr: err.text, stdoutFullHash: out.fullHash, stderrFullHash: err.fullHash, stdoutBytes: out.bytes, stderrBytes: err.bytes, outputTruncated: out.truncated || err.truncated, timedOut }); });
   });
 }
 
