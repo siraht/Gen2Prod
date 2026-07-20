@@ -436,6 +436,27 @@ export const ProjectFamilySplitManifestSchema = z.object({
   if (new Set(projects).size !== projects.length) context.addIssue({ code: "custom", path: ["assignments"], message: "project derivative leaks across families/splits" });
 });
 
+export const ProjectSyntheticCorruptionTraceSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  fixtureId: z.string().min(1),
+  goldSourceHash: Sha256Schema,
+  dirtySourceHash: Sha256Schema,
+  operations: z.array(z.object({ id: z.string().min(1), kind: z.enum(["semantic-tag-erasure", "wrapper-noise", "utility-styling", "inline-styling", "raw-value-styling", "class-expression-degradation", "component-boundary-collapse", "metadata-loss"]), changedSurface: z.string().min(1), expectedDetectors: z.array(z.string().min(1)).min(1) }).strict()).min(1),
+}).strict();
+
+export const ProjectSyntheticManifestSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  generatorVersion: z.string().min(1),
+  seed: z.number().int(),
+  generatedAt: z.string().datetime(),
+  splitManifest: ProjectFamilySplitManifestSchema,
+  fixtures: z.array(z.object({
+    fixtureId: z.string().min(1), familyId: z.string().min(1), starterFamily: z.string().min(1), archetype: z.string().min(1), contentFamily: z.string().min(1), split: z.enum(["train", "validation", "holdout"]), target: FrameworkAdapterTargetSchema, profile: ProjectFrameworkProfileSchema, directory: z.string().min(1),
+    artifacts: z.object({ dirtyProject: z.string(), goldProject: z.string(), contract: z.string(), sourceProject: z.string(), states: z.string(), strategy: z.string(), pageBrief: z.string(), mockup: z.string(), visualBaseline: z.string().optional(), lineage: z.string(), corruptionTrace: z.string() }).strict(),
+  }).strict()).min(1),
+  fingerprint: Sha256Schema,
+}).strict();
+
 export const ProjectDestinationBundleSchema = z.object({
   schemaVersion: z.literal("0.1.0"),
   projectId: z.string().min(1),
@@ -465,4 +486,5 @@ export type ProjectIsolationProof = z.infer<typeof ProjectIsolationProofSchema>;
 export type ProjectPreviewIsolationProof = z.infer<typeof ProjectPreviewIsolationProofSchema>;
 export type ProjectMutationControlReport = z.infer<typeof ProjectMutationControlReportSchema>;
 export type ProjectFamilySplitManifest = z.infer<typeof ProjectFamilySplitManifestSchema>;
+export type ProjectSyntheticManifest = z.infer<typeof ProjectSyntheticManifestSchema>;
 export type ProjectDestinationBundle = z.infer<typeof ProjectDestinationBundleSchema>;

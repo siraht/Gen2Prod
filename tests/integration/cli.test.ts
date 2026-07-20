@@ -15,7 +15,7 @@ test("exposes the complete project command tree and performs read-only inspectio
   const help = Bun.spawn(["bun", "src/cli.ts", "project", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
   const helpOutput = await new Response(help.stdout).text();
   expect(await help.exited).toBe(0);
-  for (const command of ["inspect", "plan", "run", "apply", "rollback"]) expect(helpOutput).toContain(command);
+  for (const command of ["synth-prepare", "inspect", "plan", "run", "apply", "rollback"]) expect(helpOutput).toContain(command);
 
   const root = await mkdtemp(join(tmpdir(), "g2p-cli-project-"));
   const output = await mkdtemp(join(tmpdir(), "g2p-cli-project-artifacts-"));

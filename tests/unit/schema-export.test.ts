@@ -35,6 +35,8 @@ describe("versioned schema export", () => {
     expect(names).toContain("project-preview-isolation-proof.schema.json");
     expect(names).toContain("project-mutation-control-report.schema.json");
     expect(names).toContain("project-family-split-manifest.schema.json");
+    expect(names).toContain("project-synthetic-corruption-trace.schema.json");
+    expect(names).toContain("project-synthetic-manifest.schema.json");
     expect(names).toContain("project-validation-report.schema.json");
   });
 });

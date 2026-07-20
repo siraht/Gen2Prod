@@ -53,6 +53,7 @@ import { parseProjectSource } from "./project-adapters/registry.ts";
 import { assertProjectRequest, loadProjectAdapterRunRequest, planProjectAdapterRequest, planningContext } from "./project-adapters/request.ts";
 import { ProjectContractSchema, ProjectDestinationBundleSchema, ProjectFrameworkProfileSchema, ProjectPatchPlanSchema, ProjectValidationReportSchema, SourceProjectSchema } from "./schemas/project-adapters.ts";
 import { inspectProjectAdapterReadiness } from "./project-adapters/doctor.ts";
+import { prepareProjectCurriculum } from "./project-adapters/curriculum.ts";
 
 type GlobalOptions = { config: string; workspace: string; acss?: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -147,6 +148,20 @@ acssCommand
   });
 
 const projectCommand = program.command("project").description("inspect, plan, validate, apply, and roll back existing framework/CMS projects");
+projectCommand
+  .command("synth-prepare")
+  .description("generate family-isolated dynamic dirty/gold project curriculum with optional screenshots")
+  .option("--root <path>", "curriculum output directory", "fixtures/project-generated")
+  .option("--seed <number>", "deterministic project/content seed", "424242")
+  .option("--variants <number>", "content variants per starter/archetype family", "2")
+  .option("--archetype-limit <number>", "optional archetype cap for smoke runs")
+  .option("--no-render-visuals", "skip gold/dirty browser screenshots")
+  .action(async (options: { root: string; seed: string; variants: string; archetypeLimit?: string; renderVisuals: boolean }) => {
+    const cfg = await config();
+    const manifest = await prepareProjectCurriculum({ root: resolve(options.root), seed: Number.parseInt(options.seed, 10), variantsPerFamily: Number.parseInt(options.variants, 10), ...(options.archetypeLimit ? { archetypeLimit: Number.parseInt(options.archetypeLimit, 10) } : {}), renderVisuals: options.renderVisuals, browserExecutable: cfg.capture.browserExecutable });
+    const counts = manifest.fixtures.reduce<Record<string, number>>((result, fixture) => { result[fixture.split] = (result[fixture.split] ?? 0) + 1; return result; }, {});
+    emit(result("project synth-prepare", { root: resolve(options.root), fixtures: manifest.fixtures.length, families: manifest.splitManifest.assignments.length, splits: counts, fingerprint: manifest.fingerprint }), `Prepared ${manifest.fixtures.length} dynamic projects across ${manifest.splitManifest.assignments.length} isolated families\nSplits: train=${counts.train ?? 0}; validation=${counts.validation ?? 0}; holdout=${counts.holdout ?? 0}\nManifest: ${join(resolve(options.root), "manifest.json")}`);
+  });
 projectCommand
   .command("inspect <root>")
   .description("discover and parse a destination without modifying it")
