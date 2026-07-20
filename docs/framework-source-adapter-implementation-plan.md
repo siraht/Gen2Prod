@@ -34,6 +34,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P7 WordPress structural source graph | Added nested block-stack classification, immutable dynamic core/plugin blocks, balanced shortcode regions, template-part evidence, theme.json fingerprints, stylesheet/enqueue/head evidence, and revision metadata | Fixtures retain complete unknown blocks/attributes and exact shortcode/dynamic block spans while validating stack balance and JSON attributes |
 | 2026-07-20 | P7 WordPress offline patch vertical slice | Added revision-gated opening-comment edits for static block roots, semantic tag/BEM attributes, shared tokenized SCSS, offline import/rollback packages, registry dispatch, exact rollback/reapply, round-trip parsing, and empty replanning | Dogfood changes only the root opening comment, retains all inner bytes/query/shortcode source, refuses revision mismatch, and never touches a database or remote site; PHP/runtime staging validation remains open |
 | 2026-07-20 | P8 versioned CMS JSON patch engine | Implemented `update-cms-node` preparation with exact export revision/file checks, unique ID lookup, canonical deep node pre/postconditions, unknown envelope/field retention, canonical output, atomic application, and exact original-byte rollback | Bricks-shaped mutation dogfood retains private/vendor fields, rejects stale revisions, applies one node, and restores the original indented export byte-for-byte |
+| 2026-07-20 | P8 Bricks versioned export graph | Added envelope/version validation, complete element object hashes, parent/child backlink and ancestry-cycle checks, global class/component ownership evidence, query/condition/interaction hashes, inline-style detection, and unknown-setting inventories | Valid dynamic/component fixtures round-trip with zero unresolved items; missing IDs, references, backlinks, cycles, versions, and malformed envelopes fail closed |
 
 ### Additional implementation decisions
 
@@ -51,6 +52,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | D30 | WordPress block availability does not imply static ownership | Query, navigation, post-content, site identity, archive, and template-part blocks are server/plugin rendered | These core blocks use the same preserve-verbatim authority as unknown plugin blocks; only demonstrated static core blocks may become owned source surfaces |
 | D31 | WordPress offline integration changes the smallest block-comment surface before introducing generated patterns | Existing dynamic inner HTML has no general slot contract across core/plugin blocks | The authorized static root receives semantic `tagName`/BEM `className` attributes; its opening comment is the only template edit and every inner byte remains outside the mutation span |
 | D32 | CMS node operations and source text spans cannot target the same export path in one plan | JSON node replacement canonicalizes the document while source spans rely on original byte offsets | The patch engine rejects mixed modes per file, uses canonical deep equality for CMS nodes, and retains the exact original document separately for rollback |
+| D33 | Bricks graph metadata stores hashes for dynamic payloads and a full hash of every element while the raw export remains the authoritative opaque source | Query/condition/interaction schemas and private plugin fields are version-dependent | Planners can prove preservation without pretending to understand private semantics; the node patch precondition still compares the complete original object |
 
 ### Lessons learned
 
@@ -73,6 +75,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L15 | Shortcodes can exist inside otherwise static core-block inner HTML without their own block comments | A balanced token stack attaches exact shortcode nodes to the smallest mutable containing block; shortcodes inside already-opaque blocks are covered by the parent's immutable span and are not double-counted |
 | L16 | A revision-aware rollback package must be derived from the original export contract, not the reparsed candidate revision | Candidate rediscovery correctly advances the offline revision and would otherwise make the rollback precondition self-referential | Package creation verifies the original bytes against the original revision and records both candidate hash and exact original contents/hash |
 | L17 | A file hash alone does not prove the intended CMS element is still the planned semantic node | Versioned CMS operations also require exactly one matching ID and canonical equality of the complete `before` object before replacing it |
+| L18 | Valid Bricks references are bidirectional: a known child ID can still point to a different parent | Parsing verifies both existence and the child's parent backlink, then walks ancestry to reject cycles before mutation is available |
 
 ## 1. Outcome
 
@@ -1141,9 +1144,9 @@ Dependencies: P1 shared infrastructure.
 
 Tasks:
 
-- [ ] Ingest page/template exports, element trees, settings, global classes, conditions, query loops, interactions, and version metadata.
-- [ ] Preserve unknown/vendor settings as opaque fields.
-- [ ] Map parent/child IDs and component/BEM ownership.
+- [x] Ingest page/template exports, element trees, settings, global classes, conditions, query loops, interactions, and version metadata.
+- [x] Preserve unknown/vendor settings as opaque fields.
+- [x] Map parent/child IDs and component/BEM ownership.
 - [ ] Reject inline/CMS style settings in newly owned elements.
 
 Acceptance criteria:

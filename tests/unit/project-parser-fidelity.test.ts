@@ -134,6 +134,21 @@ describe("framework parser location fidelity", () => {
     expect(result.parsed.unresolved.some((item) => item.id === "bricks-child:a")).toBeTrue();
     exact(source, flatten(result.parsed.roots));
   });
+
+  test("Bricks inventories classes, dynamic settings, components, inline styles, and unknown fields", async () => {
+    const value = { source: "bricksCopiedElements", version: "2.0", vendorEnvelope: { retained: true }, elements: [{ id: "root", parent: 0, children: ["child"], name: "section", settings: { _cssGlobalClasses: ["hero"], _conditions: [{ key: "role" }], _query: { post_type: "post" }, _interactions: [{ trigger: "click" }], _component: "cmp-1", vendorPrivate: { keep: true } } }, { id: "child", parent: "root", children: [], name: "div", settings: { _cssCustom: ".x{}" } }] };
+    const source = JSON.stringify(value);
+    const result = await project("bricks", "bricks-export.json", source);
+    expect(result.parsed.unresolved).toEqual([]);
+    const graph = (result.parsed.metadata.bricksGraph as { version: string; elements: { id: string; globalClasses: string[]; conditionsHash?: string; queryHash?: string; interactionsHash?: string; component?: string; hasInlineStyles: boolean; unknownSettingKeys: string[] }[] }[])[0]!;
+    expect(graph.version).toBe("2.0");
+    expect(graph.elements[0]).toMatchObject({ id: "root", globalClasses: ["hero"], component: "cmp-1", hasInlineStyles: false, unknownSettingKeys: ["vendorPrivate"] });
+    expect(graph.elements[0]?.conditionsHash).toBeString();
+    expect(graph.elements[0]?.queryHash).toBeString();
+    expect(graph.elements[0]?.interactionsHash).toBeString();
+    expect(graph.elements[1]).toMatchObject({ id: "child", hasInlineStyles: true });
+    exact(source, flatten(result.parsed.roots));
+  });
 });
 
 function flatten(items: import("../../src/schemas/project-adapters.ts").ProjectMarkupNode[]): import("../../src/schemas/project-adapters.ts").ProjectMarkupNode[] { return items.flatMap((item) => [item, ...flatten(item.children)]); }
