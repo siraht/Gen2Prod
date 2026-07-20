@@ -595,6 +595,41 @@ export const ProjectCrossProfileAcceptanceMatrixSchema = z.object({
   if (value.accepted !== value.profiles.every((profile) => profile.accepted)) context.addIssue({ code: "custom", path: ["accepted"], message: "matrix acceptance does not match profile evidence" });
 });
 
+export const NaturalisticProjectAuthoritySchema = z.object({
+  projectId: z.string().min(1),
+  repositoryFamily: z.string().min(1),
+  relativeRoot: RelativePathSchema,
+  identityAuthority: z.object({ name: z.string().min(1), basis: z.enum(["user-provided", "repository-manifest", "documented-owner"]), reference: z.string().min(1) }).strict(),
+  licenseAuthority: z.object({ basis: z.enum(["user-owned", "licensed", "user-provided-for-evaluation"]), reference: z.string().min(1), redistribution: z.boolean() }).strict(),
+  dataAuthority: z.object({ basis: z.enum(["user-provided", "public-benchmark", "synthetic"]), permittedUses: z.array(z.enum(["evaluation", "preference-learning", "planner-learning"])).min(1), personalDataApproved: z.boolean() }).strict(),
+  framework: z.string().min(1),
+  version: z.string().min(1),
+  generatorFamily: z.string().min(1),
+  preferenceUse: z.enum(["exact-target", "preference-only", "planner-evidence"]),
+  exactPairAuthorityHash: Sha256Schema.optional(),
+}).strict().superRefine((value, context) => { if (value.preferenceUse === "exact-target" && !value.exactPairAuthorityHash) context.addIssue({ code: "custom", path: ["exactPairAuthorityHash"], message: "exact targets require paired-source authority" }); });
+
+export const NaturalisticBenchmarkManifestSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  sourceRootHash: Sha256Schema,
+  sanitizationPolicyHash: Sha256Schema,
+  projects: z.array(z.object({
+    authority: NaturalisticProjectAuthoritySchema,
+    authorityHash: Sha256Schema,
+    split: z.enum(["train", "validation", "holdout"]),
+    sourceHash: Sha256Schema,
+    files: z.array(z.object({ path: RelativePathSchema, sourceHash: Sha256Schema, outputHash: Sha256Schema.optional(), bytes: z.number().int().nonnegative(), disposition: z.enum(["sanitized-text", "hashed-binary", "quarantined-executable", "omitted-sensitive"]), transformations: z.array(z.enum(["secret-redacted", "script-quarantined", "event-handler-removed", "external-url-neutralized", "form-side-effect-disabled", "css-network-disabled"])) }).strict()),
+    coverage: z.object({ routes: z.number().int().nonnegative(), states: z.number().int().nonnegative(), captures: z.number().int().nonnegative() }).strict(),
+    secretsRetained: z.literal(false),
+    externalSideEffectsEnabled: z.literal(false),
+  }).strict()).min(1),
+  familySplits: ProjectFamilySplitManifestSchema,
+  coverage: z.object({ frameworks: z.array(z.string()).min(1), versions: z.array(z.string()).min(1), generatorFamilies: z.array(z.string()).min(1), routes: z.number().int().nonnegative(), states: z.number().int().nonnegative(), captures: z.number().int().nonnegative(), splits: z.record(z.enum(["train", "validation", "holdout"]), z.number().int().nonnegative()) }).strict(),
+  calibration: z.object({ status: z.enum(["provisional", "eligible"]), independentFrameworks: z.number().int().nonnegative(), independentVersions: z.number().int().nonnegative(), independentGeneratorFamilies: z.number().int().nonnegative(), browsers: z.number().int().nonnegative(), thresholds: z.object({ frameworks: z.number().int().positive(), versions: z.number().int().positive(), generatorFamilies: z.number().int().positive(), browsers: z.number().int().positive() }).strict() }).strict(),
+  results: z.object({ naturalisticHash: Sha256Schema, proceduralMatrixHash: Sha256Schema.optional(), combinedHash: Sha256Schema }).strict(),
+  manifestHash: Sha256Schema,
+}).strict();
+
 export type ProjectFrameworkProfile = z.infer<typeof ProjectFrameworkProfileSchema>;
 export type CommandSpec = z.infer<typeof CommandSpecSchema>;
 export type StateFixture = z.infer<typeof StateFixtureSchema>;
@@ -628,3 +663,5 @@ export type ProjectAcceptanceCapability = z.infer<typeof ProjectAcceptanceCapabi
 export type ProjectAcceptanceEvidence = z.infer<typeof ProjectAcceptanceEvidenceSchema>;
 export type ProjectProfileAcceptance = z.infer<typeof ProjectProfileAcceptanceSchema>;
 export type ProjectCrossProfileAcceptanceMatrix = z.infer<typeof ProjectCrossProfileAcceptanceMatrixSchema>;
+export type NaturalisticProjectAuthority = z.infer<typeof NaturalisticProjectAuthoritySchema>;
+export type NaturalisticBenchmarkManifest = z.infer<typeof NaturalisticBenchmarkManifestSchema>;

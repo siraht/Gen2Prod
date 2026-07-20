@@ -62,6 +62,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P4.2 Vue-native metadata | Added profile-specific canonical metadata lowering: Vue/Vite updates the document entry and Nuxt emits static `useHead` state, with escaping, duplicate prevention, exact preimages, scriptless-SFC coalescing, and dynamic-head conflict refusal | Vue/Vite dogfood replaces one title/description and replans empty; Nuxt dogfood creates exactly one setup block, compiles, replans empty, and converts an existing computed `useHead` into a blocking required action |
 | 2026-07-20 | P4.2/P5.2/P6.2 framework-native validation | Added pinned Vue/Vite, SvelteKit, and Astro+React-island projects that run actual typecheck/check/build/preview commands, capture baseline/candidate/target pixels, execute Vue/Svelte server compilers across conditional states, and feed the shared source/semantic/style/image/rollback/idempotence validator | All three native projects pass their commands, declared state capture, zero pixel diffs, source/binding preservation, 100% frozen controls, exact rollback/replay, and empty replanning; copied-audit runs retain only the previously declared hardened-isolation action rather than claiming promotion readiness |
 | 2026-07-20 | P12.1 cross-profile acceptance matrix | Added strict per-profile/per-capability evidence, explicit exception authority, five shared invariants, deterministic aggregation, and exact coverage enforcement across all ten supported profiles and nine scenario classes | The matrix indexes hashed executable tests for every profile/capability, is order-stable, accepts the complete inventory, and rejects a missing scenario, duplicate profile, hidden exception, or inconsistent verdict |
+| 2026-07-20 | P12.2 naturalistic benchmark | Added mandatory identity/license/data authority, exact-vs-preference labeling, bounded no-symlink import, secret omission/redaction, executable quarantine, HTML event/script/form/network neutralization, binary hashing/copying, family-isolated splits, coverage/calibration, and separate natural/procedural/combined hashes | Adversarial fixtures prove no secret or executable side effect reaches output and exact targets require pair authority; `userdata/*` dogfood imports 6 families/96 files/48 routes/28 captures as planner evidence with 3 train, 1 validation, 2 sealed holdout families and remains correctly provisional at 1 framework, 1 version, 4 generators, and 1 browser |
 
 ### Additional implementation decisions
 
@@ -106,6 +107,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | D57 | Vue metadata lowering follows the discovered deployment profile | Vite owns metadata in the document entry while Nuxt owns it through its head composable; treating those as interchangeable would duplicate tags or bypass SSR metadata | `vue-vite` applies one hash-guarded `index.html` edit; `nuxt` adds static `useHead`, and any existing non-identical head computation remains source-owned and blocking |
 | D58 | Framework-native completion is measured through the shared validator with real destination commands and captures | Parser-only compilation can miss package graph, SSR adapter, bundler, preview, hydration, pixel, and replay failures | Vue runs `vue-tsc` and Vite, SvelteKit runs sync/check plus its SSR build, Astro emits a hydrated React island, and all three retain the same deterministic validation fields; sandbox isolation remains an orthogonal promotion authority |
 | D59 | Cross-profile completeness is an evidence matrix, not a framework-name checklist | A profile can have a parser and planner while still lacking forms, conflict refusal, dynamic states, or rollback proof | Each of ten exact profiles must provide hashed executable evidence for all nine shared scenario classes and all five styling/preservation invariants; exceptions require a rationale, alternate evidence, and proof that shared invariants are unchanged |
+| D60 | User-provided mockups without an authority-bound 1:1 source pair are preference/planner evidence | Treating an edited concept, alternate copy, or screenshot as an exact target would train false equivalence and penalize legitimate source behavior | Exact-target imports require a pair-authority hash; current `userdata/*` families are labeled `planner-evidence`, retain identity/license/data authority, and cannot enter exact pixel calibration |
 
 ### Lessons learned
 
@@ -153,6 +155,8 @@ This is a living execution ledger. A checked task means executable code and prop
 | L40 | Framework build asset hashes and bootstrap source are not page-content semantics | Semantic recall now derives text from direct node text and URLs from content-bearing anchors/media, excluding generated script/style/link payloads that legitimately change when source modules change |
 | L41 | An authorized import inserted into an opaque frontmatter block changes that block's aggregate hash without authorizing its dynamic descendants | Preservation and binding checks exempt only the exact node targeted by an operation; hydrated islands and other nested preserved regions remain independently required byte-for-byte |
 | L42 | A single aggregate "framework passed" bit hides which behavioral archetype is absent | Capability identity is unique and exhaustive inside each profile row, and profile identity is unique and exhaustive inside the matrix; both levels recompute their verdict instead of trusting a caller flag |
+| L43 | Sanitizing credential values is insufficient if imported HTML can still execute requests | Naturalistic HTML removes all scripts and inline event handlers, disables form actions, neutralizes external resource URLs/CSS, quarantines code files, and reports every transformation while preserving original hashes as non-executable evidence |
+| L44 | A deterministic hash split can place every small corpus family in train by chance | The frozen naturalistic salt was selected before evaluation using family IDs only to ensure train/validation/holdout presence; complete repository families remain indivisible and the selected salt hash is retained in the split manifest |
 
 ## 1. Outcome
 
@@ -1520,11 +1524,11 @@ Dependencies: profile acceptance.
 
 Tasks:
 
-- [ ] Import real projects only with project identity and data/license authority.
-- [ ] Strip secrets and external side effects from fixtures.
-- [ ] Preserve imperfect and non-1:1 examples as preference/planner evidence rather than false exact targets.
-- [ ] Hold out entire repositories/starter families.
-- [ ] Report framework, version, generator family, route/state, and capture coverage.
+- [x] Import real projects only with project identity and data/license authority.
+- [x] Strip secrets and external side effects from fixtures.
+- [x] Preserve imperfect and non-1:1 examples as preference/planner evidence rather than false exact targets.
+- [x] Hold out entire repositories/starter families.
+- [x] Report framework, version, generator family, route/state, and capture coverage.
 
 Acceptance criteria:
 
