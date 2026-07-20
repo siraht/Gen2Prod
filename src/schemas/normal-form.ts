@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+export const SpecBindingSchema = z.object({
+  subjectRef: z.string().regex(/^sitespec:\/\/[a-z0-9][a-z0-9.-]*(?:\/[a-z0-9][a-z0-9._-]*){2,}$/),
+  subjectRevision: z.string().regex(/^[a-f0-9]{64}$/),
+  role: z.string().min(1),
+  authority: z.enum(["observed", "inferred", "proposed", "approved"]),
+});
+
 export const EvidenceSchema = z.object({
   source: z.string(),
   artifactId: z.string().optional(),
@@ -56,6 +63,7 @@ export const ComponentContractSchema = z.object({
     elements: z.array(z.string()),
     modifiers: z.array(z.string()),
   }),
+  specBindings: z.array(SpecBindingSchema).optional(),
 });
 
 export type DomAttribute = { name: string; value: string };
@@ -68,6 +76,7 @@ export type DomNode = {
   content?: ({ kind: "text"; value: string } | { kind: "child"; nodeId: string })[] | undefined;
   children: DomNode[];
   sourceLocation?: { file: string; startLine: number; startColumn: number; endLine: number; endColumn: number } | undefined;
+  specBindings?: SpecBinding[] | undefined;
 };
 
 export const DomNodeSchema: z.ZodType<DomNode> = z.lazy(() => z.object({
@@ -88,6 +97,7 @@ export const DomNodeSchema: z.ZodType<DomNode> = z.lazy(() => z.object({
     endLine: z.number().int(),
     endColumn: z.number().int(),
   }).optional(),
+  specBindings: z.array(SpecBindingSchema).optional(),
 }));
 
 export const StyleDeclarationSchema = z.object({
@@ -119,6 +129,7 @@ export const StyleIntentSchema = z.object({
   contentRole: z.string(),
   confidence: ConfidenceSchema,
   declarations: z.array(StyleDeclarationSchema),
+  specBindings: z.array(SpecBindingSchema).optional(),
 });
 
 export const TokenValueSchema = z.union([
@@ -179,6 +190,7 @@ export const InteractionContractSchema = z.object({
   focusManagement: z.string(),
   stateAttributes: z.array(z.string()),
   reducedMotion: z.string(),
+  specBindings: z.array(SpecBindingSchema).optional(),
 });
 
 export const VisualTargetSchema = z.object({
@@ -217,9 +229,15 @@ export const NormalFormSchema = z.object({
   tokens: TokenRegistrySchema,
   interactions: z.array(InteractionContractSchema),
   unresolved: z.array(z.object({ nodeId: z.string(), concern: z.string(), reason: z.string(), requiredEvidence: z.array(z.string()) })),
+  sitespec: z.object({
+    specRevision: z.string().regex(/^[a-f0-9]{64}$/),
+    pageSubjectRef: z.string(),
+    inputRevisions: z.array(z.object({ subjectRef: z.string(), revision: z.string().regex(/^[a-f0-9]{64}$/) })).min(1),
+  }).optional(),
 });
 
 export type Evidence = z.infer<typeof EvidenceSchema>;
+export type SpecBinding = z.infer<typeof SpecBindingSchema>;
 export type Confidence = z.infer<typeof ConfidenceSchema>;
 export type Strategy = z.infer<typeof StrategySchema>;
 export type Content = z.infer<typeof ContentSchema>;
