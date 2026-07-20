@@ -3,6 +3,7 @@ import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { buildCanonicalGraph, canonicalize, sha256, type CanonicalGraphRuntime, type DesignCandidate } from "@website-ontology/contracts";
 import { canonicalJson } from "../src/core/hash.ts";
+import { writeQualificationAsset } from "./generate-qualification-asset.ts";
 
 const RESERVE_BYTES = 15 * 1024 ** 3;
 const LIGHTHOUSE_VERSION = "13.4.1";
@@ -104,7 +105,7 @@ const repositoryHead = (await Bun.$`git rev-parse HEAD`.cwd(resolve(import.meta.
 
 const qualificationAsset = join(root, "inputs", "approved-hero.png");
 await mkdir(resolve(qualificationAsset, ".."), { recursive: true });
-await Bun.write(qualificationAsset, Bun.file(resolve(import.meta.dir, "..", "fixtures/generated/hero-cta/visual/gold/capture-1280-light-default.png")));
+await writeQualificationAsset(qualificationAsset);
 const specPath = join(root, "inputs", "approved-site.json");
 let graph: CanonicalGraphRuntime;
 if (externalSpecPath) {
