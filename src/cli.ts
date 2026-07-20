@@ -54,6 +54,7 @@ import { assertProjectRequest, loadProjectAdapterRunRequest, planProjectAdapterR
 import { ProjectContractSchema, ProjectDestinationBundleSchema, ProjectFrameworkProfileSchema, ProjectPatchPlanSchema, ProjectValidationReportSchema, SourceProjectSchema } from "./schemas/project-adapters.ts";
 import { inspectProjectAdapterReadiness } from "./project-adapters/doctor.ts";
 import { prepareProjectCurriculum } from "./project-adapters/curriculum.ts";
+import { loadProjectAdapterIncumbent } from "./project-adapters/policy.ts";
 
 type GlobalOptions = { config: string; workspace: string; acss?: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -94,6 +95,8 @@ async function currentAdapterPolicy(project: Gen2ProdConfig, explicit?: string) 
   const path = explicit ? resolve(explicit) : resolve(project.workspace, "adapters", "research", "incumbent-policy.json");
   return await pathExists(path) ? FrameworkAdapterPolicySchema.parse(await readJson(path)) : defaultFrameworkAdapterPolicy;
 }
+
+async function currentProjectAdapterPolicy(project: Gen2ProdConfig) { return project.projectAdapters?.policyPath ? loadProjectAdapterIncumbent(resolve(project.projectAdapters.policyPath)) : undefined; }
 
 function adapterTargets(value: string | undefined, project: Gen2ProdConfig) {
   return value ? value.split(",").filter(Boolean).map((target) => FrameworkAdapterTargetSchema.parse(target.trim())) : project.adapters?.targets ?? ALL_FRAMEWORK_ADAPTER_TARGETS;
@@ -193,7 +196,8 @@ projectCommand
     const cfg = await config();
     const request = await loadProjectAdapterRunRequest(resolve(requestValue));
     const profile = options.profile ?? cfg.projectAdapters?.profile;
-    const planned = await planProjectAdapterRequest({ root: resolve(rootValue), request, ...(profile ? { profile: ProjectFrameworkProfileSchema.parse(profile) } : {}) });
+    const projectPolicy = await currentProjectAdapterPolicy(cfg);
+    const planned = await planProjectAdapterRequest({ root: resolve(rootValue), request, ...(profile ? { profile: ProjectFrameworkProfileSchema.parse(profile) } : {}), ...(projectPolicy ? { projectPolicy } : {}) });
     const output = resolve(options.output ?? join(cfg.projectAdapters?.artifacts ?? join(cfg.workspace, "projects"), planned.source.projectId, `${planned.plan.planId}.json`));
     await writeJsonAtomic(output, planned.plan);
     const envelope = result("project plan", { projectId: planned.source.projectId, planId: planned.plan.planId, target: planned.contract.framework.target, operations: planned.plan.operations.length, predictedChangedFiles: planned.plan.predictedChangedFiles, predictedChangedBytes: planned.plan.predictedChangedBytes, planPath: output });
@@ -216,7 +220,8 @@ projectCommand
     assertProjectRequest(request, discovery.contract.framework.target, source.projectId, source.sourceHash);
     const output = resolve(options.output ?? join(cfg.projectAdapters?.artifacts ?? join(cfg.workspace, "projects"), source.projectId, "runs"));
     const configuredEnvironment = Object.fromEntries((cfg.projectAdapters?.previewEnvironmentKeys ?? []).map((key) => [key, process.env[key]]).filter((entry): entry is [string, string] => entry[1] !== undefined));
-    const run = await runProjectPipeline({ root, discovery: profile ? { profile: ProjectFrameworkProfileSchema.parse(profile) } : undefined, correspondence: request.correspondence, planning: planningContext(request), policyHash: request.policyHash, mode: request.mode, profile: request.profile, registeredVariables: request.canonical.registeredVariables, artifactRoot: output, previewUrl: request.previewUrl ?? cfg.projectAdapters?.previewUrl, previewEnvironment: configuredEnvironment, fixturePayloads: request.fixturePayloads, browserExecutable: cfg.capture.browserExecutable, ...(cfg.projectAdapters?.sandbox === "container" && cfg.projectAdapters.containerImage ? { containerImage: cfg.projectAdapters.containerImage } : {}), includeInstall: cfg.projectAdapters?.includeInstall ?? false });
+    const projectPolicy = await currentProjectAdapterPolicy(cfg);
+    const run = await runProjectPipeline({ root, discovery: profile ? { profile: ProjectFrameworkProfileSchema.parse(profile) } : undefined, correspondence: request.correspondence, planning: planningContext(request), policyHash: request.policyHash, ...(projectPolicy ? { projectPolicy } : {}), mode: request.mode, profile: request.profile, registeredVariables: request.canonical.registeredVariables, artifactRoot: output, previewUrl: request.previewUrl ?? cfg.projectAdapters?.previewUrl, previewEnvironment: configuredEnvironment, fixturePayloads: request.fixturePayloads, browserExecutable: cfg.capture.browserExecutable, ...(cfg.projectAdapters?.sandbox === "container" && cfg.projectAdapters.containerImage ? { containerImage: cfg.projectAdapters.containerImage } : {}), includeInstall: cfg.projectAdapters?.includeInstall ?? false });
     const envelope = result("project run", { runId: run.runId, projectId: run.source.projectId, planId: run.plan.planId, accepted: run.validation.accepted, hardFailures: run.validation.hardFailures, artifacts: run.artifacts, artifactRoot: run.artifactRoot, metrics: run.validation.metrics, stateCoverage: run.validation.stateCoverage });
     envelope.requiredActions.push(...run.validation.requiredActions);
     emit(envelope, `Project run ${run.runId}\nAccepted: ${run.validation.accepted ? "yes" : "no"}; hard failures: ${run.validation.hardFailures.length}\nOperations: ${run.plan.operations.length}; states: ${run.validation.stateCoverage.captured}/${run.validation.stateCoverage.declared}\nArtifacts: ${run.artifactRoot}`);
@@ -649,13 +654,14 @@ program
   .option("--naturalistic <path>", "naturalistic evaluation trajectory JSONL to blend without project leakage")
   .option("--image <paths...>", "one or more image-only reconstruction trajectory JSONLs to blend without project leakage")
   .option("--adapter <paths...>", "one or more framework-adapter research trajectory JSONLs to blend without fixture leakage")
+  .option("--project-adapter <paths...>", "one or more source-project adapter trajectory JSONLs grouped by project family")
   .option("--output <path>", "model output directory")
   .addOption(new Option("--target <target>", "model target").choices(["selector", "verifier", "planner", "all"]).default("all"))
-  .action(async (options: { trajectories?: string; naturalistic?: string; image?: string[]; adapter?: string[]; output?: string; target: DistillTarget }) => {
+  .action(async (options: { trajectories?: string; naturalistic?: string; image?: string[]; adapter?: string[]; projectAdapter?: string[]; output?: string; target: DistillTarget }) => {
     const project = await config();
     const trajectoryPath = resolve(options.trajectories ?? join(project.workspace, "research", "trajectories.jsonl"));
     const output = resolve(options.output ?? join(project.workspace, "distilled"));
-    const trajectoryPaths = [trajectoryPath, ...(options.naturalistic ? [resolve(options.naturalistic)] : []), ...(options.image ?? []).map((path) => resolve(path)), ...(options.adapter ?? []).map((path) => resolve(path))];
+    const trajectoryPaths = [trajectoryPath, ...(options.naturalistic ? [resolve(options.naturalistic)] : []), ...(options.image ?? []).map((path) => resolve(path)), ...(options.adapter ?? []).map((path) => resolve(path)), ...(options.projectAdapter ?? []).map((path) => resolve(path))];
     const distilled = await distill(trajectoryPaths, output, options.target);
     emit(result("distill", distilled), `Distilled ${distilled.dataset.trajectories} trajectories\nSupervised: ${distilled.dataset.supervised}\nPreferences: ${distilled.dataset.preferences}\nVerifier: ${distilled.dataset.verifier}\nModels: ${Object.keys(distilled.models).join(", ")}\nOutput: ${output}`);
   });

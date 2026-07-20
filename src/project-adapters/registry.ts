@@ -16,6 +16,7 @@ import { planWordPressIntegration } from "./wordpress/plan.ts";
 import { planBricksIntegration } from "./bricks/plan.ts";
 import { projectOperationGraphHash } from "./rewrite/text-edits.ts";
 import { runSandboxCommands } from "./sandbox.ts";
+import { bindProjectPolicy } from "./policy-impact.ts";
 
 export type ProjectSourceAdapter = {
   target: ProjectContract["framework"]["target"];
@@ -35,13 +36,15 @@ function adapter(profile: ProjectFrameworkProfile, target: ProjectSourceAdapter[
     parse,
     projectRoute: (source, route) => ({ route, roots: source.roots.filter((node) => node.anchor.file === route.entry || route.layoutChain.includes(node.anchor.file)), modules: source.modules.filter((module) => module.path === route.entry || route.layoutChain.includes(module.path)), bindingNames: source.bindings.map((binding) => binding.name), unresolved: source.unresolved }),
     planIntegration: async (context) => {
-      if (target === "react" && context.reactCanonical) return planReactIntegration({ root: context.root, contract: context.contract, project: context.source, correspondence: context.correspondence, canonical: context.reactCanonical, mode: context.mode, profile: context.profile, policyHash: context.policyHash });
-      if (target === "vue" && context.vueCanonical) return planVueIntegration({ root: context.root, contract: context.contract, project: context.source, correspondence: context.correspondence, canonical: context.vueCanonical, mode: context.mode, profile: context.profile, policyHash: context.policyHash });
-      if (target === "svelte" && context.svelteCanonical) return planSvelteIntegration({ root: context.root, contract: context.contract, project: context.source, correspondence: context.correspondence, canonical: context.svelteCanonical, mode: context.mode, profile: context.profile, policyHash: context.policyHash });
-      if (target === "astro" && context.astroCanonical) return planAstroIntegration({ root: context.root, contract: context.contract, project: context.source, correspondence: context.correspondence, canonical: context.astroCanonical, mode: context.mode, profile: context.profile, policyHash: context.policyHash });
-      if (target === "wordpress" && context.wordpressCanonical) return planWordPressIntegration({ root: context.root, contract: context.contract, project: context.source, correspondence: context.correspondence, canonical: context.wordpressCanonical, mode: context.mode, profile: context.profile, policyHash: context.policyHash });
-      if (target === "bricks" && context.bricksCanonical) return planBricksIntegration({ root: context.root, contract: context.contract, project: context.source, correspondence: context.correspondence, canonical: context.bricksCanonical, mode: context.mode, profile: context.profile, policyHash: context.policyHash });
-      return unsupportedPlanner(context, profile);
+      let plan: ProjectPatchPlan;
+      if (target === "react" && context.reactCanonical) plan = await planReactIntegration({ root: context.root, contract: context.contract, project: context.source, correspondence: context.correspondence, canonical: context.reactCanonical, mode: context.mode, profile: context.profile, policyHash: context.policyHash });
+      else if (target === "vue" && context.vueCanonical) plan = await planVueIntegration({ root: context.root, contract: context.contract, project: context.source, correspondence: context.correspondence, canonical: context.vueCanonical, mode: context.mode, profile: context.profile, policyHash: context.policyHash });
+      else if (target === "svelte" && context.svelteCanonical) plan = await planSvelteIntegration({ root: context.root, contract: context.contract, project: context.source, correspondence: context.correspondence, canonical: context.svelteCanonical, mode: context.mode, profile: context.profile, policyHash: context.policyHash });
+      else if (target === "astro" && context.astroCanonical) plan = await planAstroIntegration({ root: context.root, contract: context.contract, project: context.source, correspondence: context.correspondence, canonical: context.astroCanonical, mode: context.mode, profile: context.profile, policyHash: context.policyHash });
+      else if (target === "wordpress" && context.wordpressCanonical) plan = await planWordPressIntegration({ root: context.root, contract: context.contract, project: context.source, correspondence: context.correspondence, canonical: context.wordpressCanonical, mode: context.mode, profile: context.profile, policyHash: context.policyHash });
+      else if (target === "bricks" && context.bricksCanonical) plan = await planBricksIntegration({ root: context.root, contract: context.contract, project: context.source, correspondence: context.correspondence, canonical: context.bricksCanonical, mode: context.mode, profile: context.profile, policyHash: context.policyHash });
+      else plan = unsupportedPlanner(context, profile);
+      return context.projectPolicy ? bindProjectPolicy(plan, context.projectPolicy) : plan;
     },
     validateNative: async (context) => { const commands = await runSandboxCommands(context.sandbox, context.contract, { ...(context.includeInstall ? { includeInstall: true } : {}), ...(context.containerImage ? { containerImage: context.containerImage } : {}) }); return { passed: commands.length > 0 && commands.every((command) => command.passed), commands }; },
   };

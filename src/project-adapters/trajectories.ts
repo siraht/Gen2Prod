@@ -1,0 +1,21 @@
+import { join } from "node:path";
+import { pathExists, writeTextAtomic } from "../core/fs.ts";
+import { hashJson } from "../core/hash.ts";
+import { TrajectorySchema, type Trajectory } from "../schemas/research.ts";
+import type { ProjectPatchPlan, ProjectValidationReport, SourceProject } from "../schemas/project-adapters.ts";
+
+export function createProjectAdapterTrajectory(input: { experimentId: string; fixtureId: string; familyId: string; split: string; source: SourceProject; plan: ProjectPatchPlan; validation: ProjectValidationReport; outcome: "keep" | "revert"; cost: number }): Trajectory {
+  const hardGatesPass = input.validation.hardFailures.length === 0;
+  return TrajectorySchema.parse({
+    schemaVersion: "0.1.0", trajectoryId: `project-trajectory-${hashJson({ experimentId: input.experimentId, fixtureId: input.fixtureId, planId: input.plan.planId, outcome: input.outcome }).slice(0, 20)}`,
+    experimentId: input.experimentId, fixtureId: input.fixtureId, groupId: `project-adapter:${input.familyId}`, sourceKind: "project-adapter", split: input.split,
+    observations: { target: input.validation.target, sourceGraphFingerprint: input.source.normalizedHash, patchOperationHash: input.plan.operationGraphHash, stateCoverage: input.validation.stateCoverage.declared ? input.validation.stateCoverage.captured / input.validation.stateCoverage.declared : 1, nativeBuildPassed: input.validation.native.length > 0 && input.validation.native.every((item) => item.passed), visualLoss: input.validation.metrics.visualLoss, hardGateFailures: input.validation.hardFailures.length, semanticError: 1 - input.validation.metrics.structuralEquivalence, bemError: 1 - input.validation.metrics.bemCoverage, unaccountedDeclarations: input.validation.metrics.forbiddenSelectorCount },
+    actions: input.plan.operations.map((operation) => `project-patch:${operation.kind}`),
+    planSummary: { sourceGraphFingerprint: input.source.normalizedHash, sourceProjectHash: input.source.sourceHash, patchOperations: input.plan.operations.map((operation) => ({ id: operation.operationId, kind: operation.kind, path: operation.path, preservedRegionHashes: operation.preservedRegionHashes, validationObligations: operation.validationObligations })), preservationLabels: { dynamicRegions: input.validation.dynamicRegionsPreserved, handlers: input.validation.handlerBindingsPreserved, data: input.validation.dataBindingsPreserved, untouchedFiles: input.validation.untouchedFilesPreserved }, stateCoverage: input.validation.stateCoverage, build: input.validation.native, imageMetrics: input.validation.visualConditions, keepRevert: input.outcome, outputHash: hashJson(input.plan.operations), replayHash: hashJson({ rollback: input.validation.rollbackPassed, replay: input.validation.replaySourceStable, idempotence: input.validation.idempotencePassed }), sourceFrameHash: input.source.sourceHash },
+    verifierLabels: { hardGatesPass, mutationControlsPass: input.validation.mutationControlRecall === 1, idempotent: input.validation.idempotencePassed, rollbackPassed: input.validation.rollbackPassed, sourceReplayStable: input.validation.replaySourceStable },
+    fitness: { criticalGateFailures: input.validation.hardFailures.length, contentBehaviorErrors: Number(!input.validation.dynamicRegionsPreserved || !input.validation.handlerBindingsPreserved || !input.validation.dataBindingsPreserved), semanticContractError: 1 - input.validation.metrics.structuralEquivalence, accessibilityError: input.validation.metrics.accessibilityError, visualLoss: input.validation.metrics.visualLoss, unaccountedDeclarations: input.validation.metrics.forbiddenSelectorCount, bemComponentError: 1 - input.validation.metrics.bemCoverage, crossPageDrift: 1 - input.validation.metrics.textRecall, idempotenceError: Number(!input.validation.idempotencePassed), reviewBurden: input.validation.requiredActions.length, normalizedComputeCost: input.cost },
+    accepted: input.outcome === "keep" && hardGatesPass, cost: input.cost,
+  });
+}
+
+export async function appendProjectAdapterTrajectory(outputDirectory: string, trajectory: Trajectory): Promise<string> { const path = join(outputDirectory, "trajectories.jsonl"); const prior = await pathExists(path) ? await Bun.file(path).text() : ""; await writeTextAtomic(path, `${prior}${JSON.stringify(trajectory)}\n`); return path; }

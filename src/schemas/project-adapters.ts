@@ -500,6 +500,50 @@ export const ProjectDestinationBundleSchema = z.object({
   files: z.array(z.object({ path: RelativePathSchema, preimageHash: Sha256Schema.optional(), postimageHash: Sha256Schema, original: z.string().optional() }).strict()),
 }).strict();
 
+export const ProjectAdapterPolicySchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  ownershipStrategy: z.enum(["conservative-shell", "replace-owned-static"]),
+  dynamicHoleGranularity: z.enum(["maximal-preserve", "expression-level"]),
+  wrapperStrategy: z.enum(["wrap", "extract", "replace"]),
+  componentExtractionThreshold: z.number().int().min(1).max(100),
+  compositionPreference: z.enum(["children", "props", "slot", "render-fragment"]),
+  importPlacement: z.enum(["relative-local", "configured-alias"]),
+  metadataProfile: z.enum(["framework-native", "preserve-dynamic"]),
+  stylesheetStrategy: z.enum(["merge-owned-rule", "owned-file"]),
+  dynamicClassStrategy: z.enum(["preserve-opaque", "enumerate-complete"]),
+  boundaryStrategy: z.enum(["preserve-existing", "smallest-island"]),
+  oldStyleDeletionThreshold: z.number().min(0).max(1),
+  cmsMapping: z.enum(["preserve-dynamic", "semantic-owned-root"]),
+  stateAcquisitionBudget: z.number().int().min(1).max(100),
+  preserveExpressions: z.literal(true),
+  preserveHandlers: z.literal(true),
+  preserveDataAccess: z.literal(true),
+  classMode: z.literal("bem-only"),
+  styleMode: z.literal("shared-token-scss"),
+  forbidUtilityElementInlineStyles: z.literal(true),
+  sandboxFirst: z.literal(true),
+  hashPreconditions: z.literal(true),
+  frozenHardGates: z.literal(true),
+  familyIsolatedHoldout: z.literal(true),
+}).strict();
+
+export const ProjectAdapterFitnessSchema = z.object({
+  patchFailures: z.number().nonnegative(), nativeFailures: z.number().nonnegative(), preservationError: z.number().nonnegative(), stateCoverageError: z.number().nonnegative(), semanticError: z.number().nonnegative(), stylingError: z.number().nonnegative(), lockedVisualRegression: z.number().nonnegative(), targetVisualLoss: z.number().nonnegative(), ownershipError: z.number().nonnegative(), reviewBurden: z.number().nonnegative(), sourceChurn: z.number().nonnegative(), normalizedCost: z.number().nonnegative(),
+}).strict();
+
+export const ProjectAdapterResearchEvaluationSchema = z.object({
+  split: z.enum(["train", "validation", "holdout"]), policyHash: Sha256Schema, outputHash: Sha256Schema, fitness: ProjectAdapterFitnessSchema,
+  mutationControlRecall: z.number().min(0).max(1), rollbackPassed: z.boolean(), replaySourceStable: z.boolean(), familyIds: z.array(z.string().min(1)).min(1),
+  fingerprints: z.object({ evaluator: Sha256Schema, corpus: Sha256Schema, toolchain: Sha256Schema, capture: Sha256Schema }).strict(),
+}).strict();
+
+export const ProjectAdapterResearchSummarySchema = z.object({
+  schemaVersion: z.literal("0.1.0"), initialPolicy: ProjectAdapterPolicySchema, researchIncumbent: ProjectAdapterPolicySchema, productionIncumbent: ProjectAdapterPolicySchema,
+  experiments: z.array(z.object({ experimentId: z.string().min(1), iteration: z.number().int().nonnegative(), hypothesis: z.string().min(1), changedField: z.string().min(1), before: z.unknown(), after: z.unknown(), candidatePolicyHash: Sha256Schema, effective: z.boolean(), outcome: z.enum(["keep", "revert"]), reason: z.string().min(1), train: ProjectAdapterResearchEvaluationSchema, validation: ProjectAdapterResearchEvaluationSchema }).strict()),
+  baselineHoldout: ProjectAdapterResearchEvaluationSchema, finalHoldout: ProjectAdapterResearchEvaluationSchema, replayHoldout: ProjectAdapterResearchEvaluationSchema,
+  holdoutOpenedAfterSearch: z.literal(true), holdoutNonRegression: z.boolean(), promoted: z.boolean(), incumbentPath: z.string().min(1), summaryHash: Sha256Schema,
+}).strict();
+
 export type ProjectFrameworkProfile = z.infer<typeof ProjectFrameworkProfileSchema>;
 export type CommandSpec = z.infer<typeof CommandSpecSchema>;
 export type StateFixture = z.infer<typeof StateFixtureSchema>;
@@ -523,3 +567,7 @@ export type ProjectFamilySplitManifest = z.infer<typeof ProjectFamilySplitManife
 export type ProjectSyntheticManifest = z.infer<typeof ProjectSyntheticManifestSchema>;
 export type ProjectCorruptionGrammarReport = z.infer<typeof ProjectCorruptionGrammarReportSchema>;
 export type ProjectDestinationBundle = z.infer<typeof ProjectDestinationBundleSchema>;
+export type ProjectAdapterPolicy = z.infer<typeof ProjectAdapterPolicySchema>;
+export type ProjectAdapterFitness = z.infer<typeof ProjectAdapterFitnessSchema>;
+export type ProjectAdapterResearchEvaluation = z.infer<typeof ProjectAdapterResearchEvaluationSchema>;
+export type ProjectAdapterResearchSummary = z.infer<typeof ProjectAdapterResearchSummarySchema>;

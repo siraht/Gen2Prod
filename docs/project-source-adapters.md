@@ -115,12 +115,15 @@ Apply re-discovers the destination and verifies root, framework/profile/version,
 ```yaml
 projectAdapters:
   artifacts: .gen2prod/projects
+  policyPath: .gen2prod/project-adapter-research/production-incumbent.json
   profile: react-vite       # optional exact override
   includeInstall: false     # frozen install authority
   previewUrl: http://127.0.0.1:4173/
   previewEnvironmentKeys: [PUBLIC_API_ORIGIN]
   sandbox: copy-audit       # development evidence only
 ```
+
+`policyPath` is optional. When configured, `project plan` and `project run` load that strict promoted incumbent, require its canonical hash to equal the request `policyHash`, and bind all mutable policy decisions into the generated plan's validation obligations. A stale or unrelated policy is rejected before sandbox mutation.
 
 Production acceptance requires `sandbox: container` and `containerImage: name@sha256:<digest>`. Configuration contains environment names only; values stay process-local and must also be authorized by the discovered contract. `gen2prod --json doctor` reports parser versions, all supported profiles/capabilities, browser/PHP/Docker status, immutable-image presence, and project acceptance readiness.
 

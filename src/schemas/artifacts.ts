@@ -26,6 +26,7 @@ export const AuthorityConcernSchema = z.enum([
   "inferred-patterns",
   "advisory-only",
   "framework-source",
+  "project-policy",
   "destination-build-contract",
   "runtime-state-fixtures",
   "destination-path-ownership",

@@ -7,7 +7,7 @@ import { GateResultSchema, PassDefinitionSchema, PassEventSchema } from "./pass.
 import { EvaluationResultSchema, ExperimentResultSchema, TrajectorySchema } from "./research.ts";
 import { ImageDerivedContentStrategySchema, ImageOnlyAnalysisSchema, ImageOnlyBuildPlanSchema, ImageOnlyEvaluationSchema, ImageOnlyPolicySchema, ImageOnlyTargetManifestSchema, ImageStateSequenceAnalysisSchema } from "./image-only.ts";
 import { CmsDocumentSchema, FrameworkAdapterBenchmarkSchema, FrameworkAdapterEvaluationSchema, FrameworkAdapterExperimentSchema, FrameworkAdapterManifestSchema, FrameworkAdapterPolicySchema, FrameworkAdapterResearchSummarySchema, FrameworkAdapterSuiteSchema, FrameworkAdapterValidationSchema } from "./adapters.ts";
-import { ProjectAdapterRunRequestSchema, ProjectContractSchema, ProjectCorrespondenceSchema, ProjectCorruptionGrammarReportSchema, ProjectDestinationBundleSchema, ProjectFamilySplitManifestSchema, ProjectIsolationProofSchema, ProjectMutationControlReportSchema, ProjectOwnershipMapSchema, ProjectPatchPlanSchema, ProjectPreviewIsolationProofSchema, ProjectRouteProjectionSchema, ProjectSyntheticCorruptionTraceSchema, ProjectSyntheticManifestSchema, ProjectValidationReportSchema, SourceProjectSchema } from "./project-adapters.ts";
+import { ProjectAdapterFitnessSchema, ProjectAdapterPolicySchema, ProjectAdapterResearchEvaluationSchema, ProjectAdapterResearchSummarySchema, ProjectAdapterRunRequestSchema, ProjectContractSchema, ProjectCorrespondenceSchema, ProjectCorruptionGrammarReportSchema, ProjectDestinationBundleSchema, ProjectFamilySplitManifestSchema, ProjectIsolationProofSchema, ProjectMutationControlReportSchema, ProjectOwnershipMapSchema, ProjectPatchPlanSchema, ProjectPreviewIsolationProofSchema, ProjectRouteProjectionSchema, ProjectSyntheticCorruptionTraceSchema, ProjectSyntheticManifestSchema, ProjectValidationReportSchema, SourceProjectSchema } from "./project-adapters.ts";
 
 const SCHEMAS = {
   "artifact-ref": ArtifactRefSchema,
@@ -53,6 +53,10 @@ const SCHEMAS = {
   "project-synthetic-corruption-trace": ProjectSyntheticCorruptionTraceSchema,
   "project-synthetic-manifest": ProjectSyntheticManifestSchema,
   "project-validation-report": ProjectValidationReportSchema,
+  "project-adapter-policy": ProjectAdapterPolicySchema,
+  "project-adapter-fitness": ProjectAdapterFitnessSchema,
+  "project-adapter-research-evaluation": ProjectAdapterResearchEvaluationSchema,
+  "project-adapter-research-summary": ProjectAdapterResearchSummarySchema,
 };
 
 export async function exportSchemas(outputDirectory: string): Promise<string[]> {

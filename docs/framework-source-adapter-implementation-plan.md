@@ -55,6 +55,8 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P3.2 Next-native metadata integration | Extended the portable canonical request with optional title/description intent and added a minimal App Router metadata operation that updates or inserts `export const metadata`, preserves unrelated object fields, and blocks on `generateMetadata` or opaque initializers | Next dogfood updates title, inserts description, retains Open Graph data, emits no document tags or client directive, preserves async fetch/server boundaries, and fails closed for dynamic metadata |
 | 2026-07-20 | P10.2 composable project corruption grammar | Added 24 independently selectable source-shaped corruptions spanning semantic/style/component/metadata, import/handler/branch/key/slot/boundary/layout, CMS parent/revision/settings, and scope/preimage/rollback/idempotence failures with exact field and before/after hashes | Full composition changes 24 unique fields with 24 positive detectors; single-corruption dogfood proves unrelated authority stays exact, tampered overlap fails schema validation, and every generated project now retains the suite beside its concrete dirty/gold trace |
 | 2026-07-20 | P2.7/P10.1 independent React topology curriculum | Split the generated React families into a local-function topology and an imported-child topology, added `clsx` enum/state matrices and exact JSX comment/formatting evidence, and retained the existing props, conditional, keyed, form, dialog, async, ref, handler, and responsive-state matrix | Both dirty and gold variants native-build; parser evidence distinguishes imported `Card` only in the composed family, enumerates dynamic classes, retains comments, and existing stale-preimage/independent-edit/owned-collision fixtures complete the integration matrix; Next nested metadata and WordPress/Bricks dynamic query/condition fixtures cover the remaining dynamic archetypes |
+| 2026-07-20 | P11 project-policy research and promotion loop | Added a strict 13-field mutable policy with 10 literal hard invariants, 12-dimensional lexicographic fitness, one-field/effective-intervention enforcement, frozen four-part fingerprints, retained keep/revert evidence, train/validation family isolation, post-search sealed holdout, 100% control/rollback/replay promotion gates, and configured production-incumbent loading | Dogfood produces one effective keep, one effective revert, one no-op revert, exact repeated holdout output, no pre-search holdout access, successful promotion, immutable-field rejection, and 13 distinct plan validation directives whose impact hashes change with their owning field |
+| 2026-07-20 | P11.4 project trajectories and distillation | Added `project-adapter` trajectory provenance with source graph/patch/preservation/state/native/image/replay evidence, project-family group IDs, CLI `distill --project-adapter`, contradiction quarantine through the shared dataset builder, and deterministic-verifier veto labels | Dataset dogfood retains one family across keep/revert examples, emits a preference pair without leakage, reports project-adapter source counts, and prevents a nominal keep with hard failures from becoming accepted evidence |
 
 ### Additional implementation decisions
 
@@ -91,6 +93,9 @@ This is a living execution ledger. A checked task means executable code and prop
 | D49 | Next metadata intent lowers only through App Router metadata exports | Injecting `<head>` tags or shadowing `generateMetadata` creates duplicate/incorrect server metadata and can silently discard data-driven fields | Static object exports receive a hash-guarded minimal merge; dynamic/opaque metadata requires an explicit source-authorized mapping |
 | D50 | Quality corruptions and deliberately invalid gate controls share a grammar but not one dirty build | Import, preimage, rollback, and CMS-revision failures are useful evaluator examples but would make every ordinary dirty project unbuildable | Generated dirty/gold projects retain quality-only concrete source differences, while the adjacent composable suite materializes each hard-failure specimen independently with an expected detector |
 | D51 | Starter-family identity requires a different source graph, not a label in otherwise identical source | Family-isolated splits do not prevent topology leakage if two family IDs emit the same component structure | Function-family cards remain local; composed-family cards are separate imported modules, while content variants remain derivatives within their topology family |
+| D52 | Project-policy hard invariants are literal schema fields outside the mutation set | A research loop that can propose utilities, inline styling, relaxed hashes, or non-isolated holdout has made its evaluator part of the attack surface | Mutation attempts outside the 13 enumerated strategy/budget fields fail; every mutable value has a generated validation directive and policy-impact hash |
+| D53 | Sealed holdout is a terminal audit, never a cadence parameter | Periodic holdout peeking turns the holdout into another optimization split | Research calls only train/validation during the mutation loop, then evaluates baseline/candidate/replay holdout after search and promotes only on exact replay plus non-regression |
+| D54 | A configured production incumbent must match the request's policy hash | Silently loading a newer policy would invalidate the signed plan/evaluator identity; silently ignoring the incumbent would make promotion inert | Project plan/run load `projectAdapters.policyPath` only when configured and reject hash mismatch before planning or sandbox work |
 
 ### Lessons learned
 
@@ -130,6 +135,8 @@ This is a living execution ledger. A checked task means executable code and prop
 | L32 | Preserving a metadata export is not the same as integrating the destination metadata contract | The canonical request now carries explicit metadata intent, Next gets a native operation, and dynamic generators are surfaced as blockers rather than silently ignored |
 | L33 | A corruption name without exact changed-field identity cannot prove independent detector coverage | Grammar reports require one unique field, effective before/after hashes, and a positive named detector per operation; overlap and ineffective mutations are invalid artifacts |
 | L34 | Declaring two starter families without changing their module graph creates false independence | Curriculum tests now assert the imported-component graph and filesystem differ by family in addition to checking split identity |
+| L35 | Comparing policy JSON hashes alone would treat a renamed/no-op candidate as an intervention | Effectiveness requires a changed policy plus changed generated output or non-cost fitness; the explicit no-op control is retained as a revert |
+| L36 | Trajectory fixture IDs are not a safe split boundary for source projects | Project-adapter trajectories use `project-adapter:<familyId>` as their group, so content/state/corruption derivatives cannot leak independently into training and holdout |
 
 ## 1. Outcome
 
@@ -1435,15 +1442,15 @@ Dependencies: P10, P11.1–P11.2.
 
 Tasks:
 
-- [ ] Start from an intentionally conservative strangler baseline.
-- [ ] Change exactly one policy field per experiment.
-- [ ] Verify that the intervention changed patch output or a non-cost fitness dimension.
-- [ ] Freeze evaluator/corpus/toolchain/capture fingerprints.
-- [ ] Retain all accepted and rejected experiments.
-- [ ] Search train/validation project families only.
-- [ ] Open sealed holdout only after search.
-- [ ] Require non-regression, 100% mutation-control recall, rollback, and exact source replay before promotion.
-- [ ] Load the promoted incumbent in production project runs.
+- [x] Start from an intentionally conservative strangler baseline.
+- [x] Change exactly one policy field per experiment.
+- [x] Verify that the intervention changed patch output or a non-cost fitness dimension.
+- [x] Freeze evaluator/corpus/toolchain/capture fingerprints.
+- [x] Retain all accepted and rejected experiments.
+- [x] Search train/validation project families only.
+- [x] Open sealed holdout only after search.
+- [x] Require non-regression, 100% mutation-control recall, rollback, and exact source replay before promotion.
+- [x] Load the promoted incumbent in production project runs.
 
 Acceptance criteria:
 
@@ -1456,11 +1463,11 @@ Dependencies: P11.3.
 
 Tasks:
 
-- [ ] Add `project-adapter` trajectory source kind.
-- [ ] Record source graph fingerprints, patch operations, preservation labels, state coverage, build/image metrics, and keep/revert result.
-- [ ] Preserve project-family grouping in distillation.
-- [ ] Add `distill --project-adapter` input.
-- [ ] Train/evaluate selector/verifier/planner artifacts without allowing learned output to bypass deterministic gates.
+- [x] Add `project-adapter` trajectory source kind.
+- [x] Record source graph fingerprints, patch operations, preservation labels, state coverage, build/image metrics, and keep/revert result.
+- [x] Preserve project-family grouping in distillation.
+- [x] Add `distill --project-adapter` input.
+- [x] Train/evaluate selector/verifier/planner artifacts without allowing learned output to bypass deterministic gates.
 
 Acceptance criteria:
 

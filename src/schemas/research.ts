@@ -163,7 +163,7 @@ export const TrajectorySchema = z.object({
   experimentId: z.string(),
   fixtureId: z.string(),
   groupId: z.string().optional(),
-  sourceKind: z.enum(["synthetic-html", "naturalistic-html", "production-html", "synthetic-image", "live-image", "framework-adapter", "unknown"]).optional(),
+  sourceKind: z.enum(["synthetic-html", "naturalistic-html", "production-html", "synthetic-image", "live-image", "framework-adapter", "project-adapter", "unknown"]).optional(),
   split: z.string(),
   observations: z.record(z.string(), z.union([z.number(), z.string(), z.boolean()])),
   actions: z.array(z.string()),

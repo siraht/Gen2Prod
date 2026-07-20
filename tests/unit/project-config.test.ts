@@ -4,6 +4,7 @@ import { ConfigSchema, ProjectAdaptersConfigSchema } from "../../src/core/config
 describe("project adapter configuration", () => {
   test("requires immutable container identity and rejects unknown authority", () => {
     expect(ProjectAdaptersConfigSchema.parse({ sandbox: "container", containerImage: `gen2prod/runtime@sha256:${"a".repeat(64)}` })).toMatchObject({ sandbox: "container", includeInstall: false, previewEnvironmentKeys: [] });
+    expect(ProjectAdaptersConfigSchema.parse({ policyPath: ".gen2prod/project-adapter-research/production-incumbent.json" }).policyPath).toContain("production-incumbent");
     expect(() => ProjectAdaptersConfigSchema.parse({ sandbox: "container", containerImage: "gen2prod/runtime:latest" })).toThrow("immutable image digest");
     expect(() => ProjectAdaptersConfigSchema.parse({ sandbox: "copy-audit", allowAllEnvironment: true })).toThrow();
   });

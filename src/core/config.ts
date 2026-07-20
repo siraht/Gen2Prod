@@ -13,6 +13,7 @@ export const ProjectAdaptersConfigSchema = z.object({
   previewEnvironmentKeys: z.array(z.string().regex(/^[A-Z_][A-Z0-9_]*$/)).default([]),
   sandbox: z.enum(["copy-audit", "container"]).default("copy-audit"),
   containerImage: z.string().regex(/^[^\s@]+@sha256:[a-f0-9]{64}$/, "must be an immutable image digest").optional(),
+  policyPath: z.string().min(1).optional(),
 }).strict().superRefine((value, context) => {
   if (value.sandbox === "container" && !value.containerImage) context.addIssue({ code: "custom", path: ["containerImage"], message: "container sandbox requires a digest-pinned image" });
   if (value.sandbox === "copy-audit" && value.containerImage) context.addIssue({ code: "custom", path: ["containerImage"], message: "containerImage is only valid for the container sandbox" });
