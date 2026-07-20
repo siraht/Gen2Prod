@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { hashFile, sha256 } from "../../src/core/hash.ts";
 import { discoverProject } from "../../src/project-adapters/discovery.ts";
-import { runProjectCommand } from "../../src/project-adapters/process.ts";
+import { runProjectCommand, startProjectPreview } from "../../src/project-adapters/process.ts";
 import { parseProjectSource } from "../../src/project-adapters/registry.ts";
 import { planOwnedFile } from "../../src/project-adapters/rewrite/files.ts";
 import { projectOperationGraphHash } from "../../src/project-adapters/rewrite/text-edits.ts";
@@ -40,6 +40,21 @@ describe("safe project process runner and sandbox", () => {
     const drift = { ...value.command, args: ["-e", "await Bun.write('bun.lock','drifted')"] };
     const driftContract = ProjectContractSchema.parse({ ...value.contract, commands: { build: drift } });
     expect(runProjectCommand({ root: value.root, contract: driftContract, command: drift })).rejects.toThrow("Lockfile drift");
+  });
+
+  test("starts only the declared preview command, waits for readiness, and stops its process tree", async () => {
+    const value = await runnerFixture();
+    const port = 24_000 + Math.floor(Math.random() * 4_000);
+    await Bun.write(join(value.root, "server.ts"), "const server = Bun.serve({ port: Number(process.env.PREVIEW_PORT), fetch: () => new Response('ready') }); process.on('SIGTERM', () => { server.stop(); process.exit(0); });\n");
+    const preview = { executable: process.execPath, args: ["server.ts"], cwd: ".", envKeys: ["PREVIEW_PORT"], timeoutMs: 5_000 };
+    const contract = ProjectContractSchema.parse({ ...value.contract, commands: { ...value.contract.commands, preview }, authority: { ...value.contract.authority, permittedEnvironmentKeys: ["SAFE_VALUE", "PREVIEW_PORT"] } });
+    const url = `http://127.0.0.1:${port}/`;
+    const server = await startProjectPreview({ root: value.root, contract, url, environment: { PREVIEW_PORT: String(port) } });
+    expect(await (await fetch(url)).text()).toBe("ready");
+    expect(server.pid).toBeGreaterThan(0);
+    await server.stop();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await expect(fetch(url, { signal: AbortSignal.timeout(500) })).rejects.toThrow();
   });
 
   test("copies, patches, builds, and retains evidence without touching the source project", async () => {
