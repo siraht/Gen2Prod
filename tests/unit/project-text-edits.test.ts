@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { hashJson, sha256 } from "../../src/core/hash.ts";
+import { canonicalJson, hashJson, sha256 } from "../../src/core/hash.ts";
 import { discoverProject } from "../../src/project-adapters/discovery.ts";
 import { parseProjectSource } from "../../src/project-adapters/registry.ts";
 import { applyPreparedTextPatch, prepareTextPatch, projectOperationGraphHash, rollbackPreparedTextPatch } from "../../src/project-adapters/rewrite/text-edits.ts";
@@ -107,5 +107,26 @@ describe("hash-guarded project text edits", () => {
     expect(applyPreparedTextPatch(prepared)).rejects.toThrow("preimage changed");
     await rollbackPreparedTextPatch(prepared);
     expect(Bun.file(join(value.root, operation.path)).exists()).resolves.toBeFalse();
+  });
+
+  test("applies versioned CMS nodes canonically while retaining unknown fields and rolling back", async () => {
+    const root = await mkdtemp(join(tmpdir(), "g2p-cms-edits-"));
+    const before = { id: "a", parent: 0, children: [], name: "div", settings: { vendor: { retained: true } }, pluginPrivate: [1, 2] };
+    const document = { source: "bricksCopiedElements", version: "2.0", envelopeUnknown: { keep: true }, elements: [before] };
+    const source = JSON.stringify(document, null, 2);
+    await Bun.write(join(root, "bricks-export.json"), source);
+    const discovery = await discoverProject(root);
+    const project = await parseProjectSource(root, discovery);
+    const after = { ...before, settings: { ...before.settings, _cssGlobalClasses: ["page"] } };
+    const operation: ProjectPatchOperation = { kind: "update-cms-node", operationId: "cms-a", dependencies: [], path: "bricks-export.json", filePreimageHash: sha256(source), authorities: ["cms-export", "destination-path-ownership"], preservedRegionHashes: [], blastRadius: "component", expectedPostimageHash: sha256(canonicalJson(after)), validationObligations: ["cms-tree-roundtrip", "revision-precondition"], skippable: false, revision: sha256(source), nodeId: "a", before, after };
+    const prepared = await prepareTextPatch(root, discovery.contract, project, plan(project, operation));
+    const output = prepared.outputs.get("bricks-export.json")!;
+    expect(JSON.parse(output)).toEqual({ ...document, elements: [after] });
+    await applyPreparedTextPatch(prepared);
+    expect(JSON.parse((await readFile(join(root, "bricks-export.json"))).toString("utf8")).envelopeUnknown).toEqual({ keep: true });
+    await rollbackPreparedTextPatch(prepared);
+    expect((await readFile(join(root, "bricks-export.json"))).toString("utf8")).toBe(source);
+    const stale = { ...operation, operationId: "cms-stale", revision: sha256("stale") };
+    await expect(prepareTextPatch(root, discovery.contract, project, plan(project, stale))).rejects.toThrow("revision preimage mismatch");
   });
 });

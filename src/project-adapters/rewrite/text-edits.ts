@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, readFile, realpath, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { hashJson, sha256 } from "../../core/hash.ts";
+import { canonicalJson, hashJson, sha256 } from "../../core/hash.ts";
 import { sourceAnchor } from "../ir.ts";
 import type { ProjectContract, ProjectPatchOperation, ProjectPatchPlan, SourceAnchor, SourceProject } from "../../schemas/project-adapters.ts";
 
@@ -69,7 +69,14 @@ export async function prepareTextPatch(root: string, contract: ProjectContract, 
       continue;
     }
     if (original === undefined) throw new Error(`Patch target does not exist: ${path}`);
-    if (operations.some((operation) => operation.kind === "update-cms-node")) throw new Error(`CMS JSON operations require the versioned CMS patch engine: ${path}`);
+    const cmsOperations = operations.filter((operation): operation is Extract<ProjectPatchOperation, { kind: "update-cms-node" }> => operation.kind === "update-cms-node");
+    if (cmsOperations.length) {
+      if (cmsOperations.length !== operations.length) throw new Error(`CMS JSON and text operations cannot share target ${path}`);
+      const output = prepareCmsJson(original, cmsOperations, path, audit);
+      outputs.set(path, output);
+      outputFileHashes.set(path, sha256(output));
+      continue;
+    }
     let output = original;
     const resolved = (operations as TextSpanOperation[]).map((operation) => resolveSpan(operation, original, anchors));
     for (const item of resolved.sort((left, right) => right.start - left.start || right.end - left.end)) {
@@ -83,6 +90,24 @@ export async function prepareTextPatch(root: string, contract: ProjectContract, 
     outputFileHashes.set(path, sha256(output));
   }
   return { planId: plan.planId, projectRoot, originals, outputs, originalFileHashes, outputFileHashes, audit };
+}
+
+function prepareCmsJson(original: string, operations: Extract<ProjectPatchOperation, { kind: "update-cms-node" }>[], path: string, audit: PatchAuditEntry[]): string {
+  let document: unknown;
+  try { document = JSON.parse(original); } catch { throw new Error(`CMS patch target is not valid JSON: ${path}`); }
+  if (!document || typeof document !== "object" || !Array.isArray((document as { elements?: unknown }).elements)) throw new Error(`CMS patch target has no elements array: ${path}`);
+  const elements = (document as { elements: unknown[] }).elements;
+  for (const operation of operations) {
+    if (!operation.filePreimageHash || operation.filePreimageHash !== sha256(original) || operation.revision !== sha256(original)) throw new Error(`CMS revision preimage mismatch for ${operation.operationId}`);
+    const matches = elements.flatMap((element, index) => element && typeof element === "object" && (element as { id?: unknown }).id === operation.nodeId ? [index] : []);
+    if (matches.length !== 1) throw new Error(`CMS node ${operation.nodeId} is not unique for ${operation.operationId}`);
+    const index = matches[0]!;
+    if (canonicalJson(elements[index]) !== canonicalJson(operation.before)) throw new Error(`CMS node preimage mismatch for ${operation.operationId}`);
+    if (sha256(canonicalJson(operation.after)) !== operation.expectedPostimageHash) throw new Error(`CMS node postimage mismatch for ${operation.operationId}`);
+    elements[index] = structuredClone(operation.after);
+    audit.push({ operationId: operation.operationId, path, rebased: false, preimageHash: sha256(canonicalJson(operation.before)), postimageHash: operation.expectedPostimageHash });
+  }
+  return canonicalJson(document);
 }
 
 function validatePreservedRegions(operations: ProjectPatchOperation[], project: SourceProject): void {
