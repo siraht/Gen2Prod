@@ -4,6 +4,7 @@ import type { ProjectPatchOperation } from "../../schemas/project-adapters.ts";
 
 export type ImportRequest = {
   module: string;
+  sideEffect?: boolean;
   defaultImport?: string;
   namespaceImport?: string;
   named?: { imported: string; local?: string; typeOnly?: boolean }[];
@@ -33,7 +34,7 @@ export function planImport(input: ImportPlanInput): ProjectPatchOperation | unde
     if (bindings && ts.isNamespaceImport(bindings)) existingBindings.set(bindings.name.text, { module, imported: "*", typeOnly: clause.isTypeOnly });
     if (bindings && ts.isNamedImports(bindings)) for (const element of bindings.elements) existingBindings.set(element.name.text, { module, imported: element.propertyName?.text ?? element.name.text, typeOnly: clause.isTypeOnly || element.isTypeOnly });
   }
-  let complete = true;
+  let complete = input.request.sideEffect ? imports.some((declaration) => ts.isStringLiteral(declaration.moduleSpecifier) && declaration.moduleSpecifier.text === input.request.module) : true;
   const missing = new Set<string>();
   for (const desired of requested) {
     const existing = existingBindings.get(desired.local);
@@ -128,6 +129,7 @@ export function planUnusedImportRemoval(operationId: string, path: string, sourc
 function filterRequest(request: ImportRequest, missing: Set<string>): ImportRequest {
   return {
     module: request.module,
+    ...(request.sideEffect ? { sideEffect: true } : {}),
     ...(request.defaultImport && missing.has(request.defaultImport) ? { defaultImport: request.defaultImport } : {}),
     ...(request.namespaceImport && missing.has(request.namespaceImport) ? { namespaceImport: request.namespaceImport } : {}),
     ...(request.named ? { named: request.named.filter((item) => missing.has(item.local ?? item.imported)) } : {}),
@@ -140,12 +142,14 @@ function requestedBindings(request: ImportRequest): { local: string; imported: s
   if (request.defaultImport) values.push({ local: request.defaultImport, imported: "default", typeOnly: Boolean(request.typeOnly) });
   if (request.namespaceImport) values.push({ local: request.namespaceImport, imported: "*", typeOnly: Boolean(request.typeOnly) });
   for (const named of request.named ?? []) values.push({ local: named.local ?? named.imported, imported: named.imported, typeOnly: Boolean(request.typeOnly || named.typeOnly) });
-  if (values.length === 0) throw new Error(`Import request for ${request.module} has no bindings`);
+  if (values.length === 0 && !request.sideEffect) throw new Error(`Import request for ${request.module} has no bindings`);
+  if (request.sideEffect && values.length) throw new Error("Side-effect imports cannot declare bindings");
   if (request.namespaceImport && request.named?.length) throw new Error("Namespace and named imports cannot share one request");
   return values;
 }
 
 function renderImport(request: ImportRequest): string {
+  if (request.sideEffect) return `import ${JSON.stringify(request.module)};`;
   const pieces: string[] = [];
   if (request.defaultImport) pieces.push(request.defaultImport);
   if (request.namespaceImport) pieces.push(`* as ${request.namespaceImport}`);

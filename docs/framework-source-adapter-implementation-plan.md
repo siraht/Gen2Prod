@@ -22,6 +22,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P1.7 safe runner and copied sandbox (filesystem hardening still open) | Added exact command authorization, shell-free spawn, filtered env, deadlines, bounded/redacted logs, lockfile guards, copied dependencies only when requested, source fingerprint monitoring, retained command/runtime evidence, and sandbox-only patch/build dogfood | Runner/env/redaction/timeout/lock-drift and source-untouched sandbox build tests pass; production acceptance remains false until a pinned container/OS sandbox can prohibit arbitrary absolute-path writes |
 | 2026-07-20 | P1.8 declarative state capture | Extended stabilized browser evidence with hash-verified network fixtures, route navigation, safe/authorized action separation, post-action rendered source, per-fixture viewport/theme capture, environment/input equivalence hashes, and explicit branch/interaction coverage actions | Mocked route, safe details interaction, screenshot/DOM coverage, fixture equivalence, and unsafe-click refusal dogfood tests pass |
 | 2026-07-20 | P1.9 source/render correspondence | Added a strict correspondence artifact and confidence-scored matching across states using tags, text, attributes, class roles, accessible names, source/render ancestry, and layout visibility; repeated instances aggregate to one template node and low-confidence mappings cannot authorize destructive edits | Repeated React list and unique high-confidence mapping tests pass; sandbox-only DOM IDs are removed from serialized rendered source |
+| 2026-07-20 | P1.10 shared ACSS-tokenized SCSS | Added PostCSS/SCSS import/rule inventory, source+render selector reachability, owner-rule replacement/creation, side-effect style imports, proven-dead removal, registered ACSS/project variable checks, Sass compilation, and class-only BEM/nesting/utility gates | Unrendered branch retention, rendered-only retention, dead-rule removal, untouched import/rules, owner replacement, token coverage, compilation, and forbidden-selector tests pass |
 
 ### Additional implementation decisions
 
@@ -43,6 +44,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L04 | Astro compiler locations can extend beyond the original source for nested expressions in the currently pinned compiler | Such constructs are recorded as blocking unresolved regions; no guessed offset or regex fallback is allowed |
 | L05 | React JSX nested inside a callback still has a JSX container ancestor beyond the function boundary | Root detection walks to the source file, preventing callback children from appearing twice in the project graph |
 | L06 | `Bun.file().text()` removes a UTF-8 BOM while native compiler offsets and raw file hashes use the original byte-bearing source | All source adapters and patch preflights use a BOM-preserving byte read followed by UTF-8 decode; the edit-engine fixture locks BOM, CRLF, and final-newline preservation |
+| L07 | Absence from source is not selector-death evidence, and absence from a default render is not enough either | A legacy rule is removable only when complete source-class analysis and declared rendered-state evidence both miss it; incomplete dynamic class bindings make reachability unknown |
 
 ## 1. Outcome
 
@@ -758,13 +760,13 @@ Dependencies: P1.4, existing styling analyzers.
 
 Tasks:
 
-- [ ] Parse destination SCSS/CSS with PostCSS/SCSS and inventory imports/layers.
-- [ ] Select or create one shared generated SCSS entrypoint per destination contract.
-- [ ] Insert/replace BEM owner rules using existing canonical SCSS.
-- [ ] Import compiled/runtime ACSS variables without emitting ACSS utilities.
-- [ ] Analyze selector/class reachability across all project source and declared states.
-- [ ] Delete old rules only when source and render reachability both prove them dead.
-- [ ] Record project-wide residual styling debt separately from owned-surface hard gates.
+- [x] Parse destination SCSS/CSS with PostCSS/SCSS and inventory imports/layers.
+- [x] Select or create one shared generated SCSS entrypoint per destination contract.
+- [x] Insert/replace BEM owner rules using existing canonical SCSS.
+- [x] Import compiled/runtime ACSS variables without emitting ACSS utilities.
+- [x] Analyze selector/class reachability across all project source and declared states.
+- [x] Delete old rules only when source and render reachability both prove them dead.
+- [x] Record project-wide residual styling debt separately from owned-surface hard gates.
 
 Acceptance criteria:
 

@@ -57,4 +57,11 @@ describe("project import and owned-file helpers", () => {
     expect("before" in removal ? removal.before : "").toContain("Unused");
     expect("before" in removal ? removal.before : "").not.toContain("Used,");
   });
+
+  test("plans side-effect style imports once", () => {
+    const source = 'import "./existing.scss";\nexport function App(){return <main />}\n';
+    expect(planImport({ operationId: "same-style", path: "src/App.tsx", source, request: { module: "./existing.scss", sideEffect: true } })).toBeUndefined();
+    const planned = planImport({ operationId: "new-style", path: "src/App.tsx", source, request: { module: "./components/gen2prod/gen2prod.scss", sideEffect: true } })!;
+    expect("after" in planned ? planned.after : "").toContain('import "./components/gen2prod/gen2prod.scss";');
+  });
 });
