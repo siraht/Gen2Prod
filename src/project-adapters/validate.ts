@@ -10,6 +10,7 @@ import { applyPreparedTextPatch, rollbackPreparedTextPatch } from "./rewrite/tex
 import type { ProjectSandbox } from "./sandbox.ts";
 import { validateCompiledOwnedProjectScss } from "./styles.ts";
 import { verifyIsolationProof, verifyPreviewIsolationProof } from "./container.ts";
+import { runProjectMutationControls } from "./mutations.ts";
 
 export type ProjectValidationInput = {
   sandbox: ProjectSandbox;
@@ -23,7 +24,6 @@ export type ProjectValidationInput = {
   targetCapture?: CaptureResult | undefined;
   registeredVariables: string[];
   includeInstall?: boolean | undefined;
-  mutationControlRecall?: number | undefined;
   containerImage?: string | undefined;
   requireRuntime?: boolean | undefined;
   strictVisualThreshold?: number | undefined;
@@ -76,7 +76,8 @@ export async function validateProjectPatch(input: ProjectValidationInput): Promi
   if (!replaySourceStable) hardFailures.push("fresh patch replay did not reproduce every postimage");
   const idempotencePassed = input.secondPlan.operations.length === 0 && !input.secondPlan.requiredActions.some((item) => item.blocking);
   if (!idempotencePassed) hardFailures.push("second project plan is not exactly empty");
-  const mutationControlRecall = input.mutationControlRecall ?? 0;
+  const mutationReport = await runProjectMutationControls({ contract: input.contract, source: input.source, outputDirectory: input.sandbox.artifactsRoot, ...(input.candidateCapture ? { capture: input.candidateCapture } : {}) });
+  const mutationControlRecall = mutationReport.recall;
   if (mutationControlRecall !== 1) hardFailures.push("frozen project mutation-control recall is below 100%");
   const commandIsolation = verifyIsolationProof(input.sandbox.isolationProof);
   const previewIsolation = !input.candidateCapture || Boolean(input.sandbox.previewIsolationProof && verifyPreviewIsolationProof(input.sandbox.previewIsolationProof, input.sandbox.previewIsolationProof.publishedUrl));

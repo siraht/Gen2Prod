@@ -406,6 +406,23 @@ export const ProjectPreviewIsolationProofSchema = z.object({
   proofHash: Sha256Schema,
 }).strict();
 
+export const ProjectMutationControlReportSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  registryHash: Sha256Schema,
+  evaluatorHash: Sha256Schema,
+  corpusFingerprint: Sha256Schema,
+  toolchainFingerprint: Sha256Schema,
+  controls: z.array(z.object({ id: z.string().min(1), category: z.enum(["source", "style", "scope", "build", "render", "state", "replay", "cms"]), beforeHash: Sha256Schema, mutationHash: Sha256Schema, changedFields: z.array(z.string()).length(1), detected: z.boolean(), detector: z.string().min(1) }).strict()).min(1),
+  detected: z.number().int().nonnegative(),
+  total: z.number().int().positive(),
+  recall: z.number().min(0).max(1),
+  passed: z.boolean(),
+}).strict().superRefine((value, context) => {
+  if (value.total !== value.controls.length || value.detected !== value.controls.filter((item) => item.detected).length) context.addIssue({ code: "custom", path: ["controls"], message: "mutation summary does not match controls" });
+  if (value.recall !== value.detected / value.total || value.passed !== (value.detected === value.total)) context.addIssue({ code: "custom", path: ["recall"], message: "mutation recall/pass summary is inconsistent" });
+  if (new Set(value.controls.map((item) => item.id)).size !== value.controls.length) context.addIssue({ code: "custom", path: ["controls"], message: "mutation control IDs must be unique" });
+});
+
 export const ProjectDestinationBundleSchema = z.object({
   schemaVersion: z.literal("0.1.0"),
   projectId: z.string().min(1),
@@ -433,4 +450,5 @@ export type ProjectPatchPlan = z.infer<typeof ProjectPatchPlanSchema>;
 export type ProjectValidationReport = z.infer<typeof ProjectValidationReportSchema>;
 export type ProjectIsolationProof = z.infer<typeof ProjectIsolationProofSchema>;
 export type ProjectPreviewIsolationProof = z.infer<typeof ProjectPreviewIsolationProofSchema>;
+export type ProjectMutationControlReport = z.infer<typeof ProjectMutationControlReportSchema>;
 export type ProjectDestinationBundle = z.infer<typeof ProjectDestinationBundleSchema>;

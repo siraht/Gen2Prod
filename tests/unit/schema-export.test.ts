@@ -33,6 +33,7 @@ describe("versioned schema export", () => {
     expect(names).toContain("project-destination-bundle.schema.json");
     expect(names).toContain("project-isolation-proof.schema.json");
     expect(names).toContain("project-preview-isolation-proof.schema.json");
+    expect(names).toContain("project-mutation-control-report.schema.json");
     expect(names).toContain("project-validation-report.schema.json");
   });
 });

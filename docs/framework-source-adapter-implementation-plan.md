@@ -38,7 +38,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P8 Bricks offline patch vertical slice | Added 2.x/revision-gated root ownership, complete-object CMS preconditions, semantic container/tag/BEM output, selective owned inline-style removal, shared SCSS, dynamic/private field retention, offline import/rollback packages, exact rollback/reapply, and registry dispatch | Dogfood retains child/envelope/vendor/query/condition/interaction data, removes only known root style payloads, round-trips the tree, rejects stale preimages, and replans empty without remote mutation |
 | 2026-07-20 | P2.6 shared project acceptance validator | Added native-command, patch-scope, untouched-file, immutable-region/binding, state/branch/interaction, owned-SCSS, semantic/content/URL/form/interaction/accessibility, baseline/candidate/target image-diff, rollback, replay, idempotence, mutation-recall, and isolation gates in the strict validation-report schema | React dogfood produces retained diff PNGs and passes every deterministic/native/style/visual/rollback gate; copied/direct capture is rejected, while the full pipeline accepts only with runtime-generated hardened build/preview proofs and complete frozen-control evidence |
 | 2026-07-20 | P9 preview lifecycle | Added an exact-authority, shell-free preview process with environment allowlisting, bounded output, readiness polling, early-exit/timeout errors, and process-group teardown | A live Bun preview fixture becomes reachable only through its declared command and is unreachable after deterministic shutdown |
-| 2026-07-20 | P9 inspect-to-validation project controller | Added isolated baseline/candidate sandboxes, native builds, authorized live preview, declarative full-page Chromium state capture, exact adapter planning/replanning, strict validation, and content-addressed contract/source/plan/sandbox/report/replay artifacts | End-to-end React dogfood retains baseline/candidate screenshots and diff PNG, accepts with zero failures, writes six replay-linked artifact refs, and leaves the source project and its `.gen2prod` path untouched |
+| 2026-07-20 | P9 inspect-to-validation project controller | Added isolated baseline/candidate sandboxes, native builds, authorized live preview, declarative full-page Chromium state capture, exact adapter planning/replanning, strict validation, and content-addressed contract/source/plan/sandbox/mutation/report/replay artifacts | End-to-end React dogfood retains baseline/candidate screenshots and diff PNG, accepts with zero failures, writes eight replay-linked artifact refs, and leaves the source project and its `.gen2prod` path untouched |
 | 2026-07-20 | P9.2 explicit destination apply and rollback | Added a separately invoked acceptance boundary that re-discovers the destination, verifies framework/version/lockfile/root identity, preflights every authorized hash-bound operation before writes, persists a versioned rollback bundle, applies atomically, verifies postimages, and restores exact originals on demand or post-apply races | End-to-end React dogfood proves no implicit source write, accepted apply, generated-file creation, exact changed-file inventory, stale second-apply refusal, exact rollback including generated-file removal, and rejection of an unaccepted report |
 | 2026-07-20 | P9.3 project configuration | Added a strict optional project-adapter config namespace for artifact location, exact profile, frozen-install authority, preview environment names, and explicit copied-audit versus digest-pinned container posture | Existing configuration remains valid; unknown project keys, mutable container tags, missing container digests, and mismatched sandbox/image combinations fail schema validation |
 | 2026-07-20 | P9.3 portable run request | Added a strict, exported framework-neutral request that binds source/render correspondence, canonical semantic/BEM/SCSS surface, ACSS variables, policy hash, mode/profile, preview URL, and frozen fixture payloads | Duplicate/invalid variables, hidden safety claims, unknown fields, invalid payload statuses, and malformed canonical trees fail before planning; target-specific planning remains selected from discovered destination facts |
@@ -47,6 +47,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P9.3 operator documentation and conformance audit | Documented the project lifecycle, strict run request, state/network fixtures, baseline/candidate/target image evidence, ACSS/BEM contract, explicit apply/rollback, configuration, doctor, CMS offline/staging boundary, and failure recovery; updated README and the implementation matrix only to demonstrated scope | Documentation distinguishes complete React lifecycle evidence from per-profile vertical slices and explicitly retains container, mutation-corpus, staging, research, and cross-profile acceptance as bounded work |
 | 2026-07-20 | P1.7 hardened build-command backend | Added digest verification against local registry digests, Docker-created command containers with no network, read-only root, all capabilities dropped, no-new-privileges, resource bounds, exact writable project/artifact mounts, authorized environment names, lockfile guards, bounded/redacted logs, inspected constraint proof, proof hashing, and exact container cleanup | A pinned Bun 1.3.14 container dogfood writes its authorized project output while failing both an external fetch and an absolute-root write; tampered proof fails verification and no container remains. Preview/capture containment is tracked separately before this proof may authorize full acceptance |
 | 2026-07-20 | P1.7 hardened preview/capture boundary | Added a per-preview Docker bridge with outbound masquerading and inter-container communication disabled, a live failed egress probe, read-only/capability-dropped/no-new-privileges runtime, one exact loopback-only published port, inspected proof hashing, and deterministic container/network cleanup; validators now derive isolation only from retained build and preview proofs | Host Chromium captures the contained preview while the preview cannot fetch the Internet; full React pipeline dogfood accepts from runtime-generated proofs, retains both proofs in the sandbox artifact, applies and rolls back through the CLI, and exposes no caller flag capable of claiming hardened isolation |
+| 2026-07-20 | P0.3/P10.3 frozen project mutation controls | Added an 18-control one-field mutation registry spanning expressions, handlers, keys, branches, slots, utilities, forbidden selectors/raw values, runtime boundaries, scope/preimages, native build, rendered pixels, state behavior, rollback/idempotence, and CMS parent/revision; reports bind registry, evaluator sources, frozen corpus, framework/parser/lockfile/toolchain, and capture environment fingerprints | Every mutation changes exactly one frozen field, has a named detector, produces a unique mutation hash, and reaches 100% recall; validation runs the suite itself, retains a strict content-addressed report/replay input, and no API/CLI recall override remains |
 
 ### Additional implementation decisions
 
@@ -75,6 +76,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | D41 | `doctor.ok` continues to describe the existing general compiler while project acceptance readiness is a separate reported fact | Project adapters are optional and must not make the established static/image compiler appear broken | `projectAdapters.sandbox.acceptanceReady` and blocking required actions expose the stricter boundary without weakening or conflating the legacy readiness signal |
 | D42 | Hardened isolation is a runtime-inspected, hash-bound artifact rather than an input boolean | A caller-provided `true` cannot prove Docker image identity or kernel-enforced constraints | Every contained command records its container/image/command identity after verifying network, root filesystem, capability, privilege, mount, timeout, and cleanup conditions; full acceptance additionally requires equivalent preview/capture containment |
 | D43 | Preview capture uses an egress-denied bridge rather than Docker's `--network none` | `none` correctly blocks egress but cannot expose the preview to the host browser on this Docker host | The bridge disables IP masquerading and inter-container communication, proves outbound fetch failure live, and publishes only the declared container port to `127.0.0.1`; all other project commands retain `--network none` |
+| D44 | Project mutation recall is computed from a versioned frozen specimen and explicit one-field interventions | A numeric input would be as untrustworthy as a caller-provided sandbox boolean | Validation owns execution and fingerprinting; a malformed summary, duplicate control, ineffective mutation, detector miss, evaluator edit, toolchain change, or capture-environment change is visible and promotion requires exact recall 1 |
 
 ### Lessons learned
 
@@ -107,6 +109,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L25 | A local copied-sandbox run is still useful even when it cannot be promoted | The CLI produces native, preservation, and artifact evidence but deterministically reports the missing hardened isolation and 100% mutation-control recall instead of exposing flags that let an operator assert those proofs |
 | L26 | `--read-only` alone is not a sandbox contract | The runner also disables networking, drops all capabilities, enables no-new-privileges, bounds processes/memory/CPU, mounts only the copied project and artifact directory writable, runs as the invoking non-root UID/GID, and verifies Docker's effective HostConfig before execution |
 | L27 | Docker's `--internal` bridge and loopback port publishing are not composable on this host | A live dogfood connection was refused despite a healthy server, so preview isolation uses a no-masquerade/no-ICC bridge plus an explicit failed-egress probe instead of weakening to ordinary bridge networking |
+| L28 | Mutation controls need intervention-effect evidence in addition to detector results | Every control records a distinct before/mutation hash and exactly one changed field; ineffective or multi-field controls cannot masquerade as useful recall evidence |
 
 ## 1. Outcome
 
@@ -595,9 +598,9 @@ Dependencies: P0.1–P0.2.
 
 Tasks:
 
-- [ ] Define evaluator source files and corpus files included in `evaluatorHash` and `corpusFingerprint`.
-- [ ] Include framework/compiler/lockfile versions and capture environment in fingerprints.
-- [ ] Define mutation-control registry before research begins.
+- [x] Define evaluator source files and corpus files included in `evaluatorHash` and `corpusFingerprint`.
+- [x] Include framework/compiler/lockfile versions and capture environment in fingerprints.
+- [x] Define mutation-control registry before research begins.
 - [ ] Define search, validation, and sealed-holdout partition rules by project family.
 
 Acceptance criteria:
@@ -1322,23 +1325,23 @@ Dependencies: P10.2 and project validator.
 
 Minimum controls:
 
-- [ ] alter one preserved expression;
-- [ ] alter one event handler binding;
-- [ ] remove a repetition key;
-- [ ] remove one conditional branch;
-- [ ] change a slot/children relationship;
-- [ ] introduce a utility class;
-- [ ] introduce element/scoped/inline styling;
-- [ ] introduce an unregistered raw value;
-- [ ] change server/client or hydration boundary;
-- [ ] touch an unowned file;
-- [ ] bypass file/span preimage;
-- [ ] create a build-only failure;
-- [ ] create a rendered-only visual failure;
-- [ ] create a state-specific behavior failure;
-- [ ] break rollback;
-- [ ] break second-plan idempotence;
-- [ ] break CMS parentage/revision.
+- [x] alter one preserved expression;
+- [x] alter one event handler binding;
+- [x] remove a repetition key;
+- [x] remove one conditional branch;
+- [x] change a slot/children relationship;
+- [x] introduce a utility class;
+- [x] introduce element/scoped/inline styling;
+- [x] introduce an unregistered raw value;
+- [x] change server/client or hydration boundary;
+- [x] touch an unowned file;
+- [x] bypass file/span preimage;
+- [x] create a build-only failure;
+- [x] create a rendered-only visual failure;
+- [x] create a state-specific behavior failure;
+- [x] break rollback;
+- [x] break second-plan idempotence;
+- [x] break CMS parentage/revision.
 
 Acceptance criteria:
 

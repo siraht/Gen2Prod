@@ -55,9 +55,9 @@ describe("React strangler project adapter", () => {
     const provisional = await validateProjectPatch({ sandbox, contract: rediscovery.contract, source: project, candidate: reparsed, plan, secondPlan: second, baselineCapture: capture, candidateCapture: capture, targetCapture: capture, registeredVariables: canonical.registeredVariables });
     expect(provisional.accepted).toBeFalse();
     expect(provisional.hardFailures).toContain("hardened network-disabled filesystem isolation evidence is absent");
-    expect(provisional.hardFailures).toContain("frozen project mutation-control recall is below 100%");
+    expect(provisional.mutationControlRecall).toBe(1);
     expect(provisional.visualConditions[0]?.pixelDifferenceRatio).toBe(0);
-    const controlsOnly = await validateProjectPatch({ sandbox, contract: rediscovery.contract, source: project, candidate: reparsed, plan, secondPlan: second, baselineCapture: capture, candidateCapture: capture, targetCapture: capture, registeredVariables: canonical.registeredVariables, mutationControlRecall: 1 });
+    const controlsOnly = await validateProjectPatch({ sandbox, contract: rediscovery.contract, source: project, candidate: reparsed, plan, secondPlan: second, baselineCapture: capture, candidateCapture: capture, targetCapture: capture, registeredVariables: canonical.registeredVariables });
     expect(controlsOnly.accepted).toBeFalse();
     expect(controlsOnly.hardFailures).toContain("hardened network-disabled filesystem isolation evidence is absent");
     expect(controlsOnly.rollbackPassed).toBeTrue();

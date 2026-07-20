@@ -52,7 +52,7 @@ test("exposes the complete project command tree and performs read-only inspectio
   expect(runOutput.command).toBe("project run");
   expect(runOutput.data.accepted).toBeFalse();
   expect(runOutput.data.hardFailures).toContain("hardened network-disabled filesystem isolation evidence is absent");
-  expect(runOutput.data.hardFailures).toContain("frozen project mutation-control recall is below 100%");
+  expect(runOutput.data.hardFailures).not.toContain("frozen project mutation-control recall is below 100%");
   expect(runOutput.data.artifactRoot).toBe(runRoot);
   expect(await Bun.file(join(root, "src", "App.tsx")).text()).toBe(original);
   expect(Bun.file(join(root, ".gen2prod")).exists()).resolves.toBeFalse();

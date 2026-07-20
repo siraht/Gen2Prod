@@ -70,6 +70,7 @@ export const ArtifactTypeSchema = z.enum([
   "project-destination-bundle",
   "project-sandbox",
   "project-validation-report",
+  "project-mutation-report",
   "validation-report",
   "visual-report",
   "performance-report",
