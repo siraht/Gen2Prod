@@ -60,10 +60,14 @@ test("exposes the complete project command tree and performs read-only inspectio
 
 test("doctor emits a stable JSON envelope", async () => {
   const child = Bun.spawn(["bun", "src/cli.ts", "--json", "doctor"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
-  const output = JSON.parse(await new Response(child.stdout).text()) as { ok: boolean; command: string; data: { registeredPasses: number } };
+  const output = JSON.parse(await new Response(child.stdout).text()) as { ok: boolean; command: string; data: { registeredPasses: number; projectAdapters: { profiles: unknown[]; parsers: Record<string, string>; sandbox: { configured: string; acceptanceReady: boolean } } }; requiredActions: { id: string }[] };
   expect(await child.exited).toBe(0);
   expect(output.command).toBe("doctor");
   expect(output.data.registeredPasses).toBeGreaterThan(20);
+  expect(output.data.projectAdapters.profiles).toHaveLength(10);
+  expect(output.data.projectAdapters.parsers).toMatchObject({ typescript: "5.9.3", vue: "3.5.40", svelte: "5.56.6", astro: "4.0.0" });
+  expect(output.data.projectAdapters.sandbox).toMatchObject({ configured: "copy-audit", acceptanceReady: false });
+  expect(output.requiredActions.map((item) => item.id)).toContain("project-sandbox:container");
 }, 15_000);
 
 test("exposes framework adapter selection on production runs", async () => {

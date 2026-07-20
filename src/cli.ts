@@ -52,6 +52,7 @@ import { runProjectPipeline } from "./project-adapters/pipeline.ts";
 import { parseProjectSource } from "./project-adapters/registry.ts";
 import { assertProjectRequest, loadProjectAdapterRunRequest, planProjectAdapterRequest, planningContext } from "./project-adapters/request.ts";
 import { ProjectContractSchema, ProjectDestinationBundleSchema, ProjectFrameworkProfileSchema, ProjectPatchPlanSchema, ProjectValidationReportSchema, SourceProjectSchema } from "./schemas/project-adapters.ts";
+import { inspectProjectAdapterReadiness } from "./project-adapters/doctor.ts";
 
 type GlobalOptions = { config: string; workspace: string; acss?: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -672,17 +673,20 @@ program
     let projectConfig = false;
     let automaticcss: { version: string; mode: string; variables: number; utilityClasses: number; sourceHash: string } | null = null;
     let frameworkAdapters: { targets: string[]; policy: string } | null = null;
+    let projectAdapters: Awaited<ReturnType<typeof inspectProjectAdapterReadiness>> | null = null;
     try {
       const project = await config(); projectConfig = true;
       const bundle = await prepareConfiguredAutomaticCss(project, globals().acss);
       const adapterPolicy = await currentAdapterPolicy(project);
       frameworkAdapters = { targets: project.adapters?.targets ?? ALL_FRAMEWORK_ADAPTER_TARGETS, policy: adapterPolicy.name };
+      projectAdapters = await inspectProjectAdapterReadiness(project);
       if (bundle) automaticcss = { version: bundle.provenance.version, mode: bundle.provenance.moduleMode, variables: bundle.registry.tokens.length, utilityClasses: bundle.catalog.utilityClasses.length, sourceHash: bundle.provenance.sourceHash };
       else warnings.push("Automatic.css is not configured or no release ZIP was discovered");
     } catch (error) { warnings.push(error instanceof Error ? error.message : String(error)); }
-    const data = { version: program.version(), runtime: `Bun ${Bun.version}`, platform: `${process.platform}/${process.arch}`, browser, projectConfig, automaticcss, frameworkAdapters, registeredPasses: createPassRegistry().list().length, externalModelProvider: process.env.GEN2PROD_MODEL_ENDPOINT ? "configured" : "local deterministic provider" };
+    const data = { version: program.version(), runtime: `Bun ${Bun.version}`, platform: `${process.platform}/${process.arch}`, browser, projectConfig, automaticcss, frameworkAdapters, projectAdapters, registeredPasses: createPassRegistry().list().length, externalModelProvider: process.env.GEN2PROD_MODEL_ENDPOINT ? "configured" : "local deterministic provider" };
     const envelope = result("doctor", data); envelope.warnings = warnings; envelope.ok = Boolean(browser && projectConfig);
-    emit(envelope, `Gen2Prod ${data.version}\n${data.runtime}\n${data.platform}\nBrowser: ${browser ?? "missing"}\nConfiguration: ${projectConfig ? "valid" : "missing/invalid"}\nAutomatic.css: ${automaticcss ? `${automaticcss.version}/${automaticcss.mode} (${automaticcss.variables} variables; ${automaticcss.utilityClasses} utility classes)` : "missing"}\nFramework adapters: ${frameworkAdapters ? `${frameworkAdapters.targets.join(", ")} (${frameworkAdapters.policy})` : "missing"}\nRegistered passes: ${data.registeredPasses}\nPlanner: ${data.externalModelProvider}`);
+    if (projectAdapters) envelope.requiredActions.push(...projectAdapters.requiredActions);
+    emit(envelope, `Gen2Prod ${data.version}\n${data.runtime}\n${data.platform}\nBrowser: ${browser ?? "missing"}\nConfiguration: ${projectConfig ? "valid" : "missing/invalid"}\nAutomatic.css: ${automaticcss ? `${automaticcss.version}/${automaticcss.mode} (${automaticcss.variables} variables; ${automaticcss.utilityClasses} utility classes)` : "missing"}\nFramework adapters: ${frameworkAdapters ? `${frameworkAdapters.targets.join(", ")} (${frameworkAdapters.policy})` : "missing"}\nProject parsers: ${projectAdapters ? `TypeScript ${projectAdapters.parsers.typescript}; Vue ${projectAdapters.parsers.vue}; Svelte ${projectAdapters.parsers.svelte}; Astro ${projectAdapters.parsers.astro}` : "missing"}\nProject sandbox: ${projectAdapters ? `${projectAdapters.sandbox.configured} (${projectAdapters.sandbox.acceptanceReady ? "acceptance ready" : "not acceptance ready"})` : "missing"}\nRegistered passes: ${data.registeredPasses}\nPlanner: ${data.externalModelProvider}`);
   });
 
 program.parseAsync(process.argv).catch((error: unknown) => {

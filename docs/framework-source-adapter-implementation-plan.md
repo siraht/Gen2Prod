@@ -43,6 +43,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P9.3 project configuration | Added a strict optional project-adapter config namespace for artifact location, exact profile, frozen-install authority, preview environment names, and explicit copied-audit versus digest-pinned container posture | Existing configuration remains valid; unknown project keys, mutable container tags, missing container digests, and mismatched sandbox/image combinations fail schema validation |
 | 2026-07-20 | P9.3 portable run request | Added a strict, exported framework-neutral request that binds source/render correspondence, canonical semantic/BEM/SCSS surface, ACSS variables, policy hash, mode/profile, preview URL, and frozen fixture payloads | Duplicate/invalid variables, hidden safety claims, unknown fields, invalid payload statuses, and malformed canonical trees fail before planning; target-specific planning remains selected from discovered destination facts |
 | 2026-07-20 | P9.3 project CLI | Added stable JSON/human `project inspect`, `plan`, `run`, `apply`, and `rollback` commands, portable plan input, explicit profile selection, output paths, retained required actions, and environment-name forwarding | CLI dogfood proves read-only inspect/plan, copied-sandbox artifact production with mandatory isolation/mutation rejection, accepted explicit apply, stale refusal, and exact CLI rollback; all project schemas export with the existing schema bundle |
+| 2026-07-20 | P9.3 project doctor | Added installed TypeScript/Vue/Svelte/Astro versions, PHP availability, all ten exact profiles and capability hash, Docker CLI/daemon/image evidence, configured sandbox posture, and acceptance readiness to human/JSON diagnostics | The repository config reports its copied-audit sandbox as useful but not acceptance-ready and emits a precise blocking container action; immutable container configurations additionally prove daemon and local image presence |
 
 ### Additional implementation decisions
 
@@ -68,6 +69,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | D38 | The inverse bundle is persisted before destination mutation and is independent of sandbox lifetime | An accepted sandbox may be cleaned up or a process may fail immediately after the first rename | Apply has a durable exact-original recovery authority before any write; postimage verification triggers automatic rollback on an observed apply race |
 | D39 | Project adapter configuration names environment variables but never stores their values | Configuration and result artifacts are durable and commonly committed or retained | Preview secrets remain process-local; the runtime may forward only names authorized by both the discovered contract and project configuration |
 | D40 | The CLI run request carries one framework-neutral canonical surface plus an explicit target discriminator | All six source planners consume the same semantic tree/SCSS contract even though they lower it differently | The artifact stays portable and strict without creating six parallel semantic schemas; discovery must agree with the discriminator before planning |
+| D41 | `doctor.ok` continues to describe the existing general compiler while project acceptance readiness is a separate reported fact | Project adapters are optional and must not make the established static/image compiler appear broken | `projectAdapters.sandbox.acceptanceReady` and blocking required actions expose the stricter boundary without weakening or conflating the legacy readiness signal |
 
 ### Lessons learned
 
@@ -1238,7 +1240,7 @@ Tasks:
 
 - [x] Add `project` command tree and stable JSON envelopes.
 - [x] Add project-adapter configuration without weakening existing config validation.
-- [ ] Extend `doctor` with parser/compiler/browser/sandbox readiness and supported profiles.
+- [x] Extend `doctor` with parser/compiler/browser/sandbox readiness and supported profiles.
 - [x] Export all schemas.
 - [ ] Document project contract examples, state fixtures, generated artifacts, safety model, CMS staging, and troubleshooting.
 - [ ] Update implementation matrix only after executable evidence exists.
