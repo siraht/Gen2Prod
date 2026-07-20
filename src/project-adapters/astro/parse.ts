@@ -9,8 +9,11 @@ type AstroPoint = { offset: number; line: number; column: number };
 type AstroNode = { type: string; name?: string; position?: { start: AstroPoint; end: AstroPoint }; children?: AstroNode[]; attributes?: { type?: string; name?: string; value?: string; position?: { start: AstroPoint; end: AstroPoint } }[] };
 
 function convertAstro(file: string, source: string, node: AstroNode, bindings: ProjectBinding[], unresolved: SourceProject["unresolved"]): ProjectMarkupNode | undefined {
-  const start = node.position?.start.offset;
-  const end = node.position?.end.offset;
+  const compilerStart = node.position?.start.offset;
+  const compilerEnd = node.position?.end.offset;
+  const resolved = node.name && ["element", "component", "custom-element"].includes(node.type) && compilerStart !== undefined ? resolveAstroTagSpan(source, compilerStart, node.name, compilerEnd) : undefined;
+  const start = resolved?.start ?? compilerStart;
+  const end = resolved?.end ?? compilerEnd;
   if (start === undefined || end === undefined || start < 0 || end < start || end > source.length) {
     unresolved.push({ id: `astro-location:${file}:${start ?? "missing"}`, concern: `Invalid compiler source location ${start ?? "?"}:${end ?? "?"} for ${node.type}`, evidenceNeeded: ["Astro compiler with exact location support for this construct"], blocking: true });
     return undefined;
@@ -24,9 +27,34 @@ function convertAstro(file: string, source: string, node: AstroNode, bindings: P
     attributes[attribute.name] = attribute.type === "expression" ? `{${sha256(value)}}` : value;
     if (attribute.name.startsWith("client:")) bindings.push({ name: attribute.name, kind: "action", sourceHash: sha256(value || attribute.name), immutable: true });
   }
-  const children = (node.children ?? []).flatMap((child) => { const value = convertAstro(file, source, child, bindings, unresolved); return value ? [value] : []; });
+  const island = node.type === "component" && (node.attributes ?? []).some((attribute) => attribute.name?.startsWith("client:"));
+  const children = island ? [] : (node.children ?? []).flatMap((child) => { const value = convertAstro(file, source, child, bindings, unresolved); return value ? [value] : []; });
   if (nodeKind === "expression" || nodeKind === "opaque") bindings.push({ name: exact, kind: node.type === "frontmatter" ? "data" : "unknown", sourceHash: sha256(exact), immutable: true });
-  return markupNode({ id: nodeId(file, start, `astro:${node.type}`), kind: nodeKind, anchor: sourceAnchor(file, source, start, end, `Astro:${node.type}`, exact), ...(node.name ? { tag: node.name } : {}), attributes, source: exact, rewriteAuthority: nodeKind === "static" ? "owned-static" : "preserve-verbatim", referencedBindings: [], observedStates: [], branchIds: [], children });
+  return markupNode({ id: nodeId(file, start, `astro:${node.type}`), kind: nodeKind, anchor: sourceAnchor(file, source, start, end, `Astro:${node.type}`, exact), ...(node.name ? { tag: node.name } : {}), attributes, source: exact, rewriteAuthority: island ? "preserve-verbatim" : nodeKind === "static" ? "owned-static" : "preserve-verbatim", referencedBindings: [], observedStates: [], branchIds: [], children });
+}
+
+function resolveAstroTagSpan(source: string, start: number, name: string, compilerEnd: number | undefined): { start: number; end: number } | undefined {
+  if (!source.startsWith(`<${name}`, start)) return undefined;
+  const openingEnd = scanTagEnd(source, start);
+  if (openingEnd === undefined) return undefined;
+  if (/\/\s*>$/.test(source.slice(start, openingEnd))) return { start, end: openingEnd };
+  const closing = `</${name}>`;
+  if (compilerEnd !== undefined && compilerEnd <= source.length && source.slice(start, compilerEnd).endsWith(closing)) return { start, end: compilerEnd };
+  const closingStart = source.indexOf(closing, openingEnd);
+  return closingStart < 0 ? undefined : { start, end: closingStart + closing.length };
+}
+
+function scanTagEnd(source: string, start: number): number | undefined {
+  let quote = "", braces = 0;
+  for (let index = start + 1; index < source.length; index += 1) {
+    const character = source[index]!;
+    if (quote) { if (character === quote && source[index - 1] !== "\\") quote = ""; continue; }
+    if (character === '"' || character === "'" || character === "`") { quote = character; continue; }
+    if (character === "{") { braces += 1; continue; }
+    if (character === "}") { braces = Math.max(0, braces - 1); continue; }
+    if (character === ">" && braces === 0) return index + 1;
+  }
+  return undefined;
 }
 
 export async function parseAstroProject(root: string, discovery: ProjectDiscoveryResult): Promise<SourceProject> {

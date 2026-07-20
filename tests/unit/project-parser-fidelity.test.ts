@@ -77,6 +77,17 @@ describe("framework parser location fidelity", () => {
     exact(result.source, flatten(result.parsed.roots));
   });
 
+  test("Astro repairs compiler-truncated self-closing island spans and locks hydration mode", async () => {
+    const source = `---\nimport Counter from '../Counter.jsx';\n---\n<main><Counter client:load count={1} /></main>`;
+    const result = await project("astro", "src/pages/index.astro", source);
+    const island = flatten(result.parsed.roots).find((node) => node.tag === "Counter")!;
+    expect(island.source).toBe('<Counter client:load count={1} />');
+    expect(island.attributes["client:load"]).toBe("");
+    expect(island.rewriteAuthority).toBe("preserve-verbatim");
+    expect(result.parsed.bindings.some((binding) => binding.name === "client:load" && binding.kind === "action")).toBeTrue();
+    exact(source, flatten(result.parsed.roots));
+  });
+
   test("WordPress preserves nested, self-closing, and unknown blocks exactly", async () => {
     const source = '<!-- wp:group {"className":"page"} --><div><!-- wp:image {"id":7} /--><!-- wp:vendor/widget {"x":{"y":1}} --><x-widget></x-widget><!-- /wp:vendor/widget --></div><!-- /wp:group -->';
     const result = await project("wordpress", "templates/index.html", source);

@@ -28,6 +28,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P1.3 exact native adapter interface | Expanded the registry to exact profiles with read-only discovery, strict Source Project parsing, route projection, planner dispatch, native sandbox validation, and consumed/ignored evidence reporting | Profile/target mismatch fails closed; route projection and evidence accounting tests pass; profiles without a mutation planner return a typed blocking zero-operation plan |
 | 2026-07-20 | P4 Vue SFC graph and strangler planner vertical slice | Added setup/classic script import and binding analysis, typed props/emits/ref/computed/slot/component/style inventories, exact SFC import anchoring, correspondence-gated semantic shell integration, shared ACSS-tokenized nested BEM SCSS, preservation-region obligations, owned-file conflict handling, and Vue/Nuxt registry dispatch | Parser fixtures distinguish recognized Vue semantics from verbatim preservation; dirty SFC dogfood preserves `v-if` and interpolation source, compiles both edited and generated templates, removes root utilities, and produces an empty second plan |
 | 2026-07-20 | P5 Svelte/SvelteKit graph and strangler planner vertical slice | Added runes/legacy prop/store/import/module/style inventories, first-class directive and await/snippet/slot evidence, SvelteKit layout/special-module/load/action/SSR-setting discovery, version-aware Svelte 5 snippet/legacy slot shells, exact script import anchoring, correspondence-gated root wrapping, shared SCSS integration, and registry dispatch | Parser/discovery fixtures cover nested dynamic routes and runtime semantics; dirty Svelte dogfood preserves keyed `{#each}`, `{#if}`, action, event-handler, and expression text; edited/generated components compile and the second plan is empty |
+| 2026-07-20 | P6 Astro island span hardening | Added a compiler-start-anchored, quote/brace-aware tag-span resolver for Astro constructs whose compiler end offsets truncate self-closing components, and classified hydrated components as immutable islands | A `client:load` component with an expression prop retains its complete exact source/hash and hydration binding; genuinely invalid expression locations still become blocking unresolved evidence |
 
 ### Additional implementation decisions
 
@@ -40,6 +41,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | D25 | A copied working directory plus post-run source hashing is an audited sandbox, not a hardened filesystem boundary | This host has Docker but no pinned Gen2Prod runtime image, and unprivileged mount namespaces are disabled | Local dogfood may run and detect source-project changes; promotion/accepted reports must require a digest-pinned network-disabled container backend before claiming escaped-output prevention |
 | D26 | Vue integration wraps an existing route root in an owned slot shell instead of printing the template AST | Compiler-generated output would churn whitespace and can normalize directive syntax | Only the root element span and native script import boundary change; every child directive, interpolation, listener, binding, and sibling whitespace span is copied verbatim |
 | D27 | Svelte shells use the destination major version's native child-content contract | Svelte 5 passes children as snippets while Svelte 4 and earlier expose slots | Version 5 emits a typed `Snippet` plus `$props()`/`{@render}` shell; older destinations emit `<slot />`, avoiding a framework-upgrade side effect |
+| D28 | Astro compiler start offsets may anchor a deterministic lexical span repair, but unanchored or ambiguous positions may not be guessed | The pinned compiler truncates some component end offsets while still reporting a correct opening-tag start | A brace/quote-aware scanner may complete that exact tag; hydrated islands then become preserve-verbatim nodes, while unresolved expressions continue to fail closed |
 
 ### Lessons learned
 
@@ -57,6 +59,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L10 | A setup binding named `props` is not the useful prop inventory when `defineProps` carries a type literal | Vue graph analysis records the literal type's property names while retaining the call source hash; destructured props retain their local binding names |
 | L11 | Svelte's modern AST gives the script element span and a separate exact `content.start` boundary | Imports are inserted inside the existing instance script at that compiler offset, or in a new leading script when no instance script exists; the component AST is never reprinted |
 | L12 | Svelte directive names alone do not identify semantics in the modern AST (`click`, `value`, and `fade` omit their source prefixes) | Inventory and binding classification use node types such as `OnDirective`, `BindDirective`, `UseDirective`, and `TransitionDirective`, while retaining each complete directive span verbatim |
+| L13 | Astro's self-closing island `position.end` can stop inside the opening tag even when `position.start` is exact | Verify the source prefix against the compiler node name, scan the tag with quote/brace state, and lock the entire hydrated component rather than trusting a partial hash |
 
 ## 1. Outcome
 
@@ -1042,7 +1045,7 @@ Tasks:
 
 - [ ] Parse frontmatter, templates, expressions, slots, components, content/data access, layouts, and style blocks.
 - [ ] Discover pages, dynamic routes, layouts, collections, framework islands, and client directives.
-- [ ] Preserve `client:*` hydration directives and imported island boundaries exactly.
+- [x] Preserve `client:*` hydration directives and imported island boundaries exactly.
 
 Acceptance criteria:
 
