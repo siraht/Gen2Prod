@@ -18,8 +18,8 @@ importers:
         specifier: 3.5.40
         version: 3.5.40
       '@website-ontology/contracts':
-        specifier: file:/data/projects/WebsiteOntology/packages/contracts
-        version: file:../WebsiteOntology/packages/contracts
+        specifier: file:vendor/website-ontology-contracts-2.0.0-dev.1.tgz
+        version: file:vendor/website-ontology-contracts-2.0.0-dev.1.tgz
       axe-core:
         specifier: ^4.10.3
         version: 4.12.1
@@ -1087,8 +1087,9 @@ packages:
   '@vue/shared@3.5.40':
     resolution: {integrity: sha512-WxnBtruIqOoV3rA4jeKDWzrYI5h7Cp4+pjwDi8kWGHz+IslhiN+wguLVVhtv2l8VoU02rzDCVfDjgCl1lNpZVg==}
 
-  '@website-ontology/contracts@file:../WebsiteOntology/packages/contracts':
-    resolution: {directory: ../WebsiteOntology/packages/contracts, type: directory}
+  '@website-ontology/contracts@file:vendor/website-ontology-contracts-2.0.0-dev.1.tgz':
+    resolution: {integrity: sha512-blExdMYwEp1TtKBNeSX0133OPpB3TBOKoHOQ2nsyGfIl+H1FmwA/fpJP98DGV5SNCEyLq/yYiQ+S6U9Hfvjq/Q==, tarball: file:vendor/website-ontology-contracts-2.0.0-dev.1.tgz}
+    version: 2.0.0-dev.1
     engines: {node: '>=20.0.0'}
 
   acorn@8.17.0:
@@ -3095,7 +3096,7 @@ snapshots:
 
   '@vue/shared@3.5.40': {}
 
-  '@website-ontology/contracts@file:../WebsiteOntology/packages/contracts':
+  '@website-ontology/contracts@file:vendor/website-ontology-contracts-2.0.0-dev.1.tgz':
     dependencies:
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)

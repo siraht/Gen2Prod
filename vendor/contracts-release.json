@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "g2p-contract-package-pin/2.0",
+  "package": "@website-ontology/contracts",
+  "version": "2.0.0-dev.1",
+  "file": "website-ontology-contracts-2.0.0-dev.1.tgz",
+  "sha256": "821a8465917f00d2b6b48f1c774a759605448ca40b60a58deee2261aec09a177",
+  "sourceRepository": "WebsiteOntology",
+  "sourceCommit": "117fd91"
+}
