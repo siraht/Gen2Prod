@@ -113,6 +113,20 @@ describe("framework parser location fidelity", () => {
     exact(source, nodes);
   });
 
+  test("WordPress classifies dynamic blocks, template parts, and balanced shortcodes as immutable", async () => {
+    const source = '<!-- wp:group {"className":"page"} --><div>[gallery ids="1,2"]<!-- wp:query {"queryId":3} --><div>Dynamic</div><!-- /wp:query --><!-- wp:template-part {"slug":"header"} /--></div><!-- /wp:group -->';
+    const result = await project("wordpress", "templates/index.html", source);
+    const graph = (result.parsed.metadata.wordpressGraph as { blocks: string[]; dynamicBlocks: string[]; shortcodes: string[]; templateParts: string[] }[])[0]!;
+    expect(graph.blocks).toEqual(["group", "query", "template-part"]);
+    expect(graph.dynamicBlocks).toEqual(["query", "template-part"]);
+    expect(graph.shortcodes).toEqual(["gallery"]);
+    expect(graph.templateParts).toEqual(["\"header\""]);
+    const nodes = flatten(result.parsed.roots);
+    expect(nodes.find((node) => node.tag === "wp:query")?.rewriteAuthority).toBe("preserve-verbatim");
+    expect(nodes.find((node) => node.tag === "shortcode:gallery")?.source).toBe('[gallery ids="1,2"]');
+    exact(source, nodes);
+  });
+
   test("Bricks retains the complete JSON export and rejects broken graph references", async () => {
     const source = JSON.stringify({ source: "bricksCopiedElements", version: "2.0", vendor: { retained: true }, elements: [{ id: "a", parent: 0, children: ["missing"], settings: { _cssGlobalClasses: ["hero"] } }] });
     const result = await project("bricks", "bricks-export.json", source);
