@@ -42,7 +42,9 @@ describe("project pipeline orchestration", () => {
     expect(report.gates.map((gate) => gate.gate)).toEqual(["A", "B", "C", "D", "E", "F", "G", "H", "I", "J"]);
     expect(report.gates.every((gate) => gate.passed)).toBeTrue();
     const replay = await store.readJson<{ events: { pass: string; authorities: string[]; delta: Record<string, number>; rollback?: unknown }[] }>(await store.getRef(result.artifacts.replay));
-    expect(replay.events.map((event) => event.pass)).toEqual(["project-inspect", "project-parse", "project-plan", "project-sandbox", "project-validate"]);
+    expect(replay.events.map((event) => event.pass)).toEqual(["project-inspect", "project-parse", "project-route-projection", "project-plan", "project-sandbox", "project-validate"]);
+    expect(result.projection?.states).toHaveLength(1);
+    expect(result.artifacts.projection).toBeDefined();
     expect(replay.events.every((event) => event.authorities.length > 0 && Object.keys(event.delta).length > 0)).toBeTrue();
     expect(replay.events.find((event) => event.pass === "project-sandbox")?.rollback).toBeDefined();
     expect(await Bun.file(join(root, "src", "App.tsx")).text()).toBe(source);

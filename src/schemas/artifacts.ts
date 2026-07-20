@@ -64,6 +64,7 @@ export const ArtifactTypeSchema = z.enum([
   "project-contract",
   "source-project-ir",
   "dynamic-region-map",
+  "project-route-projection",
   "project-ownership-map",
   "project-patch-plan",
   "project-patch",

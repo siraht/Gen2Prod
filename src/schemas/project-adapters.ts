@@ -247,6 +247,25 @@ export const ProjectCorrespondenceSchema = z.object({
   unresolved: z.array(z.object({ sourceNodeId: z.string(), reason: z.string(), requiredEvidence: z.array(z.string()) }).strict()),
 }).strict();
 
+export const ProjectRouteProjectionSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  projectId: z.string().min(1),
+  sourceProjectHash: Sha256Schema,
+  states: z.array(z.object({
+    stateId: z.string().min(1),
+    viewport: z.number().int().positive(),
+    theme: z.string().min(1),
+    screenshotHash: Sha256Schema,
+    renderedSourceHash: Sha256Schema,
+    canonicalOutputHash: Sha256Schema,
+    correspondenceHash: Sha256Schema,
+    dynamicRegionIds: z.array(z.string().min(1)),
+    blocks: z.array(z.object({ block: z.string().min(1), canonicalNodeId: z.string().min(1), sourceNodeId: z.string().min(1).optional(), decision: z.enum(["existing-component", "wrap", "extract", "preserve-slot", "unresolved"]), confidence: z.number().min(0).max(1), preservedRegionIds: z.array(z.string().min(1)) }).strict()),
+    opportunities: z.array(z.object({ sourceNodeId: z.string().min(1), kind: z.enum(["safe-replacement", "safe-wrapper", "component-extraction", "preserved-slot", "requires-evidence"]), reason: z.string().min(1) }).strict()),
+  }).strict()).min(1),
+  projectionHash: Sha256Schema,
+}).strict();
+
 export type ProjectCanonicalNodeShape = {
   nodeId: string;
   originalTag: string;
@@ -478,6 +497,7 @@ export type ProjectMarkupNode = ProjectMarkupNodeShape;
 export type SourceProject = z.infer<typeof SourceProjectSchema>;
 export type ProjectOwnershipMap = z.infer<typeof ProjectOwnershipMapSchema>;
 export type ProjectCorrespondence = z.infer<typeof ProjectCorrespondenceSchema>;
+export type ProjectRouteProjection = z.infer<typeof ProjectRouteProjectionSchema>;
 export type ProjectAdapterRunRequest = z.infer<typeof ProjectAdapterRunRequestSchema>;
 export type ProjectPatchOperation = z.infer<typeof ProjectPatchOperationSchema>;
 export type ProjectPatchPlan = z.infer<typeof ProjectPatchPlanSchema>;
