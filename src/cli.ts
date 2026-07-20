@@ -60,6 +60,7 @@ import { canonicalSiteSpecArtifactSchema, type CanonicalSiteSpecArtifact } from 
 import { approveVisualTarget, importDesignCandidate } from "./sitespec/design.ts";
 import { approveDesignSystemRelease, proposeDesignSystem } from "./sitespec/design-system.ts";
 import { buildSiteSpecPage } from "./sitespec/production.ts";
+import { buildSiteRollout } from "./sitespec/rollout.ts";
 
 type GlobalOptions = { config: string; workspace: string; acss?: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -230,6 +231,24 @@ program
     envelope.runId = build.runId;
     envelope.ok = build.validation.passed && !build.results.requiredActions.some((action: { severity: string }) => action.severity === "blocking");
     emit(envelope, `Built ${build.pageSubjectRef}\nInternal hard gates: ${build.validation.passed ? "pass" : "fail"}\nBlocking evidence actions: ${build.results.requiredActions.filter((action: { severity: string }) => action.severity === "blocking").length}\nArtifacts: ${build.runDirectory}`);
+    if (!envelope.ok) process.exitCode = 3;
+  });
+
+program
+  .command("rollout")
+  .description("classify and build governed low-novelty pages, then run sitewide audits")
+  .requiredOption("--spec <path>", "canonical SiteSpec artifact")
+  .requiredOption("--design-system <path>", "approved design-system release")
+  .option("--design-system-root <path>", "design-system artifact root; inferred from the release path")
+  .option("--output <path>", "site production artifact root", ".gen2prod/sitespec/rollout")
+  .action(async (options: { spec: string; designSystem: string; designSystemRoot?: string; output: string }) => {
+    const releasePath = resolve(options.designSystem);
+    const rollout = await buildSiteRollout({ artifact: await siteSpecArtifact(options.spec), designSystem: await readJson<DesignSystemRelease>(releasePath), designSystemRoot: resolve(options.designSystemRoot ?? join(dirname(releasePath), "..", "..")), outputDirectory: resolve(options.output) });
+    const blockingEvidence = rollout.builds.flatMap((build) => build.results.requiredActions as { id: string; reason: string; severity: string }[]).filter((action) => action.severity === "blocking");
+    const envelope = result("rollout", { classifications: rollout.classifications, builtPages: rollout.builds.map((build) => ({ pageSubjectRef: build.pageSubjectRef, runId: build.runId, runDirectory: build.runDirectory })), sitewideAudit: rollout.audit, auditPath: rollout.auditPath });
+    envelope.ok = rollout.audit.passed && rollout.requiredActions.length === 0 && blockingEvidence.length === 0;
+    envelope.requiredActions.push(...rollout.requiredActions.map((action) => ({ id: action.id, summary: action.reason, detail: `Subject: ${action.subjectRef}; authority: ${action.requiredAuthority}`, blocking: action.severity === "blocking" })), ...blockingEvidence.map((action) => ({ id: action.id, summary: action.reason, detail: "Record the required current evidence and rerun the affected page result.", blocking: true })));
+    emit(envelope, `Classified ${rollout.classifications.length} page(s); built ${rollout.builds.length}\nSitewide audits: ${rollout.audit.passed ? "pass" : "fail"}\nWorkflow actions: ${rollout.requiredActions.length}; measurement actions: ${blockingEvidence.length}\nAudit: ${rollout.auditPath}`);
     if (!envelope.ok) process.exitCode = 3;
   });
 

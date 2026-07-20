@@ -77,9 +77,8 @@ function confidence(binding?: SpecBinding) {
   };
 }
 
-function tokens(normalForm: NormalForm): TokenRegistry {
-  const bindings = nodes(normalForm.dom).flatMap((node) => node.specBindings ?? []);
-  const source = bindings[0]?.subjectRef ?? normalForm.content.page;
+function tokens(normalForm: NormalForm, release: DesignSystemRelease): TokenRegistry {
+  const source = `artifact://design-system-release/${release.id}`;
   const token = (id: string, type: "color" | "dimension" | "fontFamily" | "project", value: string, semanticRole: string, allowedProperties: string[]) => ({
     id,
     name: id,
@@ -135,8 +134,8 @@ function styles(normalForm: NormalForm): StyleIntent[] {
   });
 }
 
-function planFor(projection: SiteSpecProjection): CompilationPlan {
-  const normalForm: NormalForm = { ...projection.normalForm, styles: styles(projection.normalForm), tokens: tokens(projection.normalForm) };
+function planFor(projection: SiteSpecProjection, release: DesignSystemRelease): CompilationPlan {
+  const normalForm: NormalForm = { ...projection.normalForm, styles: styles(projection.normalForm), tokens: tokens(projection.normalForm, release) };
   const root = planned(normalForm.dom);
   return {
     source: {
@@ -286,7 +285,7 @@ export async function buildSiteSpecPage(options: {
   const projection = projectCanonicalSiteSpec(options.artifact, options.pageSubjectRef);
   assertBuildableProjection(projection);
   await assertReleaseCoverage(options.designSystem, options.designSystemRoot, projection);
-  const plan = planFor(projection);
+  const plan = planFor(projection, options.designSystem);
   const scss = emitScss(plan);
   const css = compileString(scss, { style: "expanded" }).css;
   const html = emitHtml(plan, "page.css", true);
