@@ -7,7 +7,7 @@ import { GateResultSchema, PassDefinitionSchema, PassEventSchema } from "./pass.
 import { EvaluationResultSchema, ExperimentResultSchema, TrajectorySchema } from "./research.ts";
 import { ImageDerivedContentStrategySchema, ImageOnlyAnalysisSchema, ImageOnlyBuildPlanSchema, ImageOnlyEvaluationSchema, ImageOnlyPolicySchema, ImageOnlyTargetManifestSchema, ImageStateSequenceAnalysisSchema } from "./image-only.ts";
 import { CmsDocumentSchema, FrameworkAdapterBenchmarkSchema, FrameworkAdapterEvaluationSchema, FrameworkAdapterExperimentSchema, FrameworkAdapterManifestSchema, FrameworkAdapterPolicySchema, FrameworkAdapterResearchSummarySchema, FrameworkAdapterSuiteSchema, FrameworkAdapterValidationSchema } from "./adapters.ts";
-import { ProjectAdapterRunRequestSchema, ProjectContractSchema, ProjectCorrespondenceSchema, ProjectDestinationBundleSchema, ProjectFamilySplitManifestSchema, ProjectIsolationProofSchema, ProjectMutationControlReportSchema, ProjectOwnershipMapSchema, ProjectPatchPlanSchema, ProjectPreviewIsolationProofSchema, ProjectRouteProjectionSchema, ProjectSyntheticCorruptionTraceSchema, ProjectSyntheticManifestSchema, ProjectValidationReportSchema, SourceProjectSchema } from "./project-adapters.ts";
+import { ProjectAdapterRunRequestSchema, ProjectContractSchema, ProjectCorrespondenceSchema, ProjectCorruptionGrammarReportSchema, ProjectDestinationBundleSchema, ProjectFamilySplitManifestSchema, ProjectIsolationProofSchema, ProjectMutationControlReportSchema, ProjectOwnershipMapSchema, ProjectPatchPlanSchema, ProjectPreviewIsolationProofSchema, ProjectRouteProjectionSchema, ProjectSyntheticCorruptionTraceSchema, ProjectSyntheticManifestSchema, ProjectValidationReportSchema, SourceProjectSchema } from "./project-adapters.ts";
 
 const SCHEMAS = {
   "artifact-ref": ArtifactRefSchema,
@@ -43,6 +43,7 @@ const SCHEMAS = {
   "project-ownership-map": ProjectOwnershipMapSchema,
   "project-correspondence": ProjectCorrespondenceSchema,
   "project-route-projection": ProjectRouteProjectionSchema,
+  "project-corruption-grammar-report": ProjectCorruptionGrammarReportSchema,
   "project-patch-plan": ProjectPatchPlanSchema,
   "project-destination-bundle": ProjectDestinationBundleSchema,
   "project-isolation-proof": ProjectIsolationProofSchema,

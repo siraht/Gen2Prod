@@ -53,6 +53,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P2.3 auditable React class migration | Added whole-token semantic BEM replacement over every statically enumerable variant, proof-gated behavior-hook lowering to `data-*`, and fail-closed preservation for framework, unknown, and runtime-generated class surfaces | Unit dogfood covers base/modifier mapping, behavior migration, runtime opacity, and framework-class blockers without substring rewriting or executing destination code |
 | 2026-07-20 | P2.4 rendered-state route projection | Connected each declared rendered HTML/CSS state to the existing static canonical compiler, source/render correspondence, immutable dynamic descendants, BEM block ownership decisions, and safe replacement/wrapper/extraction/slot opportunities in a strict hash-bound artifact | Two-state React dogfood produces distinct canonical outputs, retains rendered inputs, maps preserved dynamics and BEM blocks, and project runtime replay now retains the projection artifact when capture evidence exists |
 | 2026-07-20 | P3.2 Next-native metadata integration | Extended the portable canonical request with optional title/description intent and added a minimal App Router metadata operation that updates or inserts `export const metadata`, preserves unrelated object fields, and blocks on `generateMetadata` or opaque initializers | Next dogfood updates title, inserts description, retains Open Graph data, emits no document tags or client directive, preserves async fetch/server boundaries, and fails closed for dynamic metadata |
+| 2026-07-20 | P10.2 composable project corruption grammar | Added 24 independently selectable source-shaped corruptions spanning semantic/style/component/metadata, import/handler/branch/key/slot/boundary/layout, CMS parent/revision/settings, and scope/preimage/rollback/idempotence failures with exact field and before/after hashes | Full composition changes 24 unique fields with 24 positive detectors; single-corruption dogfood proves unrelated authority stays exact, tampered overlap fails schema validation, and every generated project now retains the suite beside its concrete dirty/gold trace |
 
 ### Additional implementation decisions
 
@@ -87,6 +88,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | D47 | Behavior classes become `data-*` only when source evidence proves they are selector-only hooks | A class may be consumed by CSS, JavaScript, a plugin, tests, or analytics, and changing it without a complete reference proof can break behavior | Unproven behavior and framework classes remain opaque blockers; a clean-surface claim is available only when every reachable variant is complete and every token is owned or proven migratable |
 | D48 | Runtime projection compiles captured HTML/CSS per state and overlays source authority afterward | Static canonical inference is useful for semantic/BEM intent but cannot own the dynamic expressions that produced a materialized DOM | Each state keeps its canonical hash and correspondence hash while ownership decisions retain preserved-region IDs; a missing rendered source fails instead of fabricating a projection |
 | D49 | Next metadata intent lowers only through App Router metadata exports | Injecting `<head>` tags or shadowing `generateMetadata` creates duplicate/incorrect server metadata and can silently discard data-driven fields | Static object exports receive a hash-guarded minimal merge; dynamic/opaque metadata requires an explicit source-authorized mapping |
+| D50 | Quality corruptions and deliberately invalid gate controls share a grammar but not one dirty build | Import, preimage, rollback, and CMS-revision failures are useful evaluator examples but would make every ordinary dirty project unbuildable | Generated dirty/gold projects retain quality-only concrete source differences, while the adjacent composable suite materializes each hard-failure specimen independently with an expected detector |
 
 ### Lessons learned
 
@@ -124,6 +126,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L30 | A syntactically BEM-compatible token is not evidence that Gen2Prod owns its runtime meaning | Class migration consumes explicit style/behavior/framework evidence and rewrites complete tokens only; runtime class functions never become guessed variants |
 | L31 | One default render cannot establish dynamic ownership | Projection runs every declared state independently and carries immutable source-region IDs into each canonical block decision; unobserved or low-confidence mappings remain evidence requests |
 | L32 | Preserving a metadata export is not the same as integrating the destination metadata contract | The canonical request now carries explicit metadata intent, Next gets a native operation, and dynamic generators are surfaced as blockers rather than silently ignored |
+| L33 | A corruption name without exact changed-field identity cannot prove independent detector coverage | Grammar reports require one unique field, effective before/after hashes, and a positive named detector per operation; overlap and ineffective mutations are invalid artifacts |
 
 ## 1. Outcome
 
@@ -1315,18 +1318,18 @@ Corruptions:
 - [x] semantic tag erasure and wrapper noise;
 - [x] utility/inline/raw-value styling;
 - [x] class-expression degradation;
-- [x] component boundary collapse (overfragmentation remains in the grammar extension);
+- [x] component boundary collapse and overfragmentation;
 - [x] style ownership and token drift;
 - [x] metadata integration mistakes;
-- [ ] import/path mistakes;
-- [ ] handler binding loss or movement;
-- [ ] conditional branch loss;
-- [ ] repetition key/template loss;
-- [ ] slot/children/snippet loss;
-- [ ] server/client/hydration boundary changes;
-- [ ] route/layout misintegration;
-- [ ] CMS parent/revision/style-setting defects;
-- [ ] patch-scope, stale-preimage, rollback, and idempotence defects.
+- [x] import/path mistakes;
+- [x] handler binding loss or movement;
+- [x] conditional branch loss;
+- [x] repetition key/template loss;
+- [x] slot/children/snippet loss;
+- [x] server/client/hydration boundary changes;
+- [x] route/layout misintegration;
+- [x] CMS parent/revision/style-setting defects;
+- [x] patch-scope, stale-preimage, rollback, and idempotence defects.
 
 Acceptance criteria:
 

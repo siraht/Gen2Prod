@@ -12,6 +12,7 @@ import { ProjectContractSchema, ProjectSyntheticCorruptionTraceSchema, ProjectSy
 import { discoverProject } from "./discovery.ts";
 import { parseProjectSource } from "./registry.ts";
 import { createProjectFamilySplits } from "./splits.ts";
+import { applyProjectCorruptions } from "./corruptions.ts";
 
 export type PrepareProjectCurriculumOptions = { root: string; seed: number; variantsPerFamily?: number; archetypeLimit?: number; renderVisuals?: boolean; browserExecutable?: string | undefined };
 
@@ -55,14 +56,16 @@ export async function prepareProjectCurriculum(options: PrepareProjectCurriculum
       { id: "metadata", kind: "metadata-loss", changedSurface: "description metadata removed from dirty document entry", expectedDetectors: ["metadata-contract"] },
     ] });
     const lineage = { schemaVersion: "0.1.0", fixtureId, familyId, starterFamily: starter, seed: options.seed, variant, contentFamily: contentVariant.family.id, authorities: { dynamicSource: "gold-and-dirty-source-comparison", content: "strategy/content artifact", pixels: "canonical static render", behavior: "declared project states" }, hashes: { goldSource: sha256(goldSource), dirtySource: sha256(dirtySource), goldScss: sha256(goldScss), dirtyScss: sha256(dirtyScss), contract: contractHash, sourceProject: source.sourceHash }, preservedDynamicFragments: ["items.map", "key={item.id}", "onSubmit", "dialogRef.current?.showModal", "status branches", "controlled email state", "children composition"] };
+    const corruptionSuite = applyProjectCorruptions(fixtureId).report;
     await Promise.all([
       writeJsonAtomic(join(directory, "project-contract.json"), contract), writeJsonAtomic(join(directory, "source-project.json"), source), writeJsonAtomic(join(directory, "project-states.json"), states),
       writeJsonAtomic(join(directory, "fixture.strategy.json"), strategyArtifact(spec, contentVariant.family)), writeJsonAtomic(join(directory, "fixture.page-brief.json"), pageBriefArtifact(spec)), writeJsonAtomic(join(directory, "fixture.content.json"), contentArtifact(spec)), writeJsonAtomic(join(directory, "fixture.mockup.json"), mockupArtifact(spec)),
       writeJsonAtomic(join(directory, "project-lineage.json"), lineage), writeJsonAtomic(join(directory, "project-corruption-trace.json"), corruptionTrace),
+      writeJsonAtomic(join(directory, "project-corruption-suite.json"), corruptionSuite),
       writeTextAtomic(join(directory, "fixture.gold.html"), staticGold.html), writeTextAtomic(join(directory, "gold.css"), staticGold.css), writeTextAtomic(join(directory, "fixture.gold.scss"), staticGold.scss), writeTextAtomic(join(directory, "fixture.corrupted.html"), staticDirty.html), writeTextAtomic(join(directory, "corrupted.css"), staticDirty.css),
     ]);
     if (options.renderVisuals) await ensureVisualBenchmark(directory, options.browserExecutable);
-    fixtures.push({ fixtureId, familyId, starterFamily: starter, archetype: spec.archetype, contentFamily: contentVariant.family.id, split: splitByFamily.get(familyId)!, target: "react", profile: "react-vite", directory: relative(process.cwd(), directory), artifacts: { dirtyProject: "dirty-project", goldProject: "gold-project", contract: "project-contract.json", sourceProject: "source-project.json", states: "project-states.json", strategy: "fixture.strategy.json", pageBrief: "fixture.page-brief.json", mockup: "fixture.mockup.json", ...(options.renderVisuals ? { visualBaseline: "fixture.visual-baseline.json" } : {}), lineage: "project-lineage.json", corruptionTrace: "project-corruption-trace.json" } });
+    fixtures.push({ fixtureId, familyId, starterFamily: starter, archetype: spec.archetype, contentFamily: contentVariant.family.id, split: splitByFamily.get(familyId)!, target: "react", profile: "react-vite", directory: relative(process.cwd(), directory), artifacts: { dirtyProject: "dirty-project", goldProject: "gold-project", contract: "project-contract.json", sourceProject: "source-project.json", states: "project-states.json", strategy: "fixture.strategy.json", pageBrief: "fixture.page-brief.json", mockup: "fixture.mockup.json", ...(options.renderVisuals ? { visualBaseline: "fixture.visual-baseline.json" } : {}), lineage: "project-lineage.json", corruptionTrace: "project-corruption-trace.json", corruptionSuite: "project-corruption-suite.json" } });
   }
   const value = { schemaVersion: "0.1.0", generatorVersion: "project-curriculum-0.1.0", seed: options.seed, generatedAt: new Date().toISOString(), splitManifest, fixtures } as const;
   const manifest = ProjectSyntheticManifestSchema.parse({ ...value, fingerprint: hashJson({ ...value, generatedAt: "<excluded>" }) });

@@ -38,6 +38,7 @@ describe("versioned schema export", () => {
     expect(names).toContain("project-synthetic-corruption-trace.schema.json");
     expect(names).toContain("project-synthetic-manifest.schema.json");
     expect(names).toContain("project-route-projection.schema.json");
+    expect(names).toContain("project-corruption-grammar-report.schema.json");
     expect(names).toContain("project-validation-report.schema.json");
   });
 });

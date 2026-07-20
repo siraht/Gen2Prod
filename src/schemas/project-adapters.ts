@@ -461,8 +461,21 @@ export const ProjectSyntheticCorruptionTraceSchema = z.object({
   fixtureId: z.string().min(1),
   goldSourceHash: Sha256Schema,
   dirtySourceHash: Sha256Schema,
-  operations: z.array(z.object({ id: z.string().min(1), kind: z.enum(["semantic-tag-erasure", "wrapper-noise", "utility-styling", "inline-styling", "raw-value-styling", "class-expression-degradation", "component-boundary-collapse", "metadata-loss"]), changedSurface: z.string().min(1), expectedDetectors: z.array(z.string().min(1)).min(1) }).strict()).min(1),
+  operations: z.array(z.object({ id: z.string().min(1), kind: z.enum(["semantic-tag-erasure", "wrapper-noise", "utility-styling", "inline-styling", "raw-value-styling", "class-expression-degradation", "component-boundary-collapse", "component-boundary-overfragmentation", "style-token-drift", "metadata-loss", "import-path-mistake", "handler-binding-loss", "conditional-branch-loss", "repetition-key-loss", "slot-loss", "runtime-boundary-change", "route-layout-misintegration", "cms-parent-defect", "cms-revision-defect", "cms-style-setting-defect", "patch-scope-defect", "stale-preimage-defect", "rollback-defect", "idempotence-defect"]), changedSurface: z.string().min(1), expectedDetectors: z.array(z.string().min(1)).min(1) }).strict()).min(1),
 }).strict();
+
+export const ProjectCorruptionGrammarReportSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  fixtureId: z.string().min(1),
+  cleanHash: Sha256Schema,
+  corruptedHash: Sha256Schema,
+  operations: z.array(z.object({ id: z.string().min(1), kind: ProjectSyntheticCorruptionTraceSchema.shape.operations.element.shape.kind, changedField: z.string().min(1), beforeHash: Sha256Schema, afterHash: Sha256Schema, detector: z.string().min(1), detected: z.literal(true) }).strict()).min(1),
+  composed: z.literal(true),
+}).strict().superRefine((value, context) => {
+  if (new Set(value.operations.map((item) => item.id)).size !== value.operations.length) context.addIssue({ code: "custom", path: ["operations"], message: "corruption operation IDs must be unique" });
+  if (new Set(value.operations.map((item) => item.changedField)).size !== value.operations.length) context.addIssue({ code: "custom", path: ["operations"], message: "composed corruption fields must not overlap" });
+  for (const item of value.operations) if (item.beforeHash === item.afterHash) context.addIssue({ code: "custom", path: ["operations", item.id], message: "corruption must change its declared field" });
+});
 
 export const ProjectSyntheticManifestSchema = z.object({
   schemaVersion: z.literal("0.1.0"),
@@ -472,7 +485,7 @@ export const ProjectSyntheticManifestSchema = z.object({
   splitManifest: ProjectFamilySplitManifestSchema,
   fixtures: z.array(z.object({
     fixtureId: z.string().min(1), familyId: z.string().min(1), starterFamily: z.string().min(1), archetype: z.string().min(1), contentFamily: z.string().min(1), split: z.enum(["train", "validation", "holdout"]), target: FrameworkAdapterTargetSchema, profile: ProjectFrameworkProfileSchema, directory: z.string().min(1),
-    artifacts: z.object({ dirtyProject: z.string(), goldProject: z.string(), contract: z.string(), sourceProject: z.string(), states: z.string(), strategy: z.string(), pageBrief: z.string(), mockup: z.string(), visualBaseline: z.string().optional(), lineage: z.string(), corruptionTrace: z.string() }).strict(),
+    artifacts: z.object({ dirtyProject: z.string(), goldProject: z.string(), contract: z.string(), sourceProject: z.string(), states: z.string(), strategy: z.string(), pageBrief: z.string(), mockup: z.string(), visualBaseline: z.string().optional(), lineage: z.string(), corruptionTrace: z.string(), corruptionSuite: z.string().optional() }).strict(),
   }).strict()).min(1),
   fingerprint: Sha256Schema,
 }).strict();
@@ -508,4 +521,5 @@ export type ProjectPreviewIsolationProof = z.infer<typeof ProjectPreviewIsolatio
 export type ProjectMutationControlReport = z.infer<typeof ProjectMutationControlReportSchema>;
 export type ProjectFamilySplitManifest = z.infer<typeof ProjectFamilySplitManifestSchema>;
 export type ProjectSyntheticManifest = z.infer<typeof ProjectSyntheticManifestSchema>;
+export type ProjectCorruptionGrammarReport = z.infer<typeof ProjectCorruptionGrammarReportSchema>;
 export type ProjectDestinationBundle = z.infer<typeof ProjectDestinationBundleSchema>;

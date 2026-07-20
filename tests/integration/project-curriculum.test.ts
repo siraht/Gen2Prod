@@ -36,8 +36,11 @@ describe("synthetic dynamic project curriculum", () => {
     expect(goldScss).toContain("var(--space-m)");
     const states = await Bun.file(join(directory, fixture.artifacts.states)).json() as unknown[];
     expect(states).toHaveLength(6);
-    const trace = await Bun.file(join(directory, fixture.artifacts.corruptionTrace)).json() as { operations: unknown[] };
-    expect(trace.operations).toHaveLength(8);
+      const trace = await Bun.file(join(directory, fixture.artifacts.corruptionTrace)).json() as { operations: unknown[] };
+      const suite = await Bun.file(join(directory, fixture.artifacts.corruptionSuite!)).json() as { operations: { detected: boolean }[] };
+      expect(trace.operations).toHaveLength(8);
+      expect(suite.operations).toHaveLength(24);
+      expect(suite.operations.every((operation) => operation.detected)).toBeTrue();
 
     const discovery = await discoverProject(dirtyRoot);
     const source = await parseProjectSource(dirtyRoot, discovery);
