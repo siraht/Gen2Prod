@@ -15,7 +15,7 @@ import type { AutomaticCssBundle } from "../acss/schema.ts";
 import type { CompiledPage } from "../compiler/types.ts";
 import { capturePage, type CaptureResult } from "../evidence/capture.ts";
 import { cropUncertainRegions } from "../evidence/crops.ts";
-import { generateGreenfield } from "../greenfield/pipeline.ts";
+import { generateGreenfieldProposal } from "../greenfield/pipeline.ts";
 import { auditAccessibility } from "../validation/accessibility.ts";
 import { contextFromCompiled, validate, type ValidationReport } from "../validation/gates.ts";
 import { applyAutomaticRepairs, planLocalizedRepairs } from "../validation/repair.ts";
@@ -97,19 +97,20 @@ async function writePairedVisualEvidence(baseline: CaptureResult, candidate: Cap
   await writeJsonAtomic(join(outputDirectory, "visual-evaluation.json"), { schemaVersion: "0.1.0", conditions });
 }
 
-async function compileInput(options: RunOptions, outputDirectory: string, requiredActions: RequiredAction[]): Promise<{ compiled: CompiledPage; cssPath?: string; greenfield?: ReturnType<typeof generateGreenfield>; acss?: AutomaticCssBundle }> {
+async function compileInput(options: RunOptions, outputDirectory: string, requiredActions: RequiredAction[]): Promise<{ compiled: CompiledPage; cssPath?: string; greenfield?: ReturnType<typeof generateGreenfieldProposal>; acss?: AutomaticCssBundle }> {
   const acss = await prepareConfiguredAutomaticCss(options.config, options.acssSource);
   const fallbackRegistry = acss?.registry ?? extractTokenRegistry("");
   const frameworkClassCatalog = acss?.catalog.utilityClasses;
   if (options.mode === "greenfield") {
-    const greenfield = generateGreenfield(await Bun.file(options.input).json());
+    const greenfield = generateGreenfieldProposal(await Bun.file(options.input).json());
+    requiredActions.push({ id: "canonical-sitespec-required", summary: "Approve the generated proposal in SiteSpec before production", detail: "This legacy greenfield input is proposal evidence only. Import greenfield-artifacts.json into SiteSpec, resolve its authority questions, compile a canonical SiteSpec V2 artifact, then use `gen2prod build --spec ... --design-system ...`.", blocking: true });
     const sourceDirectory = join(outputDirectory, "greenfield-source");
     await ensureDirectory(sourceDirectory);
     const htmlPath = join(sourceDirectory, "page.html");
     const cssPath = join(sourceDirectory, "page.css");
-    await Bun.write(htmlPath, greenfield.html);
-    await Bun.write(cssPath, greenfield.css);
-    return { compiled: await compileStaticPage({ htmlPath, cssPath, tokenRegistry: greenfield.spec.tokens, fallbackTokenRegistry: fallbackRegistry, frameworkClassCatalog, policy: options.policy }), cssPath, greenfield, ...(acss ? { acss } : {}) };
+    await Bun.write(htmlPath, greenfield.preview.html);
+    await Bun.write(cssPath, greenfield.preview.css);
+    return { compiled: await compileStaticPage({ htmlPath, cssPath, tokenRegistry: greenfield.preview.spec.tokens, fallbackTokenRegistry: fallbackRegistry, frameworkClassCatalog, policy: options.policy }), cssPath, greenfield, ...(acss ? { acss } : {}) };
   }
   const cssPath = await discoverCss(options.input, options.cssPath);
   const css = (await loadSourceCss(options.input, cssPath)).css;

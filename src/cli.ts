@@ -632,10 +632,11 @@ program
     const run = await executeRun({ input: resolve(input), cssPath: options.css, tokenPath: options.tokens, acssSource: globals().acss, visualTargetPath: options.visualTarget, mode: ModeSchema.parse(options.mode ?? project.mode), profile: ProfileSchema.parse(options.profile ?? project.profile), capture: options.capture, config: project, policy, adapterPolicy: await currentAdapterPolicy(project), adapterTargets: selectedAdapters });
     const envelope = result("run", { runId: run.runId, runDirectory: run.runDirectory, passed: run.validation.passed, gates: run.validation.gates.map((gate) => ({ gate: gate.gate, passed: gate.passed, hard: gate.hard })), metrics: run.validation.metrics, repairCount: run.repairs.length });
     envelope.runId = run.runId;
-    envelope.ok = run.validation.passed;
+    envelope.ok = run.validation.passed && !run.manifest.requiredActions.some((action) => action.blocking);
     envelope.requiredActions.push(...run.manifest.requiredActions);
-    emit(envelope, `Run ${run.runId}\n${run.validation.passed ? "All hard gates passed." : `${run.validation.gates.filter((gate) => gate.hard && !gate.passed).length} hard gate(s) require localized repair.`}${run.adapterSuite ? `\nFramework adapters: ${run.adapterSuite.aggregate.passed}/${run.adapterSuite.targets.length} passed${run.adapterSuite.aggregate.meanVisualPixelDifferenceRatio === undefined ? "" : `; mean pixel diff ${(run.adapterSuite.aggregate.meanVisualPixelDifferenceRatio * 100).toFixed(4)}%`}` : ""}\nArtifacts: ${run.runDirectory}\n${run.reports.ciSummary}`);
-    if (!run.validation.passed) process.exitCode = 3;
+    const blockingActions = run.manifest.requiredActions.filter((action) => action.blocking).length;
+    emit(envelope, `Run ${run.runId}\n${run.validation.passed ? "All hard gates passed." : `${run.validation.gates.filter((gate) => gate.hard && !gate.passed).length} hard gate(s) require localized repair.`}${blockingActions ? `\n${blockingActions} blocking authority action(s) remain.` : ""}${run.adapterSuite ? `\nFramework adapters: ${run.adapterSuite.aggregate.passed}/${run.adapterSuite.targets.length} passed${run.adapterSuite.aggregate.meanVisualPixelDifferenceRatio === undefined ? "" : `; mean pixel diff ${(run.adapterSuite.aggregate.meanVisualPixelDifferenceRatio * 100).toFixed(4)}%`}` : ""}\nArtifacts: ${run.runDirectory}\n${run.reports.ciSummary}`);
+    if (!envelope.ok) process.exitCode = 3;
   });
 
 const adapter = program.command("adapter").description("emit, evaluate, and self-improve framework-native and CMS adapters");

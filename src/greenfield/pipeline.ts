@@ -3,8 +3,9 @@ import { createArchetypes } from "../synthetic/archetypes.ts";
 import { normalFormFromSpec, renderGold } from "../synthetic/render.ts";
 import type { CanonicalNode, CanonicalPageSpec } from "../synthetic/types.ts";
 import type { NormalForm } from "../schemas/normal-form.ts";
+import { hashJson } from "../core/hash.ts";
 
-export const ProjectBriefSchema = z.object({
+export const GreenfieldProposalInputSchema = z.object({
   schemaVersion: z.string().default("0.1.0"),
   projectId: z.string(),
   businessName: z.string(),
@@ -20,17 +21,26 @@ export const ProjectBriefSchema = z.object({
   constraints: z.array(z.string()).default(["BEM", "SCSS", "WCAG 2.2 AA"]),
 });
 
-export type ProjectBrief = z.infer<typeof ProjectBriefSchema>;
-export type GreenfieldResult = {
-  brief: ProjectBrief;
+export type GreenfieldProposalInput = z.infer<typeof GreenfieldProposalInputSchema>;
+export type SiteSpecIngestionProposal = {
+  schemaVersion: "sitespec-ingestion/2.0";
+  kind: "ingestion-result";
+  id: string;
+  source: { uri: string; hash: string; sourceType: "prose"; authority: "observed" };
+  observations: [];
+  inferences: { subject: string; claim: string; authority: "inferred"; confidence: number; evidenceUris: string[] }[];
+  proposals: { subjectRef: string; entityKind: "site-strategy" | "page" | "route"; authority: "proposed"; data: Record<string, unknown> }[];
+  unresolvedAuthority: { id: string; question: string; requiredAuthority: string; subjectRef?: string }[];
+  semanticDiff: { addedProposals: string[]; observedWithoutProposal: string[]; proposalWithoutObservation: string[] };
+};
+export type GreenfieldProposalResult = {
+  authority: "proposed";
+  input: GreenfieldProposalInput;
+  sitespecProposal: SiteSpecIngestionProposal;
   sitemap: { pages: { slug: string; intent: string; primary: boolean }[]; navigation: string[] };
   pageBrief: { slug: string; goal: string; searchIntent: string; sections: string[]; conversionRole: string };
   sectionInventory: { name: string; goal: string; slots: string[]; variants: string[] }[];
-  spec: CanonicalPageSpec;
-  normalForm: NormalForm;
-  html: string;
-  scss: string;
-  css: string;
+  preview: { spec: CanonicalPageSpec; normalForm: NormalForm; html: string; scss: string; css: string };
 };
 
 function walk(root: CanonicalNode): CanonicalNode[] { return [root, ...root.children.flatMap(walk)]; }
@@ -54,8 +64,37 @@ function withUniquePrefix(root: CanonicalNode, prefix: string): CanonicalNode {
   return clone;
 }
 
-export function generateGreenfield(input: unknown): GreenfieldResult {
-  const brief = ProjectBriefSchema.parse(input);
+function toSiteSpecProposal(brief: GreenfieldProposalInput): SiteSpecIngestionProposal {
+  const namespace = brief.projectId.toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-|-$/g, "") || "project";
+  const strategyRef = `sitespec://${namespace}/strategies/main`;
+  const pageRef = `sitespec://${namespace}/pages/home`;
+  const routeRef = `sitespec://${namespace}/routes/home`;
+  const proposals: SiteSpecIngestionProposal["proposals"] = [
+    { subjectRef: strategyRef, entityKind: "site-strategy", authority: "proposed", data: { goals: [brief.siteGoal], audiences: [brief.audience], positioning: brief.positioning, offers: brief.features.map((feature) => feature.title), trust: brief.trustSignals, sourceStatus: "proposal-only" } },
+    { subjectRef: pageRef, entityKind: "page", authority: "proposed", data: { title: brief.businessName, purpose: brief.siteGoal, audienceNeed: brief.audience, conversionRole: brief.conversionGoal, proposedSections: ["hero", "feature-grid", ...(brief.faq.length ? ["faq"] : [])], proposedContent: { positioning: brief.positioning, features: brief.features, faq: brief.faq, primaryCta: brief.primaryCta } } },
+    { subjectRef: routeRef, entityKind: "route", authority: "proposed", data: { pathname: "/", pageRef } },
+  ];
+  const sourceHash = hashJson(brief);
+  const unresolvedAuthority: SiteSpecIngestionProposal["unresolvedAuthority"] = [
+    { id: "approve-strategy-authority", question: "Who approves the proposed goals, audience, positioning, offers, and trust claims?", requiredAuthority: "project-owner", subjectRef: strategyRef },
+    { id: "approve-home-content", question: "Who approves the proposed home-page content and conversion action?", requiredAuthority: "content-owner", subjectRef: pageRef },
+    { id: "confirm-cta-destination", question: `Is ${brief.primaryCta.href} the approved production destination for “${brief.primaryCta.label}”?`, requiredAuthority: "project-owner", subjectRef: pageRef },
+  ];
+  const resultWithoutId = {
+    schemaVersion: "sitespec-ingestion/2.0" as const,
+    kind: "ingestion-result" as const,
+    source: { uri: `gen2prod://greenfield-proposal/${namespace}`, hash: sourceHash, sourceType: "prose" as const, authority: "observed" as const },
+    observations: [] as [],
+    inferences: [{ subject: brief.businessType, claim: `The requested site may serve the ${brief.businessType} domain.`, authority: "inferred" as const, confidence: 0.5, evidenceUris: [`gen2prod://greenfield-proposal/${namespace}`] }],
+    proposals,
+    unresolvedAuthority,
+    semanticDiff: { addedProposals: proposals.map((proposal) => proposal.subjectRef).sort(), observedWithoutProposal: [], proposalWithoutObservation: proposals.map((proposal) => proposal.subjectRef).sort() },
+  };
+  return { ...resultWithoutId, id: hashJson(resultWithoutId) };
+}
+
+export function generateGreenfieldProposal(input: unknown): GreenfieldProposalResult {
+  const brief = GreenfieldProposalInputSchema.parse(input);
   const [heroTemplate, featureTemplate, , faqTemplate] = createArchetypes();
   if (!heroTemplate || !featureTemplate || !faqTemplate) throw new Error("Greenfield templates unavailable");
   const heroRoot = structuredClone(heroTemplate.root);
@@ -111,14 +150,18 @@ export function generateGreenfield(input: unknown): GreenfieldResult {
   };
   const rendered = renderGold(spec);
   return {
-    brief,
+    authority: "proposed",
+    input: brief,
+    sitespecProposal: toSiteSpecProposal(brief),
     sitemap: { pages: [{ slug: "/", intent: brief.siteGoal, primary: true }], navigation: ["Home"] },
     pageBrief: { slug: "home", goal: brief.siteGoal, searchIntent: brief.positioning, sections: sections.map((section) => section.classes[0] ?? section.nodeId), conversionRole: brief.conversionGoal },
     sectionInventory: sections.map((section) => ({ name: section.classes[0] ?? section.nodeId, goal: section.role, slots: walk(section).map((node) => node.role), variants: section.classes.filter((name) => name.includes("--")) })),
-    spec,
-    normalForm: normalFormFromSpec(spec),
-    html: rendered.html.replace('href="gold.css"', 'href="page.css"'),
-    scss: rendered.scss,
-    css: rendered.css,
+    preview: {
+      spec,
+      normalForm: normalFormFromSpec(spec),
+      html: rendered.html.replace('href="gold.css"', 'href="page.css"'),
+      scss: rendered.scss,
+      css: rendered.css,
+    },
   };
 }
