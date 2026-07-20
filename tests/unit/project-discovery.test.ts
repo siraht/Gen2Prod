@@ -3,6 +3,7 @@ import { mkdtemp, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { discoverProject } from "../../src/project-adapters/discovery.ts";
+import { parseProjectSource, projectSourceAdapter } from "../../src/project-adapters/registry.ts";
 import { ProjectDiscoveryError } from "../../src/project-adapters/types.ts";
 
 async function reactProject() {
@@ -42,5 +43,17 @@ describe("project discovery", () => {
     const link = `${root}-link`;
     await symlink(root, link);
     await expect(discoverProject(link)).rejects.toBeInstanceOf(ProjectDiscoveryError);
+  });
+
+  test("selects an exact profile adapter and reports consumed/ignored evidence", async () => {
+    const root = await reactProject();
+    await Bun.write(join(root, "src", "support.json"), "{}\n");
+    const discovery = await discoverProject(root);
+    const adapter = projectSourceAdapter(discovery.contract);
+    const project = await parseProjectSource(root, discovery);
+    expect(adapter.profile).toBe("react-vite");
+    expect(adapter.projectRoute(project, discovery.contract.integration.routeEntries[0]!).roots).toHaveLength(1);
+    expect(project.metadata.evidence).toEqual({ consumed: ["src/App.tsx"], ignored: ["bun.lock", "package.json", "src/support.json"] });
+    expect(() => projectSourceAdapter({ ...discovery.contract, framework: { ...discovery.contract.framework, target: "vue" } })).toThrow("No exact");
   });
 });
