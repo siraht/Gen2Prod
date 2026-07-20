@@ -4,6 +4,7 @@ import { hashJson, sha256 } from "../../core/hash.ts";
 import { sourceAnchor, nodeId, markupNode, assembleSourceProject, readSourceText } from "../ir.ts";
 import type { ProjectBinding, ProjectMarkupNode, SourceProject } from "../../schemas/project-adapters.ts";
 import type { ProjectDiscoveryResult } from "../types.ts";
+import { analyzeReactClassBinding } from "./classes.ts";
 
 function jsxTag(node: ts.JsxTagNameExpression): string { return node.getText(); }
 
@@ -99,7 +100,11 @@ function classVariants(root: ProjectMarkupNode): SourceProject["classVariants"] 
   const visit = (node: ProjectMarkupNode) => {
     const literal = node.attributes.className ?? node.attributes.class;
     if (literal && !literal.startsWith("{")) rows.push({ nodeId: node.id, classes: [literal.split(/\s+/).filter(Boolean)], complete: true, evidence: ["literal-class-binding"] });
-    else if (literal) rows.push({ nodeId: node.id, classes: [], complete: false, evidence: ["dynamic-class-binding-preserved"] });
+    else if (literal) {
+      const binding = node.children.find((child) => child.attributes.attribute === "className" || child.attributes.attribute === "class");
+      const analysis = binding ? analyzeReactClassBinding(binding.source) : { variants: [], complete: false, reasons: ["dynamic class source was not anchored"] };
+      rows.push({ nodeId: node.id, classes: analysis.variants, complete: analysis.complete, evidence: analysis.complete ? ["statically-enumerated-class-binding"] : ["dynamic-class-binding-preserved", ...analysis.reasons] });
+    }
     node.children.forEach(visit);
   };
   visit(root);
