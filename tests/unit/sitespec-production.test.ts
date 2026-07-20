@@ -103,5 +103,10 @@ describe("SiteSpec governed page production", () => {
     expect(image?.uri).toBe(`artifact://sha256/${image?.hash}`);
     expect(Bun.file(join(built.runDirectory, "assets", `${image?.hash}.png`)).exists()).resolves.toBeTrue();
     expect(built.validation.gates.find((gate) => gate.gate === "G")?.passed).toBeTrue();
+    expect(built.validation.gates.find((gate) => gate.gate === "B")?.passed).toBeTrue();
+    expect(built.validation.gates.find((gate) => gate.gate === "I")?.passed).toBeTrue();
+    expect(built.results.results.find((result: { requirementRef: string }) => result.requirementRef.endsWith("/design-system-use"))?.status).toBe("pass");
+    expect(built.html).toContain('class="hero__heading"');
+    expect(built.html).not.toContain("hero-1__");
   });
 });

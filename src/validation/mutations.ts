@@ -25,7 +25,7 @@ export const EVALUATOR_MUTATIONS: EvaluatorMutation[] = [
   { id: "duplicate-false-component", expectedGate: "I", apply: (input) => {
     const scssDeclarations = input.scss.match(/\.button(?:--[a-z0-9-]+)?\s*\{([^{}]+)\}/)?.[1] ?? "display: inline-flex;";
     const cssDeclarations = input.css.match(/\.button(?:--[a-z0-9-]+)?\s*\{([^{}]+)\}/)?.[1] ?? "display: inline-flex;";
-    return { ...input, html: input.html.replace(/class="([^"]*\bbutton\b[^"]*)"/, 'class="$1 imposter-component"'), scss: `${input.scss}\n.imposter-component {${scssDeclarations}}`, css: `${input.css}\n.imposter-component {${cssDeclarations}}` };
+    return { ...input, html: input.html.replace(/class="([^"]*\bbutton\b[^"]*)"/, 'class="$1 imposter-component imposter-component--primary"'), scss: `${input.scss}\n.imposter-component { &--primary {${scssDeclarations}} }`, css: `${input.css}\n.imposter-component--primary {${cssDeclarations}}` };
   } },
   { id: "delete-behavior-hook", expectedGate: "E", apply: (input) => ({ ...input, html: input.html.replace(/\s+data-hook="[^"]+"/, "") }) },
   { id: "duplicate-document-id", expectedGate: "E", apply: (input) => {

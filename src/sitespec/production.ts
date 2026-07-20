@@ -149,7 +149,7 @@ function declaration(property: string, value: string, tokenRole?: string): Style
 }
 
 function styles(normalForm: NormalForm): StyleIntent[] {
-  return nodes(normalForm.dom).flatMap((node, index): StyleIntent[] => {
+  return nodes(normalForm.dom).flatMap((node): StyleIntent[] => {
     const classValue = node.attributes.find((attribute) => attribute.name === "class")?.value ?? "";
     if (!classValue) return [];
     const classes = classValue.split(/\s+/).filter(Boolean);
@@ -165,7 +165,11 @@ function styles(normalForm: NormalForm): StyleIntent[] {
       else if (block === "cta") declarations.push(declaration("border-top", "var(--border-subtle)", "surface.border"));
       else if (block === "form") declarations.push(declaration("border", "var(--border-subtle)", "surface.border"));
     } else if (node.tag === "a" || node.tag === "button") declarations.push(declaration("background-color", "var(--action-primary)", "action.primary"), declaration("color", "var(--surface-on-brand)", "surface.on-brand"));
-    else return [];
+    else if (/^h[1-6]$/.test(node.tag)) declarations.push(declaration("margin-block", "0"));
+    else if (node.tag === "p") declarations.push(declaration("margin-block", "0"), declaration("max-width", "65ch"));
+    else if (node.tag === "img") declarations.push(declaration("display", "block"), declaration("max-width", "100%"), declaration("height", "auto"));
+    else if (node.tag === "article") declarations.push(declaration("display", "grid"), declaration("gap", "var(--spacing-section)", "spacing.section"));
+    else declarations.push(declaration("display", "block"));
     return [{ nodeId: node.nodeId, styleRole: block, layoutRole: node.tag, contentRole: node.specBindings?.[0]?.role ?? node.tag, confidence: confidence(node.specBindings?.[0]), declarations, specBindings: node.specBindings }];
   });
 }

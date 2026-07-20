@@ -108,20 +108,29 @@ function descendantText(element: ValidationElement): string {
 }
 
 function equivalentStyleBlocks(css: string, htmlNames: Set<string>): string[][] {
-  const signatures = new Map<string, Set<string>>();
+  const rulesByBlock = new Map<string, Set<string>>();
   const root = postcss.parse(css);
   root.walkRules((rule) => {
     const declarations: string[] = [];
     rule.walkDecls((declaration) => { declarations.push(`${declaration.prop}:${declaration.value}`); });
     if (declarations.length === 0) return;
-    const signature = declarations.sort().join(";");
-    const blocks = signatures.get(signature) ?? new Set<string>();
+    const declarationSignature = declarations.sort().join(";");
     for (const selector of rule.selectors) for (const match of selector.matchAll(/\.([_a-zA-Z]+[\w-]*)/g)) {
       const className = match[1]!;
-      if (htmlNames.has(className)) blocks.add(className.split(/__|--/)[0]!);
+      if (!htmlNames.has(className)) continue;
+      const block = className.split(/__|--/)[0]!;
+      const rules = rulesByBlock.get(block) ?? new Set<string>();
+      rules.add(`${className.slice(block.length)}{${declarationSignature}}`);
+      rulesByBlock.set(block, rules);
     }
-    signatures.set(signature, blocks);
   });
+  const signatures = new Map<string, Set<string>>();
+  for (const [block, rules] of rulesByBlock) {
+    const signature = [...rules].sort().join("|");
+    const blocks = signatures.get(signature) ?? new Set<string>();
+    blocks.add(block);
+    signatures.set(signature, blocks);
+  }
   return [...signatures.values()].filter((blocks) => blocks.size > 1).map((blocks) => [...blocks].sort());
 }
 

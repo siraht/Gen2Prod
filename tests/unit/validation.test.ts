@@ -3,6 +3,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PNG } from "pngjs";
+import { compileString } from "sass";
 import { createArchetypes } from "../../src/synthetic/archetypes.ts";
 import { renderGold } from "../../src/synthetic/render.ts";
 import { compileStaticPage } from "../../src/compiler/pipeline.ts";
@@ -58,6 +59,15 @@ describe("validation gates", () => {
     const report = await validate({ ...contextFromCompiled(compiled, thresholds), html });
     const accessibility = report.gates.find((gate) => gate.gate === "E")!;
     expect(accessibility.assertions.find((item) => item.id === "static-a11y")?.passed).toBeTrue();
+  });
+
+  test("compares complete component style signatures instead of shared child rules", async () => {
+    const compiled = await compiledHero();
+    const html = compiled.html.replace("</main>", '<section class="feature"><h2 class="feature__heading">Feature</h2></section><section class="notice"><h2 class="notice__heading">Notice</h2></section></main>');
+    const scss = `${compiled.scss}\n.feature { border: 1px solid currentColor; &__heading { margin-block: 0; } }\n.notice { padding: 1rem; &__heading { margin-block: 0; } }\n`;
+    const css = compileString(scss).css;
+    const report = await validate({ ...contextFromCompiled(compiled, thresholds), html, scss, css });
+    expect(report.gates.find((gate) => gate.gate === "I")?.assertions.find((item) => item.id === "component-equivalence")?.passed).toBeTrue();
   });
 
   test("applies only schema-valid localized repairs and revalidates the result", async () => {

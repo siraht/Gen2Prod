@@ -107,11 +107,10 @@ function authorityActions(entities: ContractEntity[]): RequiredAction[] {
   return [...new Map(actions.map((action) => [`${action.subjectRef}:${action.actionType}:${action.reason}`, action])).values()].sort((left, right) => left.id.localeCompare(right.id));
 }
 
-function contentNode(entity: ContractEntity, index: number, byUid: Map<string, ContractEntity>, headingOffset: number): DomNode {
+function contentNode(entity: ContractEntity, index: number, byUid: Map<string, ContractEntity>, headingOffset: number, componentBlock: string): DomNode {
   const value = (data(entity).content ?? {}) as Record<string, unknown>;
   const kind = String(value.kind ?? "unresolved-brief");
-  const block = id(entity.uid.split("/sections/")[1]?.split("/")[0] ?? "section");
-  const className = `${block}__${id(entity.id)}`;
+  const className = `${componentBlock}__${id(entity.id)}`;
   let tag = "p";
   let text = "";
   const attributes: DomNode["attributes"] = [{ name: "class", value: className }];
@@ -215,9 +214,10 @@ export function projectCanonicalSiteSpec(input: unknown, pageSubjectRef: string)
     const pattern = byUid.get(ref(section, "patternRef"))!;
     const slots = refs(section, "slotAssignmentRefs").map((value) => byUid.get(value)).filter((value): value is ContractEntity => Boolean(value));
     const items = refs(section, "collectionItemRefs").map((value) => byUid.get(value)).filter((value): value is ContractEntity => Boolean(value));
-    return { nodeId: `g2p-${sha256(section.uid).slice(0, 12)}`, tag: "section", attributes: [{ name: "class", value: `${id(pattern.id)}${refs(section, "variantRefs").map((value) => ` ${id(pattern.id)}--${id(byUid.get(value)?.id ?? value)}`).join("")}` }, { name: "data-sitespec-subject", value: section.uid }], text: "", textFingerprint: sha256(""), children: [...slots.map((slot, index) => contentNode(slot, index, byUid, 2)), ...items.map((item, index) => collectionNode(item, byUid, index))], specBindings: [binding(section, "section-instance"), binding(pattern, "pattern")] };
+    const componentBlock = id(pattern.id);
+    return { nodeId: `g2p-${sha256(section.uid).slice(0, 12)}`, tag: "section", attributes: [{ name: "class", value: `${componentBlock}${refs(section, "variantRefs").map((value) => ` ${componentBlock}--${id(byUid.get(value)?.id ?? value)}`).join("")}` }, { name: "data-sitespec-subject", value: section.uid }], text: "", textFingerprint: sha256(""), children: [...slots.map((slot, index) => contentNode(slot, index, byUid, 2, componentBlock)), ...items.map((item, index) => collectionNode(item, byUid, index))], specBindings: [binding(section, "section-instance"), binding(pattern, "pattern")] };
   });
-  const body: DomNode = { nodeId: `g2p-${sha256(page.uid).slice(0, 12)}`, tag: "body", attributes: [{ name: "class", value: `page page--${id(page.id)}` }, { name: "data-sitespec-subject", value: page.uid }], text: "", textFingerprint: sha256(""), children: [{ nodeId: `g2p-${sha256(`${page.uid}:main`).slice(0, 12)}`, tag: "main", attributes: [{ name: "class", value: "page__main" }], text: "", textFingerprint: sha256(""), children: sectionNodes, specBindings: [binding(page, "page")] }], specBindings: [binding(page, "page"), binding(route, "route"), binding(shell, "shell")] };
+  const body: DomNode = { nodeId: `g2p-${sha256(page.uid).slice(0, 12)}`, tag: "body", attributes: [{ name: "class", value: "page" }, { name: "data-sitespec-subject", value: page.uid }], text: "", textFingerprint: sha256(""), children: [{ nodeId: `g2p-${sha256(`${page.uid}:main`).slice(0, 12)}`, tag: "main", attributes: [{ name: "class", value: "page__main" }], text: "", textFingerprint: sha256(""), children: sectionNodes, specBindings: [binding(page, "page")] }], specBindings: [binding(page, "page"), binding(route, "route"), binding(shell, "shell")] };
   const actions = entities.filter((entity) => entity.kind === "action");
   const unresolved = authorityActions(entities);
   const normalForm: NormalForm = {
