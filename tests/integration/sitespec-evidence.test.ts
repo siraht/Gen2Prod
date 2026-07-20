@@ -1,0 +1,30 @@
+import { expect, test } from "bun:test";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import { createContractValidator, sha256, type CanonicalGraphRuntime, type ResultManifest, type VisualTarget } from "@website-ontology/contracts";
+import { capturePage } from "../../src/evidence/capture.ts";
+import type { CanonicalSiteSpecArtifact } from "../../src/schemas/sitespec.ts";
+import { capturePageEvidence } from "../../src/sitespec/evidence.ts";
+
+test("records repeatable browser, accessibility, and exact visual-target evidence", async () => {
+  const graph = await Bun.file(new URL(import.meta.resolve("@website-ontology/contracts/fixtures/valid/reference-canonical-graph.json"))).json() as CanonicalGraphRuntime;
+  const artifact: CanonicalSiteSpecArtifact = { artifactType: "canonical-site-spec", schemaVersion: graph.schemaVersion, revision: graph.revision, spec: graph };
+  const page = graph.entities.find((entity) => entity.uid === "sitespec://northstar/pages/home")!;
+  const requirements = graph.entities.filter((entity) => entity.kind === "requirement" && ["accessibility", "visual-target-conformance"].includes(String(entity.data.ruleType)));
+  const root = await mkdtemp(join(tmpdir(), "g2p-browser-evidence-"));
+  await Bun.write(join(root, "page.html"), '<!doctype html><html lang="en"><head><title>Evidence page</title><link rel="stylesheet" href="page.css"></head><body><main><h1>Evidence page</h1><a href="/next/">Next step</a></main></body></html>');
+  await Bun.write(join(root, "page.css"), "body{margin:0;background:#fff;color:#111;font-family:system-ui}main{padding:3rem}a:focus-visible{outline:3px solid #06c}");
+  const initial = await capturePage({ url: pathToFileURL(join(root, "page.html")).href, outputDirectory: join(root, "target-capture"), viewports: [640], viewportHeight: 480, states: ["default"], themes: ["light"] });
+  const targetPath = initial.captures[0]!.screenshot;
+  const targetBytes = new Uint8Array(await Bun.file(targetPath).arrayBuffer());
+  const target: VisualTarget = { schemaVersion: "website-ontology-artifacts/2.0", kind: "visual-target", id: "home-exact-target", candidateRef: "artifact://design-candidate/home-exact", pageSubjectRef: page.uid, inputRevisions: [{ subjectRef: page.uid, revision: page.revision }], approvedRegions: ["full-page"], approvalRef: "qualification://approvals/exact-browser-target", artifact: { schemaVersion: "website-ontology-artifacts/2.0", kind: "artifact-ref", id: "home-target", hash: sha256(targetBytes), uri: pathToFileURL(targetPath).href, mediaType: "image/png", byteLength: targetBytes.byteLength } };
+  const results: ResultManifest = { schemaVersion: "website-ontology-results/2.0", kind: "result-manifest", id: "home-browser-results", inputRevisions: [{ subjectRef: page.uid, revision: page.revision }], results: requirements.map((requirement, index) => ({ schemaVersion: "website-ontology-results/2.0", kind: "requirement-result", id: `browser-${index}`, requirementRef: requirement.uid, subjectRef: page.uid, subjectRevision: page.revision, status: "unresolved", assertions: [{ id: `pending-${index}`, status: "unresolved", message: "Browser evidence pending." }], evidence: [], measurements: [] })), requiredActions: [{ schemaVersion: "website-ontology-results/2.0", kind: "required-action", id: "home-visual-target-conformance-evidence", subjectRef: page.uid, subjectRevision: page.revision, actionType: "rerun", severity: "blocking", reason: "Capture evidence.", requiredAuthority: "platform-validator" }] };
+  const captured = await capturePageEvidence({ artifact, results, visualTarget: target, runDirectory: root, outputPath: join(root, "browser-results.json"), viewport: 640, viewportHeight: 480, maxPixelDifference: 0 });
+  expect(captured.pixelDifferenceRatio).toBe(0);
+  expect(createContractValidator().validate("results", captured.results).valid).toBeTrue();
+  expect(captured.results.results.find((item: { requirementRef: string }) => item.requirementRef.endsWith("/visual-target-conformance"))?.status).toBe("pass");
+  expect(captured.results.results.find((item: { requirementRef: string }) => item.requirementRef.endsWith("/accessibility"))?.status).toBe("pass");
+  expect(captured.results.requiredActions).toEqual([]);
+}, 15_000);

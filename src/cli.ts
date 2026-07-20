@@ -61,7 +61,7 @@ import { approveVisualTarget, importDesignCandidate } from "./sitespec/design.ts
 import { approveDesignSystemRelease, proposeDesignSystem } from "./sitespec/design-system.ts";
 import { buildSiteSpecPage } from "./sitespec/production.ts";
 import { buildSiteRollout } from "./sitespec/rollout.ts";
-import { recordPageEvidence } from "./sitespec/evidence.ts";
+import { capturePageEvidence, recordPageEvidence } from "./sitespec/evidence.ts";
 
 type GlobalOptions = { config: string; workspace: string; acss?: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -271,6 +271,26 @@ evidenceCommand
     const envelope = result("evidence record", { resultsId: recorded.id, output, statuses: recorded.results.map((item: { requirementRef: string; status: string }) => ({ requirementRef: item.requirementRef, status: item.status })), blockingActions: blocking });
     envelope.ok = blocking === 0 && recorded.results.every((item: { status: string }) => ["pass", "waived"].includes(item.status));
     emit(envelope, `Recorded external evidence for ${recorded.id}\nBlocking actions: ${blocking}\nResults: ${output}`);
+    if (!envelope.ok) process.exitCode = 3;
+  });
+evidenceCommand
+  .command("capture <run>")
+  .description("capture browser, accessibility, and pixel-difference evidence for a page visual target")
+  .requiredOption("--spec <path>", "canonical SiteSpec artifact")
+  .requiredOption("--visual-target <path>", "approved page visual target")
+  .option("--results <path>", "input result manifest; defaults to results.json in the run")
+  .option("--output <path>", "updated result manifest; defaults to browser-results.json in the run")
+  .option("--viewport <pixels>", "capture viewport width", "1280")
+  .option("--height <pixels>", "capture viewport height", "900")
+  .option("--threshold <ratio>", "maximum pixel difference ratio", "0.03")
+  .action(async (run: string, options: { spec: string; visualTarget: string; results?: string; output?: string; viewport: string; height: string; threshold: string }) => {
+    const runDirectory = resolve(run);
+    const output = resolve(options.output ?? join(runDirectory, "browser-results.json"));
+    const captured = await capturePageEvidence({ artifact: await siteSpecArtifact(options.spec), results: await readJson<ResultManifest>(resolve(options.results ?? join(runDirectory, "results.json"))), visualTarget: await readJson<VisualTarget>(resolve(options.visualTarget)), runDirectory, outputPath: output, viewport: Number.parseInt(options.viewport, 10), viewportHeight: Number.parseInt(options.height, 10), maxPixelDifference: Number.parseFloat(options.threshold) });
+    const visual = captured.results.results.find((item: { requirementRef: string }) => item.requirementRef.endsWith("/visual-target-conformance"));
+    const envelope = result("evidence capture", { output, evidencePath: captured.evidencePath, screenshotPath: captured.screenshotPath, diffPath: captured.diffPath, pixelDifferenceRatio: captured.pixelDifferenceRatio, visualStatus: visual?.status });
+    envelope.ok = visual?.status === "pass";
+    emit(envelope, `Captured browser evidence\nPixel difference: ${(captured.pixelDifferenceRatio * 100).toFixed(4)}%\nResults: ${output}\nEvidence: ${captured.evidencePath}`);
     if (!envelope.ok) process.exitCode = 3;
   });
 
