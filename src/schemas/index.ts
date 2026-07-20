@@ -5,3 +5,4 @@ export * from "./normal-form.ts";
 export * from "./pass.ts";
 export * from "./project-adapters.ts";
 export * from "./research.ts";
+export * from "./sitespec.ts";

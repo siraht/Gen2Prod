@@ -17,6 +17,7 @@
     "verify": "bun run check && bun run test && bun run acceptance && bun run build"
   },
   "dependencies": {
+    "@website-ontology/contracts": "file:/data/projects/WebsiteOntology/packages/contracts",
     "@astrojs/compiler": "4.0.0",
     "@tesseract.js-data/eng": "1.0.0",
     "@vue/compiler-sfc": "3.5.40",
