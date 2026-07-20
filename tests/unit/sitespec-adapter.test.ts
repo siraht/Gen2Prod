@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { buildCanonicalGraph, type CanonicalGraphRuntime } from "@website-ontology/contracts";
 import { NormalFormSchema } from "../../src/schemas/normal-form.ts";
-import { assertBuildableProjection, projectCanonicalSiteSpec, SiteSpecAuthorityError } from "../../src/sitespec/adapter.ts";
+import { assertBuildableProjection, operationalRequiredActions, projectCanonicalSiteSpec, SiteSpecAuthorityError } from "../../src/sitespec/adapter.ts";
 
 async function graphFixture(): Promise<CanonicalGraphRuntime> {
   const url = import.meta.resolve("@website-ontology/contracts/fixtures/valid/reference-canonical-graph.json");
@@ -43,5 +43,16 @@ describe("canonical SiteSpec to G2P-NF projection", () => {
     expect(() => assertBuildableProjection(projection)).not.toThrow();
     const allNodes = (node: typeof projection.normalForm.dom): typeof projection.normalForm.dom[] => [node, ...node.children.flatMap(allNodes)];
     expect(allNodes(projection.normalForm.dom).find((node) => node.tag === "a" && node.text === "Get started")?.attributes).toContainEqual({ name: "href", value: "/assessment/" });
+  });
+
+  test("maps blocked authority into actionable public CLI records", async () => {
+    const graph = await graphFixture();
+    const projection = projectCanonicalSiteSpec(artifact(graph), "sitespec://northstar/pages/assessment");
+    const actions = operationalRequiredActions(projection.requiredActions);
+    expect(actions).not.toHaveLength(0);
+    expect(actions[0]).toMatchObject({ blocking: true });
+    expect(actions[0]!.summary).toContain("not approved for production");
+    expect(actions[0]!.detail).toContain("authority:");
+    expect(actions[0]!.detail).toContain("Subject: sitespec://");
   });
 });

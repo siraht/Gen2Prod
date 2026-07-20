@@ -6,6 +6,7 @@ import {
   type RequiredAction,
 } from "@website-ontology/contracts";
 import { canonicalSiteSpecArtifactSchema, type CanonicalSiteSpecArtifact } from "../schemas/sitespec.ts";
+import type { RequiredAction as OperationalRequiredAction } from "../core/result.ts";
 import type {
   ComponentContract,
   DomNode,
@@ -31,6 +32,15 @@ export class SiteSpecAuthorityError extends Error {
     super(`SiteSpec projection is blocked by ${requiredActions.length} unresolved authority requirement(s)`);
     this.name = "SiteSpecAuthorityError";
   }
+}
+
+export function operationalRequiredActions(actions: RequiredAction[]): OperationalRequiredAction[] {
+  return actions.map((action) => ({
+    id: action.id,
+    summary: action.reason,
+    detail: `Subject: ${action.subjectRef} at ${action.subjectRevision}; action: ${action.actionType}; authority: ${action.requiredAuthority}`,
+    blocking: action.severity === "blocking",
+  }));
 }
 
 function data(entity: ContractEntity): Record<string, unknown> {

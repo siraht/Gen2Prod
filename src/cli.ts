@@ -62,6 +62,7 @@ import { approveDesignSystemRelease, proposeDesignSystem } from "./sitespec/desi
 import { buildSiteSpecPage } from "./sitespec/production.ts";
 import { buildSiteRollout, proposeApprovedDesignSystemGap } from "./sitespec/rollout.ts";
 import { capturePageEvidence, recordPageEvidence } from "./sitespec/evidence.ts";
+import { operationalRequiredActions, SiteSpecAuthorityError } from "./sitespec/adapter.ts";
 
 type GlobalOptions = { config: string; workspace: string; acss?: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -875,7 +876,8 @@ program
 program.parseAsync(process.argv).catch((error: unknown) => {
   const known = error instanceof Gen2ProdError ? error : undefined;
   const message = error instanceof Error ? error.message : String(error);
-  if (globals().json) console.log(JSON.stringify({ ok: false, command: program.args[0] ?? "unknown", data: known?.detail ?? null, warnings: [message], requiredActions: [] }));
+  const requiredActions = error instanceof SiteSpecAuthorityError ? operationalRequiredActions(error.requiredActions) : [];
+  if (globals().json) console.log(JSON.stringify({ ok: false, command: program.args[0] ?? "unknown", data: known?.detail ?? null, warnings: [message], requiredActions }));
   else console.error(`gen2prod: ${message}`);
   process.exitCode = known?.exitCode ?? 1;
 });
