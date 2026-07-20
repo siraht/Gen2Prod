@@ -220,7 +220,8 @@ async function captureOne(browser: Browser, options: CaptureOptions, viewport: n
   });
   else if (state === "hover") await page.locator("button, a, summary").first().hover();
   const renderedSource = options.collectRenderedSource ? { ...await captureRenderedSource(page), scrollPositionsVisited } : undefined;
-  const screenshot = join(options.outputDirectory, `capture-${viewport}-${theme}-${state}.png`);
+  const safeState = state.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "default";
+  const screenshot = join(options.outputDirectory, `capture-${viewport}-${theme}-${safeState}.png`);
   await page.screenshot({ path: screenshot, fullPage: true, animations: "disabled" });
   const performanceEvidence: Record<string, unknown> = await page.evaluate(() => {
     const browserPerformance = globalThis.performance;

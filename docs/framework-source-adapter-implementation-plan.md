@@ -38,6 +38,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P8 Bricks offline patch vertical slice | Added 2.x/revision-gated root ownership, complete-object CMS preconditions, semantic container/tag/BEM output, selective owned inline-style removal, shared SCSS, dynamic/private field retention, offline import/rollback packages, exact rollback/reapply, and registry dispatch | Dogfood retains child/envelope/vendor/query/condition/interaction data, removes only known root style payloads, round-trips the tree, rejects stale preimages, and replans empty without remote mutation |
 | 2026-07-20 | P2.6 shared project acceptance validator | Added native-command, patch-scope, untouched-file, immutable-region/binding, state/branch/interaction, owned-SCSS, semantic/content/URL/form/interaction/accessibility, baseline/candidate/target image-diff, rollback, replay, idempotence, mutation-recall, and isolation gates in the strict validation-report schema | React dogfood produces retained diff PNGs and passes every deterministic/native/style/visual/rollback gate; the same run is rejected without hardened-isolation and 100% frozen-control evidence and accepted when those proofs are supplied |
 | 2026-07-20 | P9 preview lifecycle | Added an exact-authority, shell-free preview process with environment allowlisting, bounded output, readiness polling, early-exit/timeout errors, and process-group teardown | A live Bun preview fixture becomes reachable only through its declared command and is unreachable after deterministic shutdown |
+| 2026-07-20 | P9 inspect-to-validation project controller | Added isolated baseline/candidate sandboxes, native builds, authorized live preview, declarative full-page Chromium state capture, exact adapter planning/replanning, strict validation, and content-addressed contract/source/plan/sandbox/report/replay artifacts | End-to-end React dogfood retains baseline/candidate screenshots and diff PNG, accepts with zero failures, writes six replay-linked artifact refs, and leaves the source project and its `.gen2prod` path untouched |
 
 ### Additional implementation decisions
 
@@ -59,6 +60,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | D34 | Bricks owned styling is lowered to shared SCSS and one semantic global-class reference, not retained in element settings | Root style payloads conflict with the project-wide no inline/CMS styling contract | The planner removes only the enumerated visual setting keys on the explicitly owned root; all query, condition, interaction, component, content, vendor, child, and envelope data remains untouched |
 | D35 | Project acceptance is a strict report, not the absence of thrown errors | Build success or pixel similarity alone can hide source, state, rollback, policy, or isolation failures | `accepted` is true only when all recorded hard failures are empty; missing frozen-control or hardened-sandbox evidence is an explicit blocking failure even when local dogfood otherwise passes |
 | D36 | Preview servers are lifecycle processes, not build commands | Waiting for a server command to exit deadlocks capture, while detaching it without ownership leaks processes | The runtime verifies readiness at an explicit URL, retains bounded logs, and owns deterministic process-group shutdown in success and failure paths |
+| D37 | Baseline native builds and previews run from an empty-plan sandbox | Even an ordinary build writes caches/output and cannot remain a read-only inspection if executed in the destination | Original and candidate evidence come from independent copied roots; only the explicit destination-apply phase may later write accepted changes to the destination |
 
 ### Lessons learned
 
@@ -85,6 +87,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L19 | Canonical JSON output changes export whitespace even when only one element changes | Exact original bytes are retained as the rollback authority, while semantic preservation is proven through complete object/envelope equality and canonical hashes |
 | L20 | Validating an entire legacy stylesheet against owned-surface rules incorrectly charges preserved project debt to the generated component | Styling gates compile and inspect only the planned owned rule/file payload; untouched legacy selectors remain a residual/reachability concern rather than contaminating the ownership claim |
 | L21 | Killing only the package-manager child can leave its preview server alive | Preview commands start in their own process group on POSIX and shutdown signals the group, with a bounded SIGKILL fallback |
+| L22 | Route-qualified state IDs contain `/` and `:` and are unsafe screenshot filenames | Capture artifacts retain the original state ID in metadata while filenames use a deterministic sanitized representation |
 
 ## 1. Outcome
 
@@ -920,7 +923,7 @@ Dependencies: P2.5, P1.7–P1.8.
 Tasks:
 
 - [x] Run configured typecheck/build/test commands.
-- [ ] Start preview server and capture all route/state/viewports.
+- [x] Start preview server and capture all route/state/viewports.
 - [x] Compare dynamic-region, handler, import, and untouched-file hashes.
 - [x] Run semantic/content/URL/form/interaction/accessibility checks.
 - [x] Run BEM/SCSS/token/selector gates on owned surfaces.
@@ -1188,11 +1191,11 @@ Dependencies: at least React MVP and P1 infrastructure.
 
 Tasks:
 
-- [ ] Implement inspect → plan → sandbox → validate orchestration.
-- [ ] Store all artifacts in the content-addressed artifact graph.
-- [ ] Record pass events, policy hashes, authorities, deltas, decisions, rollback, and required actions.
+- [x] Implement inspect → plan → sandbox → validate orchestration.
+- [x] Store all artifacts in the content-addressed artifact graph.
+- [x] Record pass events, policy hashes, authorities, deltas, decisions, rollback, and required actions.
 - [ ] Mirror project validation into the existing product reports and Gate A–J summaries.
-- [ ] Ensure existing static/native-output pipelines remain unchanged unless project mode is selected.
+- [x] Ensure existing static/native-output pipelines remain unchanged unless project mode is selected.
 
 Acceptance criteria:
 
