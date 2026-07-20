@@ -124,7 +124,8 @@ export async function parseReactProject(root: string, discovery: ProjectDiscover
   const modules: SourceProject["modules"] = [];
   const bindings: ProjectBinding[] = [];
   const variants: SourceProject["classVariants"] = [];
-  const files = discovery.evidence.files.map((file) => ({ ...file, role: discovery.contract.integration.routeEntries.some((route) => route.entry === file.path) ? "entry" as const : /\.(?:jsx|tsx)$/.test(file.path) ? "component" as const : /\.(?:css|scss|sass)$/.test(file.path) ? "style" as const : file.path.endsWith(".json") ? "config" as const : "support" as const, editable: discovery.contract.authority.allowedPaths.some((allowed) => file.path === allowed || file.path.startsWith(`${allowed}/`)) }));
+  const reactGraph: { path: string; boundary: "client" | "server"; serverActions: string[]; asyncExports: string[]; metadataExports: string[]; importedComponents: string[]; usedComponents: string[]; props: string[] }[] = [];
+  const files = discovery.evidence.files.map((file) => ({ ...file, role: discovery.contract.integration.routeEntries.some((route) => route.entry === file.path) ? "entry" as const : discovery.contract.integration.rootLayouts.includes(file.path) ? "layout" as const : /\.(?:jsx|tsx)$/.test(file.path) ? "component" as const : /\.(?:css|scss|sass)$/.test(file.path) ? "style" as const : file.path.endsWith(".json") ? "config" as const : "support" as const, editable: discovery.contract.authority.allowedPaths.some((allowed) => file.path === allowed || file.path.startsWith(`${allowed}/`)) }));
   for (const file of files.filter((item) => /\.(?:jsx|tsx)$/.test(item.path))) {
     const source = await readSourceText(join(root, file.path));
     const sourceFile = ts.createSourceFile(file.path, source, ts.ScriptTarget.Latest, true, file.path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.JSX);
@@ -132,15 +133,45 @@ export async function parseReactProject(root: string, discovery: ProjectDiscover
     const exports: string[] = [];
     const symbols = new Set<string>();
     const components = new Set<string>();
+    const importedComponents = new Set<string>();
+    const usedComponents = new Set<string>();
+    const props = new Set<string>();
+    const serverActions = new Set<string>();
+    const asyncExports = new Set<string>();
+    const metadataExports = new Set<string>();
+    const boundary = sourceFile.statements.some((statement) => ts.isExpressionStatement(statement) && ts.isStringLiteral(statement.expression) && statement.expression.text === "use client") ? "client" as const : "server" as const;
     const visit = (node: ts.Node) => {
-      if (ts.isImportDeclaration(node)) imports.push(node.moduleSpecifier.getText(sourceFile).slice(1, -1));
-      if (ts.isFunctionDeclaration(node) && node.name) { symbols.add(node.name.text); if (/^[A-Z]/.test(node.name.text)) components.add(node.name.text); }
+      if (ts.isImportDeclaration(node)) {
+        imports.push(node.moduleSpecifier.getText(sourceFile).slice(1, -1));
+        const clause = node.importClause;
+        if (clause?.name && /^[A-Z]/.test(clause.name.text)) importedComponents.add(clause.name.text);
+        if (clause?.namedBindings && ts.isNamedImports(clause.namedBindings)) for (const element of clause.namedBindings.elements) if (/^[A-Z]/.test(element.name.text)) importedComponents.add(element.name.text);
+        for (const name of clause ? identifiers(clause) : []) bindings.push({ name, kind: "import", sourceHash: sha256(clause!.getText(sourceFile)), immutable: true });
+      }
+      if (ts.isFunctionDeclaration(node) && node.name) {
+        symbols.add(node.name.text);
+        if (/^[A-Z]/.test(node.name.text)) {
+          components.add(node.name.text);
+          for (const parameter of node.parameters) for (const name of identifiers(parameter)) { props.add(name); bindings.push({ name, kind: "prop", sourceHash: sha256(parameter.getText(sourceFile)), immutable: true }); }
+        }
+        if (node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword) && node.modifiers.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) asyncExports.add(node.name.text);
+        if (node.body?.statements.some((statement) => ts.isExpressionStatement(statement) && ts.isStringLiteral(statement.expression) && statement.expression.text === "use server")) { serverActions.add(node.name.text); bindings.push({ name: node.name.text, kind: "action", sourceHash: sha256(node.getText(sourceFile)), immutable: true }); }
+      }
       if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) { symbols.add(node.name.text); if (/^[A-Z]/.test(node.name.text)) components.add(node.name.text); }
+      if (ts.isVariableDeclaration(node) && node.initializer && ts.isCallExpression(node.initializer) && ts.isIdentifier(node.initializer.expression)) {
+        const hook = node.initializer.expression.text;
+        const names = identifiers(node.name);
+        const kind: ProjectBinding["kind"] = hook === "useRef" ? "ref" : hook === "useState" || hook === "useReducer" ? "state" : hook === "useActionState" ? "action" : "unknown";
+        if (kind !== "unknown") for (const name of names) bindings.push({ name, kind, sourceHash: sha256(node.getText(sourceFile)), immutable: true });
+      }
       if (ts.isExportAssignment(node)) exports.push("default");
+      if (ts.isVariableStatement(node) && node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) for (const declaration of node.declarationList.declarations) if (ts.isIdentifier(declaration.name)) { exports.push(declaration.name.text); if (declaration.name.text === "metadata") metadataExports.add(declaration.name.text); }
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && ["fetch", "query", "load"].includes(node.expression.text)) bindings.push({ name: node.expression.text, kind: "data", sourceHash: sha256(node.getText(sourceFile)), immutable: true });
       if (ts.canHaveModifiers(node) && ts.getModifiers(node)?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword)) {
         const named = (node as ts.NamedDeclaration).name;
-        if (named && ts.isIdentifier(named)) exports.push(named.text);
+        if (named && ts.isIdentifier(named)) { exports.push(named.text); if (named.text === "metadata" || named.text === "generateMetadata") metadataExports.add(named.text); }
       }
+      if ((ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) && /^[A-Z]/.test(jsxTag(ts.isJsxElement(node) ? node.openingElement.tagName : node.tagName))) usedComponents.add(jsxTag(ts.isJsxElement(node) ? node.openingElement.tagName : node.tagName).split(".")[0]!);
       if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node) || ts.isJsxFragment(node)) {
         if (!hasJsxContainerAncestor(node)) {
           const converted = convert(file.path, source, sourceFile, node);
@@ -152,7 +183,8 @@ export async function parseReactProject(root: string, discovery: ProjectDiscover
     };
     visit(sourceFile);
     modules.push({ path: file.path, imports: imports.sort(), exports: [...new Set(exports)].sort(), symbols: [...symbols].sort(), components: [...components].sort() });
+    reactGraph.push({ path: file.path, boundary, serverActions: [...serverActions].sort(), asyncExports: [...asyncExports].sort(), metadataExports: [...metadataExports].sort(), importedComponents: [...importedComponents].sort(), usedComponents: [...usedComponents].sort(), props: [...props].sort() });
   }
   const styleSources = files.filter((file) => file.role === "style").map((file) => ({ path: file.path, sha256: file.sha256, selectors: [], scoped: false, module: /\.module\./.test(file.path) }));
-  return assembleSourceProject(discovery.contract, discovery.contractHash, { files, modules, roots, bindings, classVariants: variants, styleSources, metadata: { capabilityHash: hashJson({ parser: "typescript", version: ts.version }) } });
+  return assembleSourceProject(discovery.contract, discovery.contractHash, { files, modules, roots, bindings, classVariants: variants, styleSources, metadata: { capabilityHash: hashJson({ parser: "typescript", version: ts.version }), reactGraph } });
 }

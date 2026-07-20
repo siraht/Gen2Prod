@@ -107,7 +107,38 @@ function discoverRoutes(profile: ProjectFrameworkProfile, files: string[]): Rout
     const entry = preferred.find((candidate) => files.includes(candidate));
     if (entry) entries = [{ route: "/", entry }];
   }
-  return entries.sort((left, right) => left.route.localeCompare(right.route)).map((entry) => ({ ...entry, layoutChain: [], states: [`${entry.route}:default`], dynamic: /\[[^\]]+\]/.test(entry.route) }));
+  return entries.sort((left, right) => left.route.localeCompare(right.route)).map((entry) => ({ ...entry, layoutChain: profile === "next-app" ? nextLayoutChain(entry.entry, files) : [], states: [`${entry.route}:default`], dynamic: /\[[^\]]+\]/.test(entry.route) }));
+}
+
+function nextLayoutChain(entry: string, files: string[]): string[] {
+  const root = entry.startsWith("src/app/") ? "src/app" : "app";
+  const layouts: string[] = [];
+  let current = dirname(entry);
+  while (current === root || current.startsWith(`${root}/`)) {
+    for (const extension of ["tsx", "jsx"]) { const candidate = `${current}/layout.${extension}`; if (files.includes(candidate)) layouts.unshift(candidate); }
+    if (current === root) break;
+    current = dirname(current);
+  }
+  return layouts;
+}
+
+function discoverTypeScript(root: string, files: string[]): { aliases: Record<string, string>; facts: Record<string, unknown>; unresolved: string[] } {
+  const relativePath = ["tsconfig.json", "jsconfig.json"].find((candidate) => files.includes(candidate));
+  if (!relativePath) return { aliases: {}, facts: {}, unresolved: [] };
+  const path = join(root, relativePath);
+  const read = ts.readConfigFile(path, ts.sys.readFile);
+  if (read.error) return { aliases: {}, facts: { config: relativePath }, unresolved: [`typescript-config:${read.error.code}`] };
+  const parsed = ts.parseJsonConfigFileContent(read.config, ts.sys, root, undefined, path);
+  const aliases: Record<string, string> = {};
+  for (const [rawAlias, targets] of Object.entries(parsed.options.paths ?? {})) {
+    const target = targets?.[0];
+    if (!target) continue;
+    const alias = rawAlias.replace(/\/\*$/, "");
+    const absolute = resolve(parsed.options.baseUrl ?? root, target.replace(/\/\*$/, ""));
+    const projectRelative = posix(relative(root, absolute));
+    if (!projectRelative.startsWith("..") && projectRelative) aliases[alias] = projectRelative;
+  }
+  return { aliases, facts: { config: relativePath, jsx: parsed.options.jsx === undefined ? "unspecified" : ts.JsxEmit[parsed.options.jsx], moduleResolution: parsed.options.moduleResolution === undefined ? "unspecified" : ts.ModuleResolutionKind[parsed.options.moduleResolution], sourceRoots: [...new Set(parsed.fileNames.map((file) => posix(relative(root, dirname(file)))))].sort() }, unresolved: parsed.errors.map((error) => `typescript-config:${error.code}`) };
 }
 
 function packageManager(files: Set<string>, declared?: string): { name: "bun" | "pnpm" | "npm" | "yarn"; lockfile: string } | undefined {
@@ -139,6 +170,7 @@ export async function discoverProject(inputRoot: string, options: DiscoverProjec
   const packagePath = pathSet.has("package.json") ? join(root, "package.json") : undefined;
   const packageData = packagePath ? await Bun.file(packagePath).json() as PackageData : {};
   const dependencies = packageDependencies(packageData);
+  const typeScript = discoverTypeScript(root, paths);
   const detected = profiles(dependencies, pathSet);
   const selected = options.profile ? detected.find((item) => item.profile === options.profile) : detected.length === 1 ? detected[0] : undefined;
   const evidence: DiscoveryEvidence = {
@@ -157,6 +189,7 @@ export async function discoverProject(inputRoot: string, options: DiscoverProjec
   const manager = packageManager(pathSet, packageData.packageManager);
   const scripts = packageData.scripts ?? {};
   const requiredActions: ProjectRequiredAction[] = [];
+  for (const unresolved of typeScript.unresolved) requiredActions.push({ id: unresolved, summary: "Resolve TypeScript project configuration", detail: `${unresolved} prevents complete alias/JSX discovery.`, blocking: true });
   if (selected.target !== "wordpress" && selected.target !== "bricks" && !scripts.build) requiredActions.push({ id: "project-build-command", summary: "Declare the project build command", detail: "package.json has no build script; native acceptance cannot complete until a build command is authorized.", blocking: true });
   const rootHash = hashJson(files.map((file) => ({ path: file.path, sha256: file.sha256 })));
   const pm = manager ? { ...manager, lockfileHash: await hashFile(join(root, manager.lockfile)) } : undefined;
@@ -176,11 +209,11 @@ export async function discoverProject(inputRoot: string, options: DiscoverProjec
       ...(manager && scripts.build ? { build: command(manager.name, "build", 300_000) } : {}),
       ...(manager && (scripts.preview || scripts.start) ? { preview: command(manager.name, scripts.preview ? "preview" : "start", 120_000) } : {}),
     },
-    integration: { routeEntries: routes, rootLayouts: paths.filter((path) => /(?:layout\.(?:jsx|tsx)|\+layout\.svelte|Layout\.astro)$/.test(path)), metadataMode: selected.profile, styleEntrypoints: paths.filter((path) => /(?:^|\/)(?:app|global|globals|style|styles)\.(?:css|scss|sass)$/.test(path)), generatedDirectory, aliases: {} },
+    integration: { routeEntries: routes, rootLayouts: paths.filter((path) => /(?:layout\.(?:jsx|tsx)|\+layout\.svelte|Layout\.astro)$/.test(path)), metadataMode: selected.profile, styleEntrypoints: paths.filter((path) => /(?:^|\/)(?:app|global|globals|style|styles)\.(?:css|scss|sass)$/.test(path)), generatedDirectory, aliases: typeScript.aliases },
     authority: { allowedPaths: options.allowedPaths ?? allowedDefaults(selected.profile, paths), deniedPaths: [".env", ".env.local", ".git", "node_modules", ".gen2prod"], preserveExpressions: true, preserveHandlers: true, preserveDataAccess: true, permitFrozenInstall: options.permitFrozenInstall ?? false, permittedEnvironmentKeys: options.permittedEnvironmentKeys ?? [] },
     states: stateFixtures,
     ...(selected.target === "wordpress" || selected.target === "bricks" ? { cms: { kind: selected.target, exportPath: routes[0]!.entry, version: versionFor(selected.profile, dependencies), pluginVersions: {}, revision: files.find((file) => file.path === routes[0]!.entry)!.sha256, contentIds: [] } } : {}),
-    discovery: { facts: { root, detectedProfile: selected.profile, files: files.length }, inferredDefaults: { generatedDirectory, packageManager: manager?.name ?? null }, explicitOverrides: options, unresolved: requiredActions.map((item) => item.id) },
+    discovery: { facts: { root, detectedProfile: selected.profile, files: files.length, typeScript: typeScript.facts, ...(selected.profile === "next-app" ? { nextSpecialFiles: paths.filter((path) => /\/(?:loading|error|not-found|template)\.(?:jsx|tsx)$/.test(path)) } : {}) }, inferredDefaults: { generatedDirectory, packageManager: manager?.name ?? null }, explicitOverrides: options, unresolved: requiredActions.map((item) => item.id) },
   });
   return { contract, contractHash: hashJson(contract), evidence, requiredActions };
 }

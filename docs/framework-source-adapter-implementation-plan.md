@@ -24,6 +24,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P1.9 source/render correspondence | Added a strict correspondence artifact and confidence-scored matching across states using tags, text, attributes, class roles, accessible names, source/render ancestry, and layout visibility; repeated instances aggregate to one template node and low-confidence mappings cannot authorize destructive edits | Repeated React list and unique high-confidence mapping tests pass; sandbox-only DOM IDs are removed from serialized rendered source |
 | 2026-07-20 | P1.10 shared ACSS-tokenized SCSS | Added PostCSS/SCSS import/rule inventory, source+render selector reachability, owner-rule replacement/creation, side-effect style imports, proven-dead removal, registered ACSS/project variable checks, Sass compilation, and class-only BEM/nesting/utility gates | Unrendered branch retention, rendered-only retention, dead-rule removal, untouched import/rules, owner replacement, token coverage, compilation, and forbidden-selector tests pass |
 | 2026-07-20 | P2 React strangler vertical slice | Added static enumeration/class-role analysis for ternary/logical/template/array/`clsx` forms and a correspondence-gated planner that emits an owned semantic shell, coalesced native imports, canonical ACSS-token SCSS, exact preserved dynamic islands, collision actions, and an empty second plan | Dirty React/Vite dogfood preserves `map`, key, handler, and data expressions byte-for-byte; removes root utilities; sandbox native build passes; second plan is empty |
+| 2026-07-20 | P2.1/P2.2 and P3 Next source graph | Added inherited tsconfig/JSX/alias resolution, Next route/layout/special-file discovery, React props/hooks/refs/imported-component inventory, async data/metadata/server-action evidence, server/client classification, and Next-safe global style placement | Dynamic-route layout-chain tests pass; Next dogfood preserves metadata/fetch/server boundaries, emits no accidental `use client`, and does not duplicate the root global-style import |
 
 ### Additional implementation decisions
 
@@ -785,9 +786,9 @@ Dependencies: P1.1, P1.3.
 
 Tasks:
 
-- [ ] Resolve tsconfig inheritance, JSX mode, aliases, entrypoints, route library signals, style imports, and build scripts.
-- [ ] Inventory React component symbols and render roots.
-- [ ] Distinguish generic React/Vite from Next and other React metaframeworks.
+- [x] Resolve tsconfig inheritance, JSX mode, aliases, entrypoints, route library signals, style imports, and build scripts.
+- [x] Inventory React component symbols and render roots.
+- [x] Distinguish generic React/Vite from Next and other React metaframeworks.
 
 Acceptance criteria:
 
@@ -801,10 +802,10 @@ Dependencies: P1.2–P1.3.
 Tasks:
 
 - [x] Parse `.jsx`/`.tsx` with the TypeScript compiler API.
-- [ ] Extract components, props, JSX trees, fragments, expressions, spreads, conditionals, maps, event bindings, refs, keys, and imports.
-- [ ] Preserve exact expression and comment spans.
-- [ ] Resolve local symbols and classify imported/opaque components.
-- [ ] Represent unsupported syntax as opaque rather than dropping it.
+- [x] Extract components, props, JSX trees, fragments, expressions, spreads, conditionals, maps, event bindings, refs, keys, and imports.
+- [x] Preserve exact expression and comment spans.
+- [x] Resolve local symbols and classify imported/opaque components.
+- [x] Represent unsupported syntax as opaque rather than dropping it.
 
 Acceptance criteria:
 
@@ -930,9 +931,9 @@ Dependencies: React MVP.
 
 Tasks:
 
-- [ ] Discover `app/` routes, layouts, templates, loading/error/not-found files, route groups, dynamic segments, metadata exports, fonts, and global styles.
-- [ ] Classify server and client components from directives and dependency graph.
-- [ ] Inventory route params, search params, server actions, and fetch/data boundaries.
+- [x] Discover `app/` routes, layouts, templates, loading/error/not-found files, route groups, dynamic segments, metadata exports, fonts, and global styles.
+- [x] Classify server and client components from directives and dependency graph.
+- [x] Inventory route params, search params, server actions, and fetch/data boundaries.
 
 Acceptance criteria:
 
@@ -945,11 +946,11 @@ Dependencies: P3.1.
 
 Tasks:
 
-- [ ] Insert generated components into the correct route/layout boundary.
+- [x] Insert generated components into the correct route/layout boundary.
 - [ ] Emit metadata through Next-native surfaces without duplicating document tags.
-- [ ] Keep server actions, async components, route params, and data access verbatim.
-- [ ] Keep client components as the smallest existing or required interaction islands.
-- [ ] Integrate shared SCSS according to Next import constraints.
+- [x] Keep server actions, async components, route params, and data access verbatim.
+- [x] Keep client components as the smallest existing or required interaction islands.
+- [x] Integrate shared SCSS according to Next import constraints.
 
 Acceptance criteria:
 

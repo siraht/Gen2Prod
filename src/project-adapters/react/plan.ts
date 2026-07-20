@@ -55,9 +55,11 @@ export async function planReactIntegration(input: { root: string; contract: Proj
   const styleOperation = await planSharedScss({ root: input.root, contract: input.contract, project: input.project, inventory, bemBlock, canonicalScss: input.canonical.scss, operationId: `style-${bemBlock}`, registeredVariables: input.canonical.registeredVariables });
   if (styleOperation) operations.push(styleOperation);
   const stylePath = styleOperation?.path ?? inventory.entrypoint;
-  const styleImport = planImport({ operationId: `import-style-${bemBlock}`, path: route.entry, source: routeSource, request: { module: modulePath(route.entry, stylePath), sideEffect: true }, dependencies: styleOperation?.kind === "write-owned-file" ? [styleOperation.operationId] : [] });
+  const styleImportEntry = input.contract.framework.profile === "next-app" ? input.contract.integration.rootLayouts[0] ?? route.entry : route.entry;
+  const styleImportSource = styleImportEntry === route.entry ? routeSource : await readSourceText(`${input.root}/${styleImportEntry}`);
+  const styleImport = planImport({ operationId: `import-style-${bemBlock}`, path: styleImportEntry, source: styleImportSource, request: { module: modulePath(styleImportEntry, stylePath), sideEffect: true }, dependencies: styleOperation?.kind === "write-owned-file" ? [styleOperation.operationId] : [] });
   if (styleImport) {
-    const collidingIndex = operations.findIndex((operation) => operation.kind === "insert-import" && operation.path === route.entry && operation.start === styleImport.start && operation.end === styleImport.end);
+    const collidingIndex = operations.findIndex((operation) => operation.kind === "insert-import" && operation.path === styleImportEntry && operation.start === styleImport.start && operation.end === styleImport.end);
     if (collidingIndex < 0) operations.push(styleImport);
     else {
       const componentOperation = operations[collidingIndex]!;
