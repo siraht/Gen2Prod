@@ -80,4 +80,18 @@ describe("project discovery", () => {
     expect(parsed.bindings.some((binding) => binding.name === "load" && binding.kind === "loader")).toBeTrue();
     expect(parsed.bindings.some((binding) => binding.name === "actions" && binding.kind === "action")).toBeTrue();
   });
+
+  test("discovers Astro dynamic pages, layouts, and content collections", async () => {
+    const root = await mkdtemp(join(tmpdir(), "g2p-astro-discovery-"));
+    await Bun.write(join(root, "package.json"), JSON.stringify({ name: "fixture-astro", scripts: { build: "astro build" }, dependencies: { astro: "7.1.1" } }));
+    await Bun.write(join(root, "bun.lock"), "lock");
+    await Bun.write(join(root, "src", "pages", "blog", "[slug].astro"), "<main>Post</main>\n");
+    await Bun.write(join(root, "src", "layouts", "Article.astro"), "<article><slot /></article>\n");
+    await Bun.write(join(root, "src", "content.config.ts"), "export const collections = {};\n");
+    const discovery = await discoverProject(root);
+    expect(discovery.contract.integration.routeEntries[0]).toMatchObject({ route: "/blog/[slug]", dynamic: true });
+    expect(discovery.contract.integration.rootLayouts).toEqual(["src/layouts/Article.astro"]);
+    expect(discovery.contract.discovery.facts.astroLayouts).toEqual(["src/layouts/Article.astro"]);
+    expect(discovery.contract.discovery.facts.astroCollections).toEqual(["src/content.config.ts"]);
+  });
 });

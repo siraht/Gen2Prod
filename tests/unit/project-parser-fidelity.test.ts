@@ -71,9 +71,10 @@ describe("framework parser location fidelity", () => {
     exact(source, flatten(result.parsed.roots));
   });
 
-  test("Astro fails closed when compiler positions are not source-valid", async () => {
+  test("Astro repairs an adjacent compiler expression start and preserves nested markup exactly", async () => {
     const result = await project("astro", "src/pages/index.astro", '---\nconst ok=true;\n---\n<main>{ok && <p>Hi</p>}</main>');
-    expect(result.parsed.unresolved.some((item) => item.id.startsWith("astro-location:"))).toBeTrue();
+    expect(result.parsed.unresolved).toEqual([]);
+    expect(flatten(result.parsed.roots).find((node) => node.kind === "expression")?.source).toBe("{ok && <p>Hi</p>}");
     exact(result.source, flatten(result.parsed.roots));
   });
 
@@ -85,6 +86,20 @@ describe("framework parser location fidelity", () => {
     expect(island.attributes["client:load"]).toBe("");
     expect(island.rewriteAuthority).toBe("preserve-verbatim");
     expect(result.parsed.bindings.some((binding) => binding.name === "client:load" && binding.kind === "action")).toBeTrue();
+    exact(source, flatten(result.parsed.roots));
+  });
+
+  test("Astro inventories frontmatter data, components, layouts, slots, styles, and island hydration", async () => {
+    const source = `---\nimport Layout from '../layouts/Layout.astro';\nimport Counter from '../Counter.jsx';\nimport { getCollection } from 'astro:content';\nconst posts = await getCollection('posts');\nconst { slug } = Astro.params;\n---\n<Layout><Counter client:visible count={posts.length} /><slot name="footer" /></Layout>\n<style>.local { color: red; }</style>`;
+    const result = await project("astro", "src/pages/[slug].astro", source);
+    const graph = (result.parsed.metadata.astroGraph as { islands: { component: string; hydration: string[]; module?: string }[]; slots: string[]; dataBindings: string[]; layouts: string[]; embeddedStyles: number }[])[0]!;
+    expect(result.parsed.modules[0]).toMatchObject({ imports: ["../Counter.jsx", "../layouts/Layout.astro", "astro:content"], components: ["Counter", "Layout"], symbols: ["posts", "slug"] });
+    expect(graph.islands).toEqual([{ component: "Counter", hydration: ["client:visible"], module: "../Counter.jsx" }]);
+    expect(graph.slots).toEqual(["footer"]);
+    expect(graph.dataBindings).toEqual(["Astro.params", "getCollection"]);
+    expect(graph.layouts).toEqual(["../layouts/Layout.astro"]);
+    expect(graph.embeddedStyles).toBe(1);
+    expect(result.parsed.styleSources).toEqual([expect.objectContaining({ path: "src/pages/[slug].astro", scoped: true })]);
     exact(source, flatten(result.parsed.roots));
   });
 
