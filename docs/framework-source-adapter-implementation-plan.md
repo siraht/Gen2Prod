@@ -32,6 +32,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P6 Astro strangler planner vertical slice | Added frontmatter-native import insertion, correspondence-gated semantic slot-shell integration, shared tokenized BEM SCSS, immutable-island preservation obligations, owned-file conflict handling, and exact-profile dispatch | Dirty Astro page dogfood preserves existing frontmatter and a complete `client:load` island, compiler-transforms edited/generated components, removes root utilities, and produces an empty second plan |
 | 2026-07-20 | P6 Astro source and islands graph | Added balanced expression recovery, frontmatter TypeScript import/symbol/data analysis, layout/slot/embedded-style evidence, dynamic-page/layout/content-collection discovery, and island module plus hydration-mode inventory | Fixtures cover nested-markup expressions, `Astro.params`, content queries, named slots, scoped styles, dynamic routes, layouts, collections, and immutable client islands with exact source spans |
 | 2026-07-20 | P7 WordPress structural source graph | Added nested block-stack classification, immutable dynamic core/plugin blocks, balanced shortcode regions, template-part evidence, theme.json fingerprints, stylesheet/enqueue/head evidence, and revision metadata | Fixtures retain complete unknown blocks/attributes and exact shortcode/dynamic block spans while validating stack balance and JSON attributes |
+| 2026-07-20 | P7 WordPress offline patch vertical slice | Added revision-gated opening-comment edits for static block roots, semantic tag/BEM attributes, shared tokenized SCSS, offline import/rollback packages, registry dispatch, exact rollback/reapply, round-trip parsing, and empty replanning | Dogfood changes only the root opening comment, retains all inner bytes/query/shortcode source, refuses revision mismatch, and never touches a database or remote site; PHP/runtime staging validation remains open |
 
 ### Additional implementation decisions
 
@@ -47,6 +48,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | D28 | Astro compiler offsets may anchor a deterministic delimiter-verified span repair, but unanchored or ambiguous positions may not be guessed | The pinned compiler truncates some component ends and reports some expression starts at the immediately preceding `>` | A brace/quote-aware scanner may complete an exact tag or balanced expression only when the expected delimiter is at the reported/adjacent boundary; all other invalid positions fail closed |
 | D29 | Astro component imports belong only in frontmatter | Imports outside the fence are markup and whole-file printing would risk data/island churn | The planner minimally inserts into the exact existing fence or creates one leading fence; data declarations and all markup remain byte-preserved outside the authorized root span |
 | D30 | WordPress block availability does not imply static ownership | Query, navigation, post-content, site identity, archive, and template-part blocks are server/plugin rendered | These core blocks use the same preserve-verbatim authority as unknown plugin blocks; only demonstrated static core blocks may become owned source surfaces |
+| D31 | WordPress offline integration changes the smallest block-comment surface before introducing generated patterns | Existing dynamic inner HTML has no general slot contract across core/plugin blocks | The authorized static root receives semantic `tagName`/BEM `className` attributes; its opening comment is the only template edit and every inner byte remains outside the mutation span |
 
 ### Lessons learned
 
@@ -67,6 +69,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L13 | Astro's self-closing island `position.end` can stop inside the opening tag, and an expression start can point to the preceding `>` | Verify the tag name or adjacent `{` delimiter, scan with quote/brace state, and lock the complete island/expression rather than trusting a partial hash |
 | L14 | Astro root wrapping can preserve unreliable nested compiler coordinates by deriving only the owned root's opening/closing boundaries | The planner scans the verified root source with quote/brace state and copies the entire inner substring verbatim into the generated shell boundary |
 | L15 | Shortcodes can exist inside otherwise static core-block inner HTML without their own block comments | A balanced token stack attaches exact shortcode nodes to the smallest mutable containing block; shortcodes inside already-opaque blocks are covered by the parent's immutable span and are not double-counted |
+| L16 | A revision-aware rollback package must be derived from the original export contract, not the reparsed candidate revision | Candidate rediscovery correctly advances the offline revision and would otherwise make the rollback precondition self-referential | Package creation verifies the original bytes against the original revision and records both candidate hash and exact original contents/hash |
 
 ## 1. Outcome
 
@@ -1098,11 +1101,11 @@ Dependencies: P7.1.
 
 Tasks:
 
-- [ ] Patch versioned exports/theme files only in sandbox.
-- [ ] Emit block-theme templates/patterns and shared BEM styles.
+- [x] Patch versioned exports/theme files only in sandbox.
+- [x] Emit block-theme templates/patterns and shared BEM styles.
 - [ ] Validate PHP syntax where PHP fragments are involved.
 - [ ] Render through an authorized local/staging fixture when available; otherwise complete static validations and record the missing runtime action.
-- [ ] Produce a revision-aware import package and rollback export.
+- [x] Produce a revision-aware import package and rollback export.
 
 Acceptance criteria:
 
