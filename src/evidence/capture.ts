@@ -98,7 +98,7 @@ async function captureDom(page: Page): Promise<unknown[]> {
     const tag = element.tagName.toLowerCase();
     const text = element.childNodes.length === 1 && element.firstChild?.nodeType === Node.TEXT_NODE ? element.textContent?.trim() ?? "" : "";
     const contentText = /^(?:a|button|summary|label|p|h[1-6]|blockquote|figcaption|li|div|section|article|figure|nav|header|footer|main|ul|ol)$/.test(tag) ? (element.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 1000) : text;
-    return { nodeId: attributes["data-g2p-node"] ?? attributes["data-gen2prod-id"], tag, attributes, text, contentText, box: { x: box.x, y: box.y, width: box.width, height: box.height }, visible: Boolean(box.width || box.height), styles: { display: style.display, position: style.position, margin: style.margin, padding: style.padding, gap: style.gap, width: style.width, height: style.height, fontSize: style.fontSize, lineHeight: style.lineHeight, color: style.color, backgroundColor: style.backgroundColor, borderRadius: style.borderRadius, boxShadow: style.boxShadow, overflow: style.overflow } };
+    return { nodeId: attributes["data-g2p-node"] ?? attributes["data-gen2prod-id"], parentId: element.parentElement?.getAttribute("data-g2p-node") ?? element.parentElement?.getAttribute("data-gen2prod-id") ?? undefined, parentTag: element.parentElement?.tagName.toLowerCase(), tag, attributes, text, contentText, box: { x: box.x, y: box.y, width: box.width, height: box.height }, visible: Boolean(box.width || box.height), styles: { display: style.display, position: style.position, margin: style.margin, padding: style.padding, gap: style.gap, width: style.width, height: style.height, fontSize: style.fontSize, lineHeight: style.lineHeight, color: style.color, backgroundColor: style.backgroundColor, borderRadius: style.borderRadius, boxShadow: style.boxShadow, overflow: style.overflow } };
   }));
 }
 
@@ -144,6 +144,8 @@ async function captureRenderedSource(page: Page): Promise<RenderedSource> {
       } catch { canvasSnapshotFailures += 1; }
     }
     const scripts = [...clone.querySelectorAll("script")];
+    clone.removeAttribute("data-gen2prod-id");
+    for (const element of [...clone.querySelectorAll("[data-gen2prod-id]")]) element.removeAttribute("data-gen2prod-id");
     const inlineEventHandlers = [...clone.querySelectorAll("*")].reduce((count, element) => count + [...element.attributes].filter((attribute) => /^on/i.test(attribute.name)).length, 0);
     scripts.forEach((script) => script.remove());
     const css: string[] = [];

@@ -230,6 +230,23 @@ export const ProjectOwnershipMapSchema = z.object({
   }).strict()),
 }).strict();
 
+export const ProjectCorrespondenceSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  projectId: z.string().min(1),
+  sourceProjectHash: Sha256Schema,
+  captureHash: Sha256Schema,
+  mappings: z.array(z.object({
+    mappingId: z.string().min(1),
+    sourceNodeId: z.string().min(1),
+    kind: z.enum(["one-to-one", "repeated-template", "wrapper", "conditional", "slot", "unresolved"]),
+    instances: z.array(z.object({ stateId: z.string(), renderedNodeId: z.string(), score: z.number().min(0).max(1) }).strict()),
+    confidence: z.number().min(0).max(1),
+    evidence: z.array(z.string()),
+    destructiveAuthorized: z.boolean(),
+  }).strict()),
+  unresolved: z.array(z.object({ sourceNodeId: z.string(), reason: z.string(), requiredEvidence: z.array(z.string()) }).strict()),
+}).strict();
+
 const PatchBaseShape = {
   operationId: z.string().min(1),
   dependencies: z.array(z.string()),
@@ -315,6 +332,7 @@ export type ProjectBinding = z.infer<typeof ProjectBindingSchema>;
 export type ProjectMarkupNode = ProjectMarkupNodeShape;
 export type SourceProject = z.infer<typeof SourceProjectSchema>;
 export type ProjectOwnershipMap = z.infer<typeof ProjectOwnershipMapSchema>;
+export type ProjectCorrespondence = z.infer<typeof ProjectCorrespondenceSchema>;
 export type ProjectPatchOperation = z.infer<typeof ProjectPatchOperationSchema>;
 export type ProjectPatchPlan = z.infer<typeof ProjectPatchPlanSchema>;
 export type ProjectValidationReport = z.infer<typeof ProjectValidationReportSchema>;

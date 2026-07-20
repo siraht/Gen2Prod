@@ -30,6 +30,7 @@ describe("project route/state fixtures", () => {
     const capture = await captureProjectStates({ baseUrl: `http://${server.hostname}:${server.port}/`, outputDirectory: output, contract, project, fixturePayloads: { [sha256(body)]: { body, contentType: "text/plain" } } });
     expect(capture.coverage).toEqual({ declared: 1, captured: 1, branchesExpected: 1, branchesObserved: 1, interactionsExpected: 1, interactionsObserved: 1 });
     expect(capture.requiredActions).toEqual([]);
+    expect(capture.capture.captures[0]?.renderedSource?.html).not.toContain("data-gen2prod-id");
     assertEquivalentFixtureInputs(capture, structuredClone(capture));
     expect(() => assertEquivalentFixtureInputs(capture, { ...capture, fixtureHash: sha256("changed") })).toThrow("fixture inputs differ");
   }, 20_000);

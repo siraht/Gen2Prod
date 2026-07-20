@@ -21,6 +21,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P1.6 ownership and three-way safety | Added strict sidecar entries with base/current/proposed hashes, source symbol/node/fingerprint/BEM ownership, unique-move rebasing, semantic/duplicate conflict classification, and workspace persistence outside runtime output | Stable, offset-moved, semantically changed, duplicate-anchor, sidecar round-trip, and no-runtime-marker tests pass |
 | 2026-07-20 | P1.7 safe runner and copied sandbox (filesystem hardening still open) | Added exact command authorization, shell-free spawn, filtered env, deadlines, bounded/redacted logs, lockfile guards, copied dependencies only when requested, source fingerprint monitoring, retained command/runtime evidence, and sandbox-only patch/build dogfood | Runner/env/redaction/timeout/lock-drift and source-untouched sandbox build tests pass; production acceptance remains false until a pinned container/OS sandbox can prohibit arbitrary absolute-path writes |
 | 2026-07-20 | P1.8 declarative state capture | Extended stabilized browser evidence with hash-verified network fixtures, route navigation, safe/authorized action separation, post-action rendered source, per-fixture viewport/theme capture, environment/input equivalence hashes, and explicit branch/interaction coverage actions | Mocked route, safe details interaction, screenshot/DOM coverage, fixture equivalence, and unsafe-click refusal dogfood tests pass |
+| 2026-07-20 | P1.9 source/render correspondence | Added a strict correspondence artifact and confidence-scored matching across states using tags, text, attributes, class roles, accessible names, source/render ancestry, and layout visibility; repeated instances aggregate to one template node and low-confidence mappings cannot authorize destructive edits | Repeated React list and unique high-confidence mapping tests pass; sandbox-only DOM IDs are removed from serialized rendered source |
 
 ### Additional implementation decisions
 
@@ -739,11 +740,11 @@ Dependencies: P1.2, P1.8.
 
 Tasks:
 
-- [ ] Match static source nodes to rendered DOM across states using tag, text, accessible role/name, attributes, class roles, component ancestry, and layout.
-- [ ] Record one-to-one, repeated-template, wrapper, conditional, slot, and unresolved mappings.
-- [ ] Keep runtime instrumentation optional and sandbox-only; strip it before validation output.
-- [ ] Aggregate repeated template instances without confusing instances with source nodes.
-- [ ] Feed confidence and unresolved ambiguity into patch planning.
+- [x] Match static source nodes to rendered DOM across states using tag, text, accessible role/name, attributes, class roles, component ancestry, and layout.
+- [x] Record one-to-one, repeated-template, wrapper, conditional, slot, and unresolved mappings.
+- [x] Keep runtime instrumentation optional and sandbox-only; strip it before validation output.
+- [x] Aggregate repeated template instances without confusing instances with source nodes.
+- [x] Feed confidence and unresolved ambiguity into patch planning.
 
 Acceptance criteria:
 
