@@ -39,6 +39,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P2.6 shared project acceptance validator | Added native-command, patch-scope, untouched-file, immutable-region/binding, state/branch/interaction, owned-SCSS, semantic/content/URL/form/interaction/accessibility, baseline/candidate/target image-diff, rollback, replay, idempotence, mutation-recall, and isolation gates in the strict validation-report schema | React dogfood produces retained diff PNGs and passes every deterministic/native/style/visual/rollback gate; the same run is rejected without hardened-isolation and 100% frozen-control evidence and accepted when those proofs are supplied |
 | 2026-07-20 | P9 preview lifecycle | Added an exact-authority, shell-free preview process with environment allowlisting, bounded output, readiness polling, early-exit/timeout errors, and process-group teardown | A live Bun preview fixture becomes reachable only through its declared command and is unreachable after deterministic shutdown |
 | 2026-07-20 | P9 inspect-to-validation project controller | Added isolated baseline/candidate sandboxes, native builds, authorized live preview, declarative full-page Chromium state capture, exact adapter planning/replanning, strict validation, and content-addressed contract/source/plan/sandbox/report/replay artifacts | End-to-end React dogfood retains baseline/candidate screenshots and diff PNG, accepts with zero failures, writes six replay-linked artifact refs, and leaves the source project and its `.gen2prod` path untouched |
+| 2026-07-20 | P9.2 explicit destination apply and rollback | Added a separately invoked acceptance boundary that re-discovers the destination, verifies framework/version/lockfile/root identity, preflights every authorized hash-bound operation before writes, persists a versioned rollback bundle, applies atomically, verifies postimages, and restores exact originals on demand or post-apply races | End-to-end React dogfood proves no implicit source write, accepted apply, generated-file creation, exact changed-file inventory, stale second-apply refusal, exact rollback including generated-file removal, and rejection of an unaccepted report |
 
 ### Additional implementation decisions
 
@@ -61,6 +62,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | D35 | Project acceptance is a strict report, not the absence of thrown errors | Build success or pixel similarity alone can hide source, state, rollback, policy, or isolation failures | `accepted` is true only when all recorded hard failures are empty; missing frozen-control or hardened-sandbox evidence is an explicit blocking failure even when local dogfood otherwise passes |
 | D36 | Preview servers are lifecycle processes, not build commands | Waiting for a server command to exit deadlocks capture, while detaching it without ownership leaks processes | The runtime verifies readiness at an explicit URL, retains bounded logs, and owns deterministic process-group shutdown in success and failure paths |
 | D37 | Baseline native builds and previews run from an empty-plan sandbox | Even an ordinary build writes caches/output and cannot remain a read-only inspection if executed in the destination | Original and candidate evidence come from independent copied roots; only the explicit destination-apply phase may later write accepted changes to the destination |
+| D38 | The inverse bundle is persisted before destination mutation and is independent of sandbox lifetime | An accepted sandbox may be cleaned up or a process may fail immediately after the first rename | Apply has a durable exact-original recovery authority before any write; postimage verification triggers automatic rollback on an observed apply race |
 
 ### Lessons learned
 
@@ -88,6 +90,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L20 | Validating an entire legacy stylesheet against owned-surface rules incorrectly charges preserved project debt to the generated component | Styling gates compile and inspect only the planned owned rule/file payload; untouched legacy selectors remain a residual/reachability concern rather than contaminating the ownership claim |
 | L21 | Killing only the package-manager child can leave its preview server alive | Preview commands start in their own process group on POSIX and shutdown signals the group, with a bounded SIGKILL fallback |
 | L22 | Route-qualified state IDs contain `/` and `:` and are unsafe screenshot filenames | Capture artifacts retain the original state ID in metadata while filenames use a deterministic sanitized representation |
+| L23 | An accepted report is not sufficient if the destination has drifted since inspection | Apply re-runs discovery and patch preparation against the real destination and rejects root, framework, lockfile, path, file, span, AST-anchor, revision, and owned-file precondition drift before mutation |
 
 ## 1. Outcome
 
@@ -1194,7 +1197,7 @@ Tasks:
 - [x] Implement inspect → plan → sandbox → validate orchestration.
 - [x] Store all artifacts in the content-addressed artifact graph.
 - [x] Record pass events, policy hashes, authorities, deltas, decisions, rollback, and required actions.
-- [ ] Mirror project validation into the existing product reports and Gate A–J summaries.
+- [x] Mirror project validation into the existing product reports and Gate A–J summaries.
 - [x] Ensure existing static/native-output pipelines remain unchanged unless project mode is selected.
 
 Acceptance criteria:
@@ -1208,11 +1211,11 @@ Dependencies: P9.1, accepted sandbox patch.
 
 Tasks:
 
-- [ ] Revalidate project root, contract, versions, lockfile, allowed paths, and operation preimages.
-- [ ] Apply the complete accepted patch atomically where possible.
-- [ ] If any precondition fails, write nothing.
-- [ ] Record exact changed files, postimages, and rollback bundle.
-- [ ] Provide an explicit rollback command using the accepted inverse plan.
+- [x] Revalidate project root, contract, versions, lockfile, allowed paths, and operation preimages.
+- [x] Apply the complete accepted patch atomically where possible.
+- [x] If any precondition fails, write nothing.
+- [x] Record exact changed files, postimages, and rollback bundle.
+- [x] Provide an explicit rollback operation using the accepted inverse plan (CLI exposure is tracked in P9.3).
 
 Acceptance criteria:
 

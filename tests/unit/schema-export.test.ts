@@ -29,6 +29,7 @@ describe("versioned schema export", () => {
     expect(names).toContain("source-project.schema.json");
     expect(names).toContain("project-ownership-map.schema.json");
     expect(names).toContain("project-patch-plan.schema.json");
+    expect(names).toContain("project-destination-bundle.schema.json");
     expect(names).toContain("project-validation-report.schema.json");
   });
 });

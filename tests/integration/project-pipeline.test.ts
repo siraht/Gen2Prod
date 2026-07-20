@@ -6,6 +6,7 @@ import type { PlannedNode } from "../../src/compiler/types.ts";
 import { sha256 } from "../../src/core/hash.ts";
 import { ArtifactStore } from "../../src/core/artifact-store.ts";
 import { discoverProject } from "../../src/project-adapters/discovery.ts";
+import { applyAcceptedProjectPatch, rollbackDestinationPatch } from "../../src/project-adapters/destination.ts";
 import { runProjectPipeline } from "../../src/project-adapters/pipeline.ts";
 import { parseProjectSource } from "../../src/project-adapters/registry.ts";
 import type { ReactCanonicalSurface } from "../../src/project-adapters/react/plan.ts";
@@ -46,6 +47,19 @@ describe("project pipeline orchestration", () => {
     expect(replay.events.find((event) => event.pass === "project-sandbox")?.rollback).toBeDefined();
     expect(await Bun.file(join(root, "src", "App.tsx")).text()).toBe(source);
     expect(Bun.file(join(root, ".gen2prod")).exists()).resolves.toBeFalse();
+
+    const application = await applyAcceptedProjectPatch({ root, contract: result.contract, source: result.source, plan: result.plan, validation: result.validation, artifactDirectory: artifacts });
+    expect(application.changedFiles.map((file) => file.path).sort()).toEqual([...result.plan.predictedChangedFiles].sort());
+    expect(await Bun.file(join(root, "src", "App.tsx")).text()).toContain("<PageShell>");
+    expect(Bun.file(join(root, "src", "components", "gen2prod", "PageShell.tsx")).exists()).resolves.toBeTrue();
+    await expect(applyAcceptedProjectPatch({ root, contract: result.contract, source: result.source, plan: result.plan, validation: result.validation, artifactDirectory: artifacts })).rejects.toThrow("root hash changed");
+
+    const bundle = await Bun.file(application.rollbackBundlePath).json();
+    const rollback = await rollbackDestinationPatch({ root, bundle });
+    expect(rollback.restoredFiles.sort()).toEqual([...result.plan.predictedChangedFiles].sort());
+    expect(await Bun.file(join(root, "src", "App.tsx")).text()).toBe(source);
+    expect(Bun.file(join(root, "src", "components", "gen2prod", "PageShell.tsx")).exists()).resolves.toBeFalse();
+    await expect(applyAcceptedProjectPatch({ root, contract: result.contract, source: result.source, plan: result.plan, validation: { ...result.validation, accepted: false }, artifactDirectory: artifacts })).rejects.toThrow("requires an accepted");
   }, 30_000);
 });
 

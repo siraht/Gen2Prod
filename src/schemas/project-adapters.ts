@@ -322,6 +322,16 @@ export const ProjectValidationReportSchema = z.object({
   accepted: z.boolean(),
 }).strict();
 
+export const ProjectDestinationBundleSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  projectId: z.string().min(1),
+  planId: z.string().min(1),
+  contractHash: Sha256Schema,
+  sourceProjectHash: Sha256Schema,
+  rootHash: Sha256Schema,
+  files: z.array(z.object({ path: RelativePathSchema, preimageHash: Sha256Schema.optional(), postimageHash: Sha256Schema, original: z.string().optional() }).strict()),
+}).strict();
+
 export type ProjectFrameworkProfile = z.infer<typeof ProjectFrameworkProfileSchema>;
 export type CommandSpec = z.infer<typeof CommandSpecSchema>;
 export type StateFixture = z.infer<typeof StateFixtureSchema>;
@@ -336,3 +346,4 @@ export type ProjectCorrespondence = z.infer<typeof ProjectCorrespondenceSchema>;
 export type ProjectPatchOperation = z.infer<typeof ProjectPatchOperationSchema>;
 export type ProjectPatchPlan = z.infer<typeof ProjectPatchPlanSchema>;
 export type ProjectValidationReport = z.infer<typeof ProjectValidationReportSchema>;
+export type ProjectDestinationBundle = z.infer<typeof ProjectDestinationBundleSchema>;
