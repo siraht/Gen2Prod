@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildCanonicalGraph, createContractValidator, type CanonicalGraphRuntime, type DesignCandidate } from "@website-ontology/contracts";
+import { buildCanonicalGraph, createContractValidator, type CanonicalGraphRuntime, type DesignCandidate, type ResultManifest } from "@website-ontology/contracts";
 import type { CanonicalSiteSpecArtifact } from "../../src/schemas/sitespec.ts";
-import { proposeDesignSystem } from "../../src/sitespec/design-system.ts";
+import { approveDesignSystemRelease, proposeDesignSystem, selectAnchorPage, selectValidationPage } from "../../src/sitespec/design-system.ts";
 import { approveVisualTarget } from "../../src/sitespec/design.ts";
 
 async function graphFixture(): Promise<CanonicalGraphRuntime> {
@@ -57,6 +57,40 @@ describe("versioned design-system proposal", () => {
     expect(coverage.exercised.patterns).toContain("sitespec://northstar/patterns/hero");
     expect(coverage.unexercised.patterns).toContain("sitespec://northstar/patterns/article");
     expect(coverage.promotionRule).toContain("validation page");
+  });
+
+  test("selects anchor and structurally different validation pages by explicit criteria", async () => {
+    const graph = approveOutstandingAction(await graphFixture());
+    const anchor = selectAnchorPage(artifact(graph));
+    const validation = selectValidationPage(artifact(graph), anchor);
+    expect(anchor.pageSubjectRef).toBe("sitespec://northstar/pages/home");
+    expect(anchor.reasons).toContain("conversion-role:primary-conversion:representative");
+    expect(validation.pageSubjectRef).toBe("sitespec://northstar/pages/assessment");
+    expect(validation.shellRef).not.toBe(anchor.shellRef);
+  });
+
+  test("approves a new release version only with current passing validation-page evidence", async () => {
+    const graph = approveOutstandingAction(await graphFixture());
+    const currentArtifact = artifact(graph);
+    const fixture = await Bun.file(new URL(import.meta.resolve("@website-ontology/contracts/fixtures/valid/design-candidate.json"))).json() as DesignCandidate;
+    const page = graph.entities.find((entity) => entity.uid === fixture.pageSubjectRef)!;
+    const target = approveVisualTarget({ candidate: { ...fixture, specRevision: page.revision }, graph, approvalRef: "siteops://approvals/northstar-home" });
+    const outputDirectory = await mkdtemp(join(tmpdir(), "g2p-design-system-approve-"));
+    const proposal = (await proposeDesignSystem({ artifact: currentArtifact, visualTarget: target, outputDirectory, version: "1.0.0-rc.1" })).release;
+    const validationPage = graph.entities.find((entity) => entity.uid === "sitespec://northstar/pages/assessment")!;
+    const requirementRefs = validationPage.data.requirementRefs as string[];
+    const results: ResultManifest = {
+      schemaVersion: "website-ontology-results/2.0",
+      kind: "result-manifest",
+      id: "assessment-current-results",
+      inputRevisions: [{ subjectRef: validationPage.uid, revision: validationPage.revision }],
+      results: requirementRefs.map((requirementRef, index) => ({ schemaVersion: "website-ontology-results/2.0", kind: "requirement-result", id: `assessment-result-${index}`, requirementRef, subjectRef: validationPage.uid, subjectRevision: validationPage.revision, status: "pass", assertions: [{ id: `verified-${index}`, status: "pass", message: "Current validation evidence passes." }], evidence: [], measurements: [] })),
+      requiredActions: [],
+    };
+    const approved = await approveDesignSystemRelease({ proposal, artifact: currentArtifact, validationPageRef: validationPage.uid, results, approvalRef: "siteops://approvals/northstar-design-system", version: "1.0.0", outputDirectory });
+    expect(approved.release.status).toBe("approved");
+    expect(approved.release.validationPageRefs).toEqual([validationPage.uid]);
+    await expect(approveDesignSystemRelease({ proposal, artifact: currentArtifact, validationPageRef: validationPage.uid, results: { ...results, inputRevisions: [{ subjectRef: validationPage.uid, revision: "0".repeat(64) }] }, approvalRef: "siteops://approvals/northstar-design-system", version: "1.0.1", outputDirectory })).rejects.toThrow("missing or stale");
   });
 
   test("refuses stale visual authority after an approved page input changes", async () => {
