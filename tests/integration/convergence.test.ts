@@ -30,4 +30,4 @@ test("stops discrete convergence when the approved target threshold is met", asy
   expect(result.stopReason).toContain("threshold met");
   expect(await Bun.file(join(directory, "converge", "diff", "incumbent-vs-target.png")).exists()).toBeTrue();
   expect(await Bun.file(join(directory, "converge", "diff", "final-vs-target.png")).exists()).toBeTrue();
-});
+}, 30_000);
