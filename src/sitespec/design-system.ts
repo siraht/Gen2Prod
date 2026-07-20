@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  assertProtocolVersion,
   createContractValidator,
   entityDependencyRefs,
   type ContractEntity,
@@ -109,6 +110,7 @@ export function staleDesignSystemInputs(release: DesignSystemRelease, artifact: 
 }
 
 export function assertDesignSystemCurrent(release: DesignSystemRelease, artifact: CanonicalSiteSpecArtifact): void {
+  assertProtocolVersion(release, "artifacts");
   const validation = createContractValidator().validate("artifacts", release);
   if (!validation.valid || release.kind !== "design-system-release") throw new Error("Invalid design-system release artifact");
   const stale = staleDesignSystemInputs(release, artifact);

@@ -1,6 +1,6 @@
 import { realpath } from "node:fs/promises";
 import { join } from "node:path";
-import { writeJsonAtomic } from "../core/fs.ts";
+import { withWorkspaceLock, writeJsonAtomic } from "../core/fs.ts";
 import { hashFile } from "../core/hash.ts";
 import { ProjectDestinationBundleSchema, type ProjectContract, type ProjectDestinationBundle, type ProjectPatchPlan, type ProjectValidationReport, type SourceProject } from "../schemas/project-adapters.ts";
 import { discoverProject } from "./discovery.ts";
@@ -9,6 +9,7 @@ import { applyPreparedTextPatch, prepareTextPatch, rollbackPreparedTextPatch, ty
 export type DestinationApplyResult = { applied: true; projectId: string; planId: string; changedFiles: { path: string; preimageHash?: string; postimageHash: string }[]; rollbackBundlePath: string };
 
 export async function applyAcceptedProjectPatch(input: { root: string; contract: ProjectContract; source: SourceProject; plan: ProjectPatchPlan; validation: ProjectValidationReport; artifactDirectory: string }): Promise<DestinationApplyResult> {
+  return withWorkspaceLock(input.root, `g2p destination apply ${input.plan.planId}`, async () => {
   if (!input.validation.accepted || input.validation.hardFailures.length || input.validation.requiredActions.some((item) => item.blocking)) throw new Error("Destination apply requires an accepted project validation report with no blocking evidence");
   if (input.validation.projectId !== input.source.projectId || input.validation.planId !== input.plan.planId || input.plan.projectId !== input.contract.projectId) throw new Error("Destination apply artifact identities do not agree");
   const rediscovery = await discoverProject(input.root, { profile: input.contract.framework.profile });
@@ -24,12 +25,15 @@ export async function applyAcceptedProjectPatch(input: { root: string; contract:
   const root = await realpath(input.root);
   for (const file of bundle.files) { const actual = await hashFile(join(root, file.path)); if (actual !== file.postimageHash) { await rollbackPreparedTextPatch(prepared); throw new Error(`Destination postimage changed during apply: ${file.path}`); } changedFiles.push({ path: file.path, ...(file.preimageHash ? { preimageHash: file.preimageHash } : {}), postimageHash: file.postimageHash }); }
   return { applied: true, projectId: input.contract.projectId, planId: input.plan.planId, changedFiles, rollbackBundlePath };
+  });
 }
 
 export async function rollbackDestinationPatch(input: { root: string; bundle: ProjectDestinationBundle | unknown }): Promise<{ rolledBack: true; projectId: string; planId: string; restoredFiles: string[] }> {
   const bundle = ProjectDestinationBundleSchema.parse(input.bundle);
+  return withWorkspaceLock(input.root, `g2p destination rollback ${bundle.planId}`, async () => {
   const root = await realpath(input.root);
   const prepared: PreparedTextPatch = { planId: bundle.planId, projectRoot: root, originals: new Map(bundle.files.map((file) => [file.path, file.original])), outputs: new Map(), originalFileHashes: new Map(bundle.files.map((file) => [file.path, file.preimageHash])), outputFileHashes: new Map(bundle.files.map((file) => [file.path, file.postimageHash])), audit: [] };
   await rollbackPreparedTextPatch(prepared);
   return { rolledBack: true, projectId: bundle.projectId, planId: bundle.planId, restoredFiles: bundle.files.map((file) => file.path) };
+  });
 }

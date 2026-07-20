@@ -1,4 +1,5 @@
 import {
+  assertProtocolVersion,
   entityDependencyRefs,
   sha256,
   type CanonicalGraphRuntime,
@@ -206,7 +207,9 @@ function collectProjectionEntities(graph: CanonicalGraphRuntime, page: ContractE
 }
 
 export function projectCanonicalSiteSpec(input: unknown, pageSubjectRef: string): SiteSpecProjection {
+  assertProtocolVersion(input, "core");
   const artifact = canonicalSiteSpecArtifactSchema.parse(input);
+  assertProtocolVersion(artifact.spec, "core");
   const graph = artifact.spec;
   const byUid = new Map(graph.entities.map((entity) => [entity.uid, entity]));
   const page = byUid.get(pageSubjectRef);

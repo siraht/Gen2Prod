@@ -1,6 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import {
+  assertProtocolVersion,
   createContractValidator,
   sha256,
   type CanonicalGraphRuntime,
@@ -25,6 +26,7 @@ type RevisionInput = {
 };
 
 function validateArtifact<T>(value: unknown, expectedKind: string): T {
+  assertProtocolVersion(value, "artifacts");
   const result = createContractValidator().validate("artifacts", value);
   if (!result.valid) throw new Error(`Invalid ${expectedKind}: ${result.errors.map((error) => `${error.instancePath || "/"} ${error.message}`).join("; ")}`);
   if ((value as { kind?: string }).kind !== expectedKind) throw new Error(`Expected ${expectedKind}`);

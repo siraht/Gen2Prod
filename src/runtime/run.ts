@@ -1,7 +1,7 @@
 import { basename, dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ArtifactStore } from "../core/artifact-store.ts";
-import { ensureDirectory, pathExists, writeJsonAtomic, writeTextAtomic } from "../core/fs.ts";
+import { ensureDirectory, pathExists, withWorkspaceLock, writeBytesAtomic, writeJsonAtomic, writeTextAtomic } from "../core/fs.ts";
 import { hashFile, hashJson } from "../core/hash.ts";
 import type { Gen2ProdConfig } from "../core/config.ts";
 import type { RequiredAction } from "../core/result.ts";
@@ -108,8 +108,8 @@ async function compileInput(options: RunOptions, outputDirectory: string, requir
     await ensureDirectory(sourceDirectory);
     const htmlPath = join(sourceDirectory, "page.html");
     const cssPath = join(sourceDirectory, "page.css");
-    await Bun.write(htmlPath, greenfield.preview.html);
-    await Bun.write(cssPath, greenfield.preview.css);
+    await writeTextAtomic(htmlPath, greenfield.preview.html);
+    await writeTextAtomic(cssPath, greenfield.preview.css);
     return { compiled: await compileStaticPage({ htmlPath, cssPath, tokenRegistry: greenfield.preview.spec.tokens, fallbackTokenRegistry: fallbackRegistry, frameworkClassCatalog, policy: options.policy }), cssPath, greenfield, ...(acss ? { acss } : {}) };
   }
   const cssPath = await discoverCss(options.input, options.cssPath);
@@ -125,6 +125,7 @@ async function compileInput(options: RunOptions, outputDirectory: string, requir
 
 export async function executeRun(options: RunOptions): Promise<RunResult> {
   const id = runId();
+  return withWorkspaceLock(options.config.workspace, `g2p run ${id}`, async () => {
   const runDirectory = resolve(options.config.workspace, "runs", id);
   const outputDirectory = join(runDirectory, "output");
   const reportsDirectory = join(runDirectory, "reports");
@@ -314,4 +315,5 @@ export async function executeRun(options: RunOptions): Promise<RunResult> {
   });
   await appendJsonLine(join(resolve(options.config.workspace), "research", "trajectories.jsonl"), trajectory);
   return { runId: id, runDirectory, compiled, validation, manifest, repairs, reports, ...(adapterSuite ? { adapterSuite } : {}) };
+  });
 }

@@ -16,7 +16,7 @@ import { PNG } from "pngjs";
 import { emitHtml, emitScss } from "../compiler/emit.ts";
 import type { CompilationPlan, PlannedNode } from "../compiler/types.ts";
 import { canonicalJson, hashJson } from "../core/hash.ts";
-import { ensureDirectory, pathExists, readJson, writeJsonAtomic, writeTextAtomic } from "../core/fs.ts";
+import { ensureDirectory, pathExists, readJson, writeBytesAtomic, writeJsonAtomic, writeTextAtomic } from "../core/fs.ts";
 import type { DomNode, NormalForm, SpecBinding, StyleIntent, TokenRegistry } from "../schemas/normal-form.ts";
 import type { CanonicalSiteSpecArtifact } from "../schemas/sitespec.ts";
 import { validate, type ValidationReport } from "../validation/gates.ts";
@@ -319,8 +319,7 @@ async function writeStableBytes(path: string, contents: Uint8Array): Promise<voi
     if (sha256(existing) !== sha256(contents)) throw new Error(`Refusing to overwrite reproducible run asset with different content: ${path}`);
     return;
   }
-  await ensureDirectory(dirname(path));
-  await Bun.write(path, contents);
+  await writeBytesAtomic(path, contents);
 }
 
 export async function buildSiteSpecPage(options: {
