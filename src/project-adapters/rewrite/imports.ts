@@ -19,7 +19,9 @@ export type ImportPlanInput = {
   dependencies?: string[];
 };
 
-export function planImport(input: ImportPlanInput): ProjectPatchOperation | undefined {
+export type InsertImportOperation = ProjectPatchOperation & { kind: "insert-import"; start: number; end: number; before: string; after: string; dependencies: string[]; operationId: string; path: string };
+
+export function planImport(input: ImportPlanInput): InsertImportOperation | undefined {
   const scriptKind = input.path.endsWith("x") ? ts.ScriptKind.TSX : input.path.endsWith(".jsx") ? ts.ScriptKind.JSX : ts.ScriptKind.TS;
   const file = ts.createSourceFile(input.path, input.source, ts.ScriptTarget.Latest, true, scriptKind);
   const imports = file.statements.filter(ts.isImportDeclaration);

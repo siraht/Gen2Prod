@@ -35,6 +35,7 @@ describe("shared project SCSS and selector reachability", () => {
     expect(compiled.tokenCoverage).toBe(1);
     expect(compiled.selectors.metrics.utilitySelectors).toBe(0);
     const styleOperation = await planSharedScss({ root, contract: discovery.contract, project, inventory, bemBlock: "page", canonicalScss: canonical, operationId: "style-page", registeredVariables: ["--text-dark", "--space-m"] });
+    if (!styleOperation) throw new Error("Expected a style operation");
     const deadOperation = await planDeadStyleRemoval(root, inventory.rules.find((rule) => rule.selector === ".dead")!, "remove-dead");
     expect(planDeadStyleRemoval(root, inventory.rules.find((rule) => rule.selector === ".branch")!, "remove-branch")).rejects.toThrow("not proven dead");
     const operations = [styleOperation, deadOperation];

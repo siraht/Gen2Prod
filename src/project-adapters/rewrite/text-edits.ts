@@ -37,6 +37,7 @@ export async function prepareTextPatch(root: string, contract: ProjectContract, 
   if (plan.contractHash !== sourceProject.contractHash) throw new Error("Plan and Source Project IR contract hashes differ");
   if (plan.sourceProjectHash !== sourceProject.sourceHash) throw new Error("Patch plan Source Project IR preimage is stale");
   if (plan.operationGraphHash !== projectOperationGraphHash(plan.operations)) throw new Error("Patch operation graph hash mismatch");
+  validatePreservedRegions(plan.operations, sourceProject);
   validateOperationGraph(plan.operations);
   validateOverlaps(plan.operations);
   const anchors = collectAnchors(sourceProject);
@@ -82,6 +83,19 @@ export async function prepareTextPatch(root: string, contract: ProjectContract, 
     outputFileHashes.set(path, sha256(output));
   }
   return { planId: plan.planId, projectRoot, originals, outputs, originalFileHashes, outputFileHashes, audit };
+}
+
+function validatePreservedRegions(operations: ProjectPatchOperation[], project: SourceProject): void {
+  const regions = new Map<string, string[]>();
+  const visit = (node: SourceProject["roots"][number]) => { const values = regions.get(node.sourceHash) ?? []; values.push(node.source); regions.set(node.sourceHash, values); node.children.forEach(visit); };
+  project.roots.forEach(visit);
+  for (const operation of operations) for (const hash of operation.preservedRegionHashes) {
+    const values = regions.get(hash);
+    if (!values?.length) throw new Error(`Unknown preserved region hash for ${operation.operationId}`);
+    if (values.length !== 1) throw new Error(`Ambiguous preserved region hash for ${operation.operationId}`);
+    const output = "after" in operation && typeof operation.after === "string" ? operation.after : "contents" in operation ? operation.contents : JSON.stringify(operation.after);
+    if (!output.includes(values[0]!)) throw new Error(`Preserved region changed or disappeared in ${operation.operationId}`);
+  }
 }
 
 function resolveSpan(operation: TextSpanOperation, source: string, anchors: SourceAnchor[]): { operation: TextSpanOperation; start: number; end: number; rebased: boolean } {

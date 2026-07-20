@@ -23,6 +23,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P1.8 declarative state capture | Extended stabilized browser evidence with hash-verified network fixtures, route navigation, safe/authorized action separation, post-action rendered source, per-fixture viewport/theme capture, environment/input equivalence hashes, and explicit branch/interaction coverage actions | Mocked route, safe details interaction, screenshot/DOM coverage, fixture equivalence, and unsafe-click refusal dogfood tests pass |
 | 2026-07-20 | P1.9 source/render correspondence | Added a strict correspondence artifact and confidence-scored matching across states using tags, text, attributes, class roles, accessible names, source/render ancestry, and layout visibility; repeated instances aggregate to one template node and low-confidence mappings cannot authorize destructive edits | Repeated React list and unique high-confidence mapping tests pass; sandbox-only DOM IDs are removed from serialized rendered source |
 | 2026-07-20 | P1.10 shared ACSS-tokenized SCSS | Added PostCSS/SCSS import/rule inventory, source+render selector reachability, owner-rule replacement/creation, side-effect style imports, proven-dead removal, registered ACSS/project variable checks, Sass compilation, and class-only BEM/nesting/utility gates | Unrendered branch retention, rendered-only retention, dead-rule removal, untouched import/rules, owner replacement, token coverage, compilation, and forbidden-selector tests pass |
+| 2026-07-20 | P2 React strangler vertical slice | Added static enumeration/class-role analysis for ternary/logical/template/array/`clsx` forms and a correspondence-gated planner that emits an owned semantic shell, coalesced native imports, canonical ACSS-token SCSS, exact preserved dynamic islands, collision actions, and an empty second plan | Dirty React/Vite dogfood preserves `map`, key, handler, and data expressions byte-for-byte; removes root utilities; sandbox native build passes; second plan is empty |
 
 ### Additional implementation decisions
 
@@ -45,6 +46,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L05 | React JSX nested inside a callback still has a JSX container ancestor beyond the function boundary | Root detection walks to the source file, preventing callback children from appearing twice in the project graph |
 | L06 | `Bun.file().text()` removes a UTF-8 BOM while native compiler offsets and raw file hashes use the original byte-bearing source | All source adapters and patch preflights use a BOM-preserving byte read followed by UTF-8 decode; the edit-engine fixture locks BOM, CRLF, and final-newline preservation |
 | L07 | Absence from source is not selector-death evidence, and absence from a default render is not enough either | A legacy rule is removable only when complete source-class analysis and declared rendered-state evidence both miss it; incomplete dynamic class bindings make reachability unknown |
+| L08 | Component and style imports commonly share the same zero-width module anchor | React planning coalesces them into one ordered import operation so overlap preflight remains strict and imports are neither duplicated nor applied against different preimages |
 
 ## 1. Outcome
 
@@ -798,7 +800,7 @@ Dependencies: P1.2–P1.3.
 
 Tasks:
 
-- [ ] Parse `.jsx`/`.tsx` with the TypeScript compiler API.
+- [x] Parse `.jsx`/`.tsx` with the TypeScript compiler API.
 - [ ] Extract components, props, JSX trees, fragments, expressions, spreads, conditionals, maps, event bindings, refs, keys, and imports.
 - [ ] Preserve exact expression and comment spans.
 - [ ] Resolve local symbols and classify imported/opaque components.
@@ -823,8 +825,8 @@ Supported first-class forms:
 
 Tasks:
 
-- [ ] Enumerate reachable class sets without executing project code.
-- [ ] classify style, behavior, framework, unknown, and non-style roles with existing CSS/source evidence;
+- [x] Enumerate reachable class sets without executing project code.
+- [x] classify style, behavior, framework, unknown, and non-style roles with existing CSS/source evidence;
 - [ ] plan semantic BEM base/element/modifier replacements;
 - [ ] migrate behavior hooks to `data-*` where source use proves equivalence;
 - [ ] preserve unknown runtime class generators as opaque and block a clean-surface claim.
@@ -859,13 +861,13 @@ Dependencies: P2.3–P2.4, P1.5–P1.6, P1.10.
 
 Tasks:
 
-- [ ] Generate owned BEM components from canonical output adapters.
-- [ ] Convert dynamic subtrees into preserved `children`, props, render fragments, or untouched imported components.
-- [ ] Generate minimal route integration edits and imports.
-- [ ] Preserve handler expression text and move bindings only with one-to-one element correspondence.
-- [ ] Preserve keys, refs, aria/data bindings, and component props.
-- [ ] Insert shared SCSS import and owned rules.
-- [ ] Emit inverse operations and source-preservation obligations.
+- [x] Generate owned BEM components from canonical output adapters.
+- [x] Convert dynamic subtrees into preserved `children`, props, render fragments, or untouched imported components.
+- [x] Generate minimal route integration edits and imports.
+- [x] Preserve handler expression text and move bindings only with one-to-one element correspondence.
+- [x] Preserve keys, refs, aria/data bindings, and component props.
+- [x] Insert shared SCSS import and owned rules.
+- [x] Emit inverse operations and source-preservation obligations.
 
 Acceptance criteria:
 

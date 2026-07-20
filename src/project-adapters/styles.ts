@@ -55,7 +55,7 @@ export async function validateCompiledOwnedProjectScss(scss: string, registeredV
   return { passed: authoring.passed && selectors.passed && tokenCoverage === 1, compiledCss, authoring, selectors, tokenCoverage };
 }
 
-export async function planSharedScss(input: { root: string; contract: ProjectContract; project: SourceProject; inventory: ProjectStyleInventory; bemBlock: string; canonicalScss: string; operationId: string; registeredVariables: Iterable<string> }): Promise<ProjectPatchOperation> {
+export async function planSharedScss(input: { root: string; contract: ProjectContract; project: SourceProject; inventory: ProjectStyleInventory; bemBlock: string; canonicalScss: string; operationId: string; registeredVariables: Iterable<string> }): Promise<ProjectPatchOperation | undefined> {
   const validation = validateOwnedProjectScss(input.canonicalScss, input.registeredVariables);
   if (!validation.passed) throw new Error(`Owned SCSS violates the styling contract: ${[...validation.nesting.violations.map((item) => item.message), ...validation.unresolvedVariables.map((item) => `unregistered variable ${item}`)].join("; ")}`);
   const existing = input.project.files.find((file) => file.path === input.inventory.entrypoint);
@@ -67,6 +67,7 @@ export async function planSharedScss(input: { root: string; contract: ProjectCon
   const before = source.slice(span.start, span.end);
   const separator = owner || source.length === 0 ? "" : source.endsWith("\n") ? "\n" : "\n\n";
   const after = `${separator}${ensureFinalNewline(input.canonicalScss)}`;
+  if (before.trimEnd() === input.canonicalScss.trimEnd()) return undefined;
   return { kind: "replace-owned-style-rule", operationId: input.operationId, dependencies: [], path: existing.path, filePreimageHash: sha256(source), authorities: ["framework-source", "destination-path-ownership"], preservedRegionHashes: [], blastRadius: "component", expectedPostimageHash: sha256(after), validationObligations: ["nested-bem-scss", "registered-token-coverage", "selector-reachability"], skippable: false, start: span.start, end: span.end, spanPreimageHash: sha256(before), astFingerprint: hashJson({ syntaxKind: "SourceFile", source }), expectedNodeKind: "SourceFile", before, after };
 }
 
