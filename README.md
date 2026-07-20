@@ -14,6 +14,7 @@ Gen2Prod turns uncertain website artifacts into semantic, BEM-structured, token-
 | Hard constraints | Build, BEM, token, inline-style, accessibility, SEO, security, and mode-specific visual failures cannot be outweighed by a soft score |
 | Styling contract | Clean output is nested SCSS with class-only BEM selectors, no utilities or element styling, and 100% direct registered-token coverage |
 | Native adapters | One accepted G2P-NF build fans out to React/JSX, Vue, Svelte, Astro, WordPress, and Bricks; every target is natively built/rendered and browser-diffed against canonical HTML |
+| Existing-project adapters | Lossless framework/CMS source graphs, hash-guarded minimal patches, copied-sandbox native builds and image diffs, explicit destination apply, and exact rollback |
 | Reproducibility | Content hashes, manifests, source authority, versioned schemas, replay events, and idempotence checks make every decision attributable |
 | Synthetic curriculum | Ten archetypes plus imported model-generator families produce strategy, page briefs, varied content, rendered mockups, gold code, marked/unmarked dirty inputs, image diffs, dynamic states, lineage, controls, and held-out splits |
 | Strict image-only loop | Live captures or generated mockups become hash-bound visual targets; local OCR/segmentation proposes semantic BEM builds, dirty/target/candidate image diffs score them, and source leakage is forbidden |
@@ -157,6 +158,7 @@ Global flags:
 | `calibrate` | Deduplicate correlated evaluations, audit benchmark coverage, and withhold unsafe threshold activation | `gen2prod calibrate --output .gen2prod/calibration/report.json` |
 | `run <input>` | Execute any production mode | `gen2prod run page.html --css app.css --tokens tokens.json` |
 | `adapter emit/evaluate/research` | Emit native framework/CMS bundles, benchmark them, and promote one-change policy improvements after sealed replay | `gen2prod adapter research --budget 3 --fresh` |
+| `project inspect/plan/run/apply/rollback` | Integrate canonical output into an existing dynamic project through a reversible sandbox-first lifecycle | `gen2prod project inspect ./site` |
 | `validate <target>` | Run Gates A–J on emitted files | `gen2prod validate .gen2prod/runs/<run-id>` |
 | `research` | Run policy/pass/verifier keep-revert experiments with optional natural-project constraints and sealed holdout promotion | `gen2prod research --track pass --budget 8 --naturalistic .gen2prod/corpus/naturalistic/manifest.json` |
 | `distill` | Export datasets and train selected models | `gen2prod distill --target verifier` |
@@ -203,6 +205,12 @@ adapters:
   targets: [react, vue, svelte, astro, wordpress, bricks]
   visualValidation: true
   captureViewport: 1280
+
+projectAdapters:
+  artifacts: .gen2prod/projects
+  includeInstall: false
+  previewEnvironmentKeys: []
+  sandbox: copy-audit
 ```
 
 Precedence is command flags, `GEN2PROD_*` environment variables, project configuration, then built-in defaults. After research accepts an incumbent policy, `run` and `evaluate` automatically prefer `.gen2prod/research/incumbent-policy.json`; adapter emission similarly prefers `.gen2prod/adapters/research/incumbent-policy.json`. An explicit `--policy` always wins.
@@ -212,6 +220,8 @@ Automatic.css is the default runtime design-system authority. `acss prepare` saf
 Image-only builds use the same release. Observed colors and typography are mapped to ACSS runtime variables in `acss-image-bindings.json` as `image-derived-unreviewed` project-override proposals. This preserves measurable pixel convergence without pretending a still image proves brand semantics; approval or correction remains a required action.
 
 Environment variables are listed in [.env.example](.env.example). The optional HTTP planner endpoint must return structured candidates; local deterministic planners remain the default.
+
+The existing-project workflow, portable request artifact, state fixtures, image-diff evidence, safety boundary, CMS staging requirements, and rollback commands are documented in [framework/CMS source adapters](docs/project-source-adapters.md).
 
 ## Architecture
 

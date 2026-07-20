@@ -44,6 +44,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P9.3 portable run request | Added a strict, exported framework-neutral request that binds source/render correspondence, canonical semantic/BEM/SCSS surface, ACSS variables, policy hash, mode/profile, preview URL, and frozen fixture payloads | Duplicate/invalid variables, hidden safety claims, unknown fields, invalid payload statuses, and malformed canonical trees fail before planning; target-specific planning remains selected from discovered destination facts |
 | 2026-07-20 | P9.3 project CLI | Added stable JSON/human `project inspect`, `plan`, `run`, `apply`, and `rollback` commands, portable plan input, explicit profile selection, output paths, retained required actions, and environment-name forwarding | CLI dogfood proves read-only inspect/plan, copied-sandbox artifact production with mandatory isolation/mutation rejection, accepted explicit apply, stale refusal, and exact CLI rollback; all project schemas export with the existing schema bundle |
 | 2026-07-20 | P9.3 project doctor | Added installed TypeScript/Vue/Svelte/Astro versions, PHP availability, all ten exact profiles and capability hash, Docker CLI/daemon/image evidence, configured sandbox posture, and acceptance readiness to human/JSON diagnostics | The repository config reports its copied-audit sandbox as useful but not acceptance-ready and emits a precise blocking container action; immutable container configurations additionally prove daemon and local image presence |
+| 2026-07-20 | P9.3 operator documentation and conformance audit | Documented the project lifecycle, strict run request, state/network fixtures, baseline/candidate/target image evidence, ACSS/BEM contract, explicit apply/rollback, configuration, doctor, CMS offline/staging boundary, and failure recovery; updated README and the implementation matrix only to demonstrated scope | Documentation distinguishes complete React lifecycle evidence from per-profile vertical slices and explicitly retains container, mutation-corpus, staging, research, and cross-profile acceptance as bounded work |
 
 ### Additional implementation decisions
 
@@ -1242,8 +1243,8 @@ Tasks:
 - [x] Add project-adapter configuration without weakening existing config validation.
 - [x] Extend `doctor` with parser/compiler/browser/sandbox readiness and supported profiles.
 - [x] Export all schemas.
-- [ ] Document project contract examples, state fixtures, generated artifacts, safety model, CMS staging, and troubleshooting.
-- [ ] Update implementation matrix only after executable evidence exists.
+- [x] Document project contract examples, state fixtures, generated artifacts, safety model, CMS staging, and troubleshooting.
+- [x] Update implementation matrix only after executable evidence exists.
 
 Acceptance criteria:
 
