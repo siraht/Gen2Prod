@@ -41,5 +41,7 @@ describe("canonical SiteSpec to G2P-NF projection", () => {
     const projection = projectCanonicalSiteSpec(artifact(approved), "sitespec://northstar/pages/home");
     expect(projection.requiredActions).toEqual([]);
     expect(() => assertBuildableProjection(projection)).not.toThrow();
+    const allNodes = (node: typeof projection.normalForm.dom): typeof projection.normalForm.dom[] => [node, ...node.children.flatMap(allNodes)];
+    expect(allNodes(projection.normalForm.dom).find((node) => node.tag === "a" && node.text === "Get started")?.attributes).toContainEqual({ name: "href", value: "/assessment/" });
   });
 });

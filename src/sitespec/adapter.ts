@@ -81,6 +81,18 @@ function requiredAction(entity: ContractEntity, reason: string, requiredAuthorit
   };
 }
 
+function actionDestination(action: ContractEntity | undefined, byUid: Map<string, ContractEntity>): string | undefined {
+  if (!action) return undefined;
+  if (typeof action.data.destinationUri === "string") return action.data.destinationUri;
+  if (typeof action.data.destinationRef !== "string") return undefined;
+  const destination = byUid.get(action.data.destinationRef);
+  if (destination?.kind === "page") {
+    const route = [...byUid.values()].find((entity) => entity.kind === "route" && entity.data.pageRef === destination.uid);
+    if (route && typeof route.data.pathname === "string") return route.data.pathname;
+  }
+  return `#${id(action.data.destinationRef)}`;
+}
+
 function authorityActions(entities: ContractEntity[]): RequiredAction[] {
   const actions: RequiredAction[] = [];
   for (const entity of entities) {
@@ -109,7 +121,7 @@ function contentNode(entity: ContractEntity, index: number, byUid: Map<string, C
     text = String(value.text ?? "");
   } else if (kind === "action-label") {
     const action = typeof data(entity).actionRef === "string" ? byUid.get(String(data(entity).actionRef)) : undefined;
-    const destination = action?.data.destinationUri ?? (typeof action?.data.destinationRef === "string" ? `#${id(action.data.destinationRef)}` : undefined);
+    const destination = actionDestination(action, byUid);
     tag = destination ? "a" : "button";
     text = String(value.label ?? "");
     if (destination) attributes.push({ name: "href", value: String(destination) });
