@@ -7,7 +7,7 @@ import { GateResultSchema, PassDefinitionSchema, PassEventSchema } from "./pass.
 import { EvaluationResultSchema, ExperimentResultSchema, TrajectorySchema } from "./research.ts";
 import { ImageDerivedContentStrategySchema, ImageOnlyAnalysisSchema, ImageOnlyBuildPlanSchema, ImageOnlyEvaluationSchema, ImageOnlyPolicySchema, ImageOnlyTargetManifestSchema, ImageStateSequenceAnalysisSchema } from "./image-only.ts";
 import { CmsDocumentSchema, FrameworkAdapterBenchmarkSchema, FrameworkAdapterEvaluationSchema, FrameworkAdapterExperimentSchema, FrameworkAdapterManifestSchema, FrameworkAdapterPolicySchema, FrameworkAdapterResearchSummarySchema, FrameworkAdapterSuiteSchema, FrameworkAdapterValidationSchema } from "./adapters.ts";
-import { ProjectAdapterRunRequestSchema, ProjectContractSchema, ProjectCorrespondenceSchema, ProjectDestinationBundleSchema, ProjectIsolationProofSchema, ProjectMutationControlReportSchema, ProjectOwnershipMapSchema, ProjectPatchPlanSchema, ProjectPreviewIsolationProofSchema, ProjectValidationReportSchema, SourceProjectSchema } from "./project-adapters.ts";
+import { ProjectAdapterRunRequestSchema, ProjectContractSchema, ProjectCorrespondenceSchema, ProjectDestinationBundleSchema, ProjectFamilySplitManifestSchema, ProjectIsolationProofSchema, ProjectMutationControlReportSchema, ProjectOwnershipMapSchema, ProjectPatchPlanSchema, ProjectPreviewIsolationProofSchema, ProjectValidationReportSchema, SourceProjectSchema } from "./project-adapters.ts";
 
 const SCHEMAS = {
   "artifact-ref": ArtifactRefSchema,
@@ -47,6 +47,7 @@ const SCHEMAS = {
   "project-isolation-proof": ProjectIsolationProofSchema,
   "project-preview-isolation-proof": ProjectPreviewIsolationProofSchema,
   "project-mutation-control-report": ProjectMutationControlReportSchema,
+  "project-family-split-manifest": ProjectFamilySplitManifestSchema,
   "project-validation-report": ProjectValidationReportSchema,
 };
 

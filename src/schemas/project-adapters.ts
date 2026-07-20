@@ -423,6 +423,19 @@ export const ProjectMutationControlReportSchema = z.object({
   if (new Set(value.controls.map((item) => item.id)).size !== value.controls.length) context.addIssue({ code: "custom", path: ["controls"], message: "mutation control IDs must be unique" });
 });
 
+export const ProjectFamilySplitManifestSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  saltHash: Sha256Schema,
+  assignments: z.array(z.object({ familyId: z.string().min(1), projectIds: z.array(z.string().min(1)).min(1), split: z.enum(["train", "validation", "holdout"]) }).strict()).min(1),
+  policy: z.object({ search: z.array(z.literal("train")).length(1), selection: z.literal("validation"), sealed: z.literal("holdout") }).strict(),
+  fingerprint: Sha256Schema,
+}).strict().superRefine((value, context) => {
+  const families = value.assignments.map((item) => item.familyId);
+  if (new Set(families).size !== families.length) context.addIssue({ code: "custom", path: ["assignments"], message: "project family must have exactly one split assignment" });
+  const projects = value.assignments.flatMap((item) => item.projectIds);
+  if (new Set(projects).size !== projects.length) context.addIssue({ code: "custom", path: ["assignments"], message: "project derivative leaks across families/splits" });
+});
+
 export const ProjectDestinationBundleSchema = z.object({
   schemaVersion: z.literal("0.1.0"),
   projectId: z.string().min(1),
@@ -451,4 +464,5 @@ export type ProjectValidationReport = z.infer<typeof ProjectValidationReportSche
 export type ProjectIsolationProof = z.infer<typeof ProjectIsolationProofSchema>;
 export type ProjectPreviewIsolationProof = z.infer<typeof ProjectPreviewIsolationProofSchema>;
 export type ProjectMutationControlReport = z.infer<typeof ProjectMutationControlReportSchema>;
+export type ProjectFamilySplitManifest = z.infer<typeof ProjectFamilySplitManifestSchema>;
 export type ProjectDestinationBundle = z.infer<typeof ProjectDestinationBundleSchema>;
