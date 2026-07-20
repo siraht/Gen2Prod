@@ -179,6 +179,11 @@ if (!gapContracts.components.some((component) => component.subjectRef === "sites
 const repeatBuild = await cli("anchor-repeat", ["build", "--spec", specPath, "--page", "sitespec://northstar/pages/home", "--design-system", approvedReleasePath, "--output", join(root, "final", "production")], [3]);
 if ((repeatBuild.data as Record<string, unknown>).runId !== (anchorBuild.data as Record<string, unknown>).runId) throw new Error("Unchanged anchor build was not idempotent");
 
+const unapprovedGraph = rebuild(graph, (entity) => { if (entity.uid === "sitespec://northstar/pages/contact/sections/form.1/slots/body") entity.authority = { ...entity.authority, state: "proposed", assertedBy: "qualification-author", scope: "semantic-content" }; });
+const unapprovedSpecPath = join(root, "negative", "incomplete-authority-site.json");
+await writeJson(unapprovedSpecPath, artifact(unapprovedGraph));
+const incompleteAuthority = await cli("reject-incomplete-authority", ["build", "--spec", unapprovedSpecPath, "--page", "sitespec://northstar/pages/contact", "--design-system", approvedReleasePath, "--output", join(root, "negative", "incomplete-authority")], [1]);
+if (!(incompleteAuthority.requiredActions as { summary?: string }[]).some((action) => action.summary?.includes("not approved for production"))) throw new Error("Incomplete-authority rejection did not return a structured required action");
 const staleGraph = rebuild(graph, (entity) => { if (entity.uid === "sitespec://northstar/pages/home/sections/hero.1/slots/heading") entity.data.content = { kind: "heading", text: "Changed current heading", level: 1 }; });
 const staleSpecPath = join(root, "negative", "stale-site.json");
 await writeJson(staleSpecPath, artifact(staleGraph));
