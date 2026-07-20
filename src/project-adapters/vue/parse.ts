@@ -3,7 +3,7 @@ import ts from "typescript";
 import { parse } from "@vue/compiler-sfc";
 import { sha256 } from "../../core/hash.ts";
 import type { ProjectBinding, ProjectMarkupNode, SourceProject } from "../../schemas/project-adapters.ts";
-import { assembleSourceProject, markupNode, nodeId, sourceAnchor } from "../ir.ts";
+import { assembleSourceProject, markupNode, nodeId, readSourceText, sourceAnchor } from "../ir.ts";
 import type { ProjectDiscoveryResult } from "../types.ts";
 
 type VueLoc = { start: { offset: number }; end: { offset: number }; source: string };
@@ -69,7 +69,7 @@ export async function parseVueProject(root: string, discovery: ProjectDiscoveryR
   const styleSources: SourceProject["styleSources"] = files.filter((file) => file.role === "style").map((file) => ({ path: file.path, sha256: file.sha256, selectors: [], scoped: false, module: /\.module\./.test(file.path) }));
   const unresolved: SourceProject["unresolved"] = [];
   for (const file of files.filter((item) => item.path.endsWith(".vue"))) {
-    const source = await Bun.file(join(root, file.path)).text();
+    const source = await readSourceText(join(root, file.path));
     const parsed = parse(source, { filename: file.path });
     if (parsed.errors.length) { unresolved.push({ id: `vue-parse:${file.path}`, concern: parsed.errors.map(String).join("; "), evidenceNeeded: ["valid Vue SFC source"], blocking: true }); continue; }
     const descriptor = parsed.descriptor;

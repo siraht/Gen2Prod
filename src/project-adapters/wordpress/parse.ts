@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { ProjectMarkupNode, SourceProject } from "../../schemas/project-adapters.ts";
-import { assembleSourceProject, markupNode, nodeId, sourceAnchor } from "../ir.ts";
+import { assembleSourceProject, markupNode, nodeId, readSourceText, sourceAnchor } from "../ir.ts";
 import type { ProjectDiscoveryResult } from "../types.ts";
 
 const CORE_BLOCKS = new Set(["archives", "buttons", "button", "columns", "column", "cover", "group", "heading", "image", "list", "list-item", "navigation", "paragraph", "post-content", "query", "separator", "site-logo", "site-title", "spacer", "template-part"]);
@@ -56,7 +56,7 @@ export async function parseWordPressProject(root: string, discovery: ProjectDisc
   const roots: ProjectMarkupNode[] = [];
   const unresolved: SourceProject["unresolved"] = [];
   for (const file of files.filter((item) => item.path.endsWith(".html"))) {
-    const source = await Bun.file(join(root, file.path)).text();
+    const source = await readSourceText(join(root, file.path));
     roots.push(markupNode({ id: nodeId(file.path, 0, "wordpress-template"), kind: "opaque", anchor: sourceAnchor(file.path, source, 0, source.length, "WordPressTemplate", source), tag: "template", attributes: {}, source, rewriteAuthority: "preserve-verbatim", referencedBindings: [], observedStates: [], branchIds: [], children: wordpressBlocks(file.path, source, unresolved) }));
   }
   const styleSources = files.filter((file) => file.role === "style").map((file) => ({ path: file.path, sha256: file.sha256, selectors: [], scoped: false, module: false }));

@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import type { ProjectMarkupNode, SourceProject } from "../../schemas/project-adapters.ts";
-import { assembleSourceProject, markupNode, nodeId, sourceAnchor } from "../ir.ts";
+import { assembleSourceProject, markupNode, nodeId, readSourceText, sourceAnchor } from "../ir.ts";
 import type { ProjectDiscoveryResult } from "../types.ts";
 
 export async function parseBricksProject(root: string, discovery: ProjectDiscoveryResult): Promise<SourceProject> {
@@ -8,7 +8,7 @@ export async function parseBricksProject(root: string, discovery: ProjectDiscove
   const roots: ProjectMarkupNode[] = [];
   const unresolved: SourceProject["unresolved"] = [];
   for (const file of files.filter((item) => item.role === "cms")) {
-    const source = await Bun.file(join(root, file.path)).text();
+    const source = await readSourceText(join(root, file.path));
     try {
       const value = JSON.parse(source) as { source?: string; elements?: { id?: string; parent?: string | 0; children?: string[]; settings?: Record<string, unknown> }[] };
       if (value.source !== "bricksCopiedElements" || !Array.isArray(value.elements)) unresolved.push({ id: `bricks-envelope:${file.path}`, concern: "Invalid Bricks export envelope", evidenceNeeded: ["versioned Bricks copied-elements export"], blocking: true });

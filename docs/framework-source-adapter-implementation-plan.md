@@ -16,6 +16,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P0.1 and P0.2 contract foundation | Added strict project artifact/authority vocabulary, destination/source/ownership/patch/validation schemas, high-risk reversible pass definitions, public schema exports, and negative safety tests | `bun run check`; project schema and schema-export tests pass |
 | 2026-07-20 | P1.1 read-only discovery | Added safe-root and symlink rejection, ignored-directory inventory, deterministic source fingerprinting, exact profile/version/lockfile/route/script discovery, explicit profile override, ambiguity failures, and required-action reporting | Repeated discovery is hash-stable; React/Vite, ambiguity, and symlink tests pass |
 | 2026-07-20 | P0.4 parser fidelity and P1.2 Source Project IR | Added native TSX/Vue/Svelte/Astro parsers, structural WordPress block and Bricks export readers, exact source anchors, text/comment ordering, immutable dynamic regions, assets/styles/modules/routes, graph-integrity checks, normalized offset-independent identity, a versioned capability matrix, and exact-location dogfood fixtures | Typecheck plus React/Vue/Svelte/Astro/WordPress/Bricks parser tests pass; unsupported or invalid locations fail closed |
+| 2026-07-20 | P1.4 hash-guarded text edits | Added full preflight, authority/symlink containment, operation DAG and overlap checks, exact AST-bound unique rebasing, descending in-memory edits, owned-file collision refusal, atomic staged writes, exact snapshot rollback, and second-apply refusal | BOM/CRLF/final-newline, untouched-byte, stale span, ambiguous rebase, overlap, graph tamper, path authority, symlink escape, postimage, collision, apply, rollback, and idempotence tests pass |
 
 ### Additional implementation decisions
 
@@ -35,6 +36,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L03 | Vue's transformed template AST rewrites `v-if`/`v-for` structure and changes the offset coordinate system | Source ingestion uses the raw `compiler-sfc` descriptor AST; compilation remains a later native-validation concern |
 | L04 | Astro compiler locations can extend beyond the original source for nested expressions in the currently pinned compiler | Such constructs are recorded as blocking unresolved regions; no guessed offset or regex fallback is allowed |
 | L05 | React JSX nested inside a callback still has a JSX container ancestor beyond the function boundary | Root detection walks to the source file, preventing callback children from appearing twice in the project graph |
+| L06 | `Bun.file().text()` removes a UTF-8 BOM while native compiler offsets and raw file hashes use the original byte-bearing source | All source adapters and patch preflights use a BOM-preserving byte read followed by UTF-8 decode; the edit-engine fixture locks BOM, CRLF, and final-newline preservation |
 
 ## 1. Outcome
 
@@ -633,14 +635,14 @@ Dependencies: P1.2.
 
 Tasks:
 
-- [ ] Validate root, allowlist, file preimage, span preimage, node kind, and AST fingerprint.
-- [ ] Detect overlapping/conflicting operations before applying any operation.
-- [ ] Sort same-file operations from highest to lowest offset.
-- [ ] Preserve BOM, newline convention, final newline, and untouched bytes.
-- [ ] Support new owned files with collision refusal.
-- [ ] Produce postimage hashes and inverse operations.
-- [ ] Implement unique-anchor rebasing with a full audit record.
-- [ ] Refuse fuzzy matching and ambiguous anchors.
+- [x] Validate root, allowlist, file preimage, span preimage, node kind, and AST fingerprint.
+- [x] Detect overlapping/conflicting operations before applying any operation.
+- [x] Sort same-file operations from highest to lowest offset.
+- [x] Preserve BOM, newline convention, final newline, and untouched bytes.
+- [x] Support new owned files with collision refusal.
+- [x] Produce postimage hashes and inverse operations.
+- [x] Implement unique-anchor rebasing with a full audit record.
+- [x] Refuse fuzzy matching and ambiguous anchors.
 
 Acceptance criteria:
 

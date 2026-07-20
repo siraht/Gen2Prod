@@ -2,6 +2,10 @@ import { relative, resolve, sep } from "node:path";
 import { hashJson, sha256 } from "../core/hash.ts";
 import { SourceAnchorSchema, SourceProjectSchema, type ProjectBinding, type ProjectContract, type ProjectMarkupNode, type SourceAnchor, type SourceProject } from "../schemas/project-adapters.ts";
 
+export async function readSourceText(path: string): Promise<string> {
+  return (await readFile(path)).toString("utf8");
+}
+
 export function projectPath(root: string, absolute: string): string {
   return relative(resolve(root), resolve(absolute)).split(sep).join("/");
 }
@@ -128,3 +132,4 @@ function deduplicateBindings(bindings: ProjectBinding[]): ProjectBinding[] {
   }
   return [...unique.values()].sort((left, right) => `${left.kind}:${left.name}`.localeCompare(`${right.kind}:${right.name}`));
 }
+import { readFile } from "node:fs/promises";

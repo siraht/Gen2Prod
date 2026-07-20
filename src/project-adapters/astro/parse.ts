@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { parse } from "@astrojs/compiler";
 import { sha256 } from "../../core/hash.ts";
 import type { ProjectBinding, ProjectMarkupNode, SourceProject } from "../../schemas/project-adapters.ts";
-import { assembleSourceProject, markupNode, nodeId, sourceAnchor } from "../ir.ts";
+import { assembleSourceProject, markupNode, nodeId, readSourceText, sourceAnchor } from "../ir.ts";
 import type { ProjectDiscoveryResult } from "../types.ts";
 
 type AstroPoint = { offset: number; line: number; column: number };
@@ -36,7 +36,7 @@ export async function parseAstroProject(root: string, discovery: ProjectDiscover
   const unresolved: SourceProject["unresolved"] = [];
   const modules: SourceProject["modules"] = [];
   for (const file of files.filter((item) => item.path.endsWith(".astro"))) {
-    const source = await Bun.file(join(root, file.path)).text();
+    const source = await readSourceText(join(root, file.path));
     const parsed = await parse(source, { position: true });
     for (const child of (parsed.ast.children ?? []) as AstroNode[]) { const value = convertAstro(file.path, source, child, bindings, unresolved); if (value) roots.push(value); }
     modules.push({ path: file.path, imports: [], exports: [], symbols: [], components: [] });

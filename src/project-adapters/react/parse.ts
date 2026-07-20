@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import ts from "typescript";
 import { hashJson, sha256 } from "../../core/hash.ts";
-import { sourceAnchor, nodeId, markupNode, assembleSourceProject } from "../ir.ts";
+import { sourceAnchor, nodeId, markupNode, assembleSourceProject, readSourceText } from "../ir.ts";
 import type { ProjectBinding, ProjectMarkupNode, SourceProject } from "../../schemas/project-adapters.ts";
 import type { ProjectDiscoveryResult } from "../types.ts";
 
@@ -121,7 +121,7 @@ export async function parseReactProject(root: string, discovery: ProjectDiscover
   const variants: SourceProject["classVariants"] = [];
   const files = discovery.evidence.files.map((file) => ({ ...file, role: discovery.contract.integration.routeEntries.some((route) => route.entry === file.path) ? "entry" as const : /\.(?:jsx|tsx)$/.test(file.path) ? "component" as const : /\.(?:css|scss|sass)$/.test(file.path) ? "style" as const : file.path.endsWith(".json") ? "config" as const : "support" as const, editable: discovery.contract.authority.allowedPaths.some((allowed) => file.path === allowed || file.path.startsWith(`${allowed}/`)) }));
   for (const file of files.filter((item) => /\.(?:jsx|tsx)$/.test(item.path))) {
-    const source = await Bun.file(join(root, file.path)).text();
+    const source = await readSourceText(join(root, file.path));
     const sourceFile = ts.createSourceFile(file.path, source, ts.ScriptTarget.Latest, true, file.path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.JSX);
     const imports: string[] = [];
     const exports: string[] = [];

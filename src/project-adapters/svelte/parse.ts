@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { parse } from "svelte/compiler";
 import { sha256 } from "../../core/hash.ts";
 import type { ProjectBinding, ProjectMarkupNode, SourceProject } from "../../schemas/project-adapters.ts";
-import { assembleSourceProject, markupNode, nodeId, sourceAnchor } from "../ir.ts";
+import { assembleSourceProject, markupNode, nodeId, readSourceText, sourceAnchor } from "../ir.ts";
 import type { ProjectDiscoveryResult } from "../types.ts";
 
 type SvelteNode = Record<string, unknown> & { type: string; start: number; end: number; name?: string; attributes?: SvelteNode[] };
@@ -56,7 +56,7 @@ export async function parseSvelteProject(root: string, discovery: ProjectDiscove
   const modules: SourceProject["modules"] = [];
   const unresolved: SourceProject["unresolved"] = [];
   for (const file of files.filter((item) => item.path.endsWith(".svelte"))) {
-    const source = await Bun.file(join(root, file.path)).text();
+    const source = await readSourceText(join(root, file.path));
     try {
       const ast = parse(source, { filename: file.path, modern: true }) as unknown as { fragment: { nodes: SvelteNode[] }; instance?: { content?: { body?: unknown[] } }; module?: { content?: { body?: unknown[] } } };
       for (const child of ast.fragment.nodes) { const converted = convert(file.path, source, child, bindings); if (converted) roots.push(converted); }
