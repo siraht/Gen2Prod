@@ -9,6 +9,7 @@ import { projectSourceAdapter } from "./registry.ts";
 import { applyPreparedTextPatch, rollbackPreparedTextPatch } from "./rewrite/text-edits.ts";
 import type { ProjectSandbox } from "./sandbox.ts";
 import { validateCompiledOwnedProjectScss } from "./styles.ts";
+import { verifyIsolationProof, verifyPreviewIsolationProof } from "./container.ts";
 
 export type ProjectValidationInput = {
   sandbox: ProjectSandbox;
@@ -23,7 +24,7 @@ export type ProjectValidationInput = {
   registeredVariables: string[];
   includeInstall?: boolean | undefined;
   mutationControlRecall?: number | undefined;
-  hardenedIsolation?: boolean | undefined;
+  containerImage?: string | undefined;
   requireRuntime?: boolean | undefined;
   strictVisualThreshold?: number | undefined;
 };
@@ -44,7 +45,7 @@ export async function validateProjectPatch(input: ProjectValidationInput): Promi
   if (!handlerBindingsPreserved) hardFailures.push("handler/action binding hashes changed");
   if (!dataBindingsPreserved) hardFailures.push("data/state binding hashes changed");
 
-  const nativeResult = await projectSourceAdapter(input.contract).validateNative({ sandbox: input.sandbox, contract: input.contract, ...(input.includeInstall ? { includeInstall: true } : {}) });
+  const nativeResult = await projectSourceAdapter(input.contract).validateNative({ sandbox: input.sandbox, contract: input.contract, ...(input.includeInstall ? { includeInstall: true } : {}), ...(input.containerImage ? { containerImage: input.containerImage } : {}) });
   const native = nativeResult.commands.map(({ command, exitCode, durationMs, stdoutHash, stderrHash, passed }) => ({ command, exitCode, durationMs, stdoutHash, stderrHash, passed }));
   if (!nativeResult.passed && input.contract.framework.target !== "wordpress" && input.contract.framework.target !== "bricks") hardFailures.push("native project commands did not all pass");
   if (!native.length && input.requireRuntime) hardFailures.push("runtime/native validation evidence is required but absent");
@@ -77,7 +78,9 @@ export async function validateProjectPatch(input: ProjectValidationInput): Promi
   if (!idempotencePassed) hardFailures.push("second project plan is not exactly empty");
   const mutationControlRecall = input.mutationControlRecall ?? 0;
   if (mutationControlRecall !== 1) hardFailures.push("frozen project mutation-control recall is below 100%");
-  if (!input.hardenedIsolation) {
+  const commandIsolation = verifyIsolationProof(input.sandbox.isolationProof);
+  const previewIsolation = !input.candidateCapture || Boolean(input.sandbox.previewIsolationProof && verifyPreviewIsolationProof(input.sandbox.previewIsolationProof, input.sandbox.previewIsolationProof.publishedUrl));
+  if (!commandIsolation || !previewIsolation) {
     hardFailures.push("hardened network-disabled filesystem isolation evidence is absent");
     requiredActions.push({ id: "hardened-project-sandbox", summary: "Run validation in the pinned hardened project sandbox", detail: "Copied-directory auditing is useful dogfood evidence but cannot prove absolute-path write or network isolation.", blocking: true });
   }

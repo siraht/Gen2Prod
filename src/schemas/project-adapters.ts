@@ -385,6 +385,27 @@ export const ProjectIsolationProofSchema = z.object({
   proofHash: Sha256Schema,
 }).strict();
 
+export const ProjectPreviewIsolationProofSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  backend: z.literal("docker-egress-denied-preview"),
+  imageReference: z.string().regex(/^[^\s@]+@sha256:[a-f0-9]{64}$/),
+  imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+  containerId: z.string().regex(/^[a-f0-9]{64}$/),
+  commandHash: Sha256Schema,
+  networkId: z.string().regex(/^[a-f0-9]{64}$/),
+  networkMasquerade: z.literal(false),
+  interContainerCommunication: z.literal(false),
+  egressProbePassed: z.literal(true),
+  publishedUrl: z.string().url(),
+  loopbackOnly: z.literal(true),
+  readOnlyRoot: z.literal(true),
+  capabilitiesDropped: z.literal("ALL"),
+  noNewPrivileges: z.literal(true),
+  sourceProjectMounted: z.literal(false),
+  projectMount: z.literal("/workspace/project"),
+  proofHash: Sha256Schema,
+}).strict();
+
 export const ProjectDestinationBundleSchema = z.object({
   schemaVersion: z.literal("0.1.0"),
   projectId: z.string().min(1),
@@ -411,4 +432,5 @@ export type ProjectPatchOperation = z.infer<typeof ProjectPatchOperationSchema>;
 export type ProjectPatchPlan = z.infer<typeof ProjectPatchPlanSchema>;
 export type ProjectValidationReport = z.infer<typeof ProjectValidationReportSchema>;
 export type ProjectIsolationProof = z.infer<typeof ProjectIsolationProofSchema>;
+export type ProjectPreviewIsolationProof = z.infer<typeof ProjectPreviewIsolationProofSchema>;
 export type ProjectDestinationBundle = z.infer<typeof ProjectDestinationBundleSchema>;

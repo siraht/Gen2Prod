@@ -9,7 +9,7 @@ import { parseProjectSource } from "../../src/project-adapters/registry.ts";
 import { planOwnedFile } from "../../src/project-adapters/rewrite/files.ts";
 import { projectOperationGraphHash } from "../../src/project-adapters/rewrite/text-edits.ts";
 import { createProjectSandbox, runSandboxCommands } from "../../src/project-adapters/sandbox.ts";
-import { runContainerProjectCommand, verifyIsolationProof, createIsolationProof } from "../../src/project-adapters/container.ts";
+import { runContainerProjectCommand, verifyIsolationProof, createIsolationProof, startContainerProjectPreview, verifyPreviewIsolationProof } from "../../src/project-adapters/container.ts";
 import { ProjectContractSchema, ProjectPatchPlanSchema } from "../../src/schemas/project-adapters.ts";
 
 async function runnerFixture() {
@@ -46,6 +46,30 @@ describe("safe project process runner and sandbox", () => {
     expect(verifyIsolationProof({ ...proof, networkMode: "bridge" } as never)).toBeFalse();
     const remaining = Bun.spawn([docker, "inspect", contained.proof.command.containerId], { stdout: "ignore", stderr: "ignore" });
     expect(await remaining.exited).not.toBe(0);
+  }, 15_000);
+
+  test("serves capture only through inspected loopback on a live-probed egress-denied network", async () => {
+    const image = "oven/bun@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4";
+    const docker = Bun.which("docker");
+    if (!docker) return;
+    const inspect = Bun.spawn([docker, "image", "inspect", image], { stdout: "ignore", stderr: "ignore" });
+    if (await inspect.exited !== 0) return;
+    const root = await mkdtemp(join(tmpdir(), "g2p-container-preview-"));
+    const artifactsRoot = await mkdtemp(join(tmpdir(), "g2p-container-preview-artifacts-"));
+    const port = 31_000 + Math.floor(Math.random() * 1_000);
+    await Bun.write(join(root, "server.ts"), "const server = Bun.serve({ port: Number(process.env.PREVIEW_PORT), hostname: '0.0.0.0', fetch: () => new Response('contained-ready') }); process.on('SIGTERM', () => { server.stop(); process.exit(0); });\n");
+    const preview = { executable: "bun", args: ["server.ts"], cwd: ".", envKeys: ["PREVIEW_PORT"], timeoutMs: 5_000 };
+    const contract = ProjectContractSchema.parse({ schemaVersion: "0.1.0", projectId: "preview", rootHash: sha256("root"), framework: { target: "react", profile: "react-generic", version: "19", rendering: ["csr"], parserVersion: "5" }, commands: { build: preview, preview }, integration: { routeEntries: [{ route: "/", entry: "src/App.tsx", layoutChain: [], states: ["default"], dynamic: false }], rootLayouts: [], metadataMode: "react", styleEntrypoints: [], generatedDirectory: "src/components/gen2prod", aliases: {} }, authority: { allowedPaths: ["src"], deniedPaths: [".env"], preserveExpressions: true, preserveHandlers: true, preserveDataAccess: true, permitFrozenInstall: false, permittedEnvironmentKeys: ["PREVIEW_PORT"] }, states: [], discovery: { facts: {}, inferredDefaults: {}, explicitOverrides: {}, unresolved: [] } });
+    const url = `http://127.0.0.1:${port}/`;
+    const server = await startContainerProjectPreview({ root, artifactsRoot, contract, url, image, environment: { PREVIEW_PORT: String(port) } });
+    expect(await (await fetch(url)).text()).toBe("contained-ready");
+    expect(server.proof).toMatchObject({ backend: "docker-egress-denied-preview", networkMasquerade: false, interContainerCommunication: false, egressProbePassed: true, loopbackOnly: true, readOnlyRoot: true, sourceProjectMounted: false });
+    expect(verifyPreviewIsolationProof(server.proof, url)).toBeTrue();
+    expect(verifyPreviewIsolationProof(server.proof, `http://127.0.0.1:${port + 1}/`)).toBeFalse();
+    const containerId = server.proof.containerId, networkId = server.proof.networkId;
+    await server.stop();
+    await expect(fetch(url, { signal: AbortSignal.timeout(500) })).rejects.toThrow();
+    for (const [kind, id] of [["container", containerId], ["network", networkId]] as const) { const remaining = Bun.spawn([docker, kind === "container" ? "inspect" : "network", ...(kind === "network" ? ["inspect"] : []), id], { stdout: "ignore", stderr: "ignore" }); expect(await remaining.exited).not.toBe(0); }
   }, 15_000);
 
   test("executes only an exact argument-array command, filters env, and redacts values", async () => {

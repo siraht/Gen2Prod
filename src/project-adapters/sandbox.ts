@@ -2,7 +2,7 @@ import { cp, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join, relative, resolve } from "node:path";
 import { canonicalJson, hashFile, hashJson } from "../core/hash.ts";
-import type { ProjectContract, ProjectIsolationProof, ProjectPatchPlan, SourceProject } from "../schemas/project-adapters.ts";
+import type { ProjectContract, ProjectIsolationProof, ProjectPatchPlan, ProjectPreviewIsolationProof, SourceProject } from "../schemas/project-adapters.ts";
 import { createIsolationProof, runContainerProjectCommand } from "./container.ts";
 import { runProjectCommand, type ProjectCommandResult } from "./process.ts";
 import { applyPreparedTextPatch, prepareTextPatch, type PreparedTextPatch } from "./rewrite/text-edits.ts";
@@ -18,6 +18,7 @@ export type ProjectSandbox = {
   sourceProject: SourceProject;
   prepared: PreparedTextPatch;
   isolationProof?: ProjectIsolationProof | undefined;
+  previewIsolationProof?: ProjectPreviewIsolationProof | undefined;
 };
 
 export async function createProjectSandbox(sourceRoot: string, contract: ProjectContract, sourceProject: SourceProject, plan: ProjectPatchPlan, options: { parent?: string; includeExistingDependencies?: boolean } = {}): Promise<ProjectSandbox> {

@@ -1,9 +1,10 @@
+import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { lstat, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 import { hashFile, hashJson, sha256 } from "../core/hash.ts";
-import { ProjectIsolationProofSchema, type CommandSpec, type ProjectContract, type ProjectIsolationProof } from "../schemas/project-adapters.ts";
-import type { ProjectCommandResult } from "./process.ts";
+import { ProjectIsolationProofSchema, ProjectPreviewIsolationProofSchema, type CommandSpec, type ProjectContract, type ProjectIsolationProof, type ProjectPreviewIsolationProof } from "../schemas/project-adapters.ts";
+import type { ProjectCommandResult, ProjectPreview } from "./process.ts";
 
 const OUTPUT_LIMIT = 10 * 1024 * 1024;
 const IMAGE_PATTERN = /^[^\s@]+@sha256:[a-f0-9]{64}$/;
@@ -72,6 +73,80 @@ export function verifyIsolationProof(proof: ProjectIsolationProof | undefined): 
   return hashJson(value) === proofHash && value.commands.every((command) => !command.timedOut);
 }
 
+export async function startContainerProjectPreview(input: { root: string; artifactsRoot: string; contract: ProjectContract; url: string; image: string; environment?: Record<string, string | undefined>; timeoutMs?: number }): Promise<ProjectPreview & { proof: ProjectPreviewIsolationProof }> {
+  if (!IMAGE_PATTERN.test(input.image)) throw new Error("Container preview requires a digest-pinned image reference");
+  const command = input.contract.commands.preview;
+  if (!command) throw new Error("Destination contract has no authorized preview command");
+  authorizeCommand(input.contract, command);
+  const docker = Bun.which("docker");
+  if (!docker) throw new Error("Docker CLI is unavailable");
+  const root = await realpath(resolve(input.root));
+  const artifactsRoot = await realpath(resolve(input.artifactsRoot));
+  const cwd = resolve(root, command.cwd);
+  const inside = relative(root, cwd);
+  if (inside.startsWith("..") || isAbsolute(inside)) throw new Error(`Preview cwd escapes sandbox: ${command.cwd}`);
+  const cwdInfo = await lstat(cwd);
+  if (!cwdInfo.isDirectory() || cwdInfo.isSymbolicLink()) throw new Error(`Unsafe preview cwd: ${command.cwd}`);
+  const target = new URL(input.url);
+  if (target.protocol !== "http:" || !["127.0.0.1", "localhost"].includes(target.hostname) || !target.port) throw new Error("Contained preview URL must be explicit loopback HTTP with a port");
+  const port = Number.parseInt(target.port, 10);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) throw new Error("Contained preview URL has an invalid port");
+  const image = await inspectPinnedImage(docker, input.image);
+  const environment = authorizedEnvironment(input.contract, command, input.environment);
+  const networkName = `gen2prod-${randomUUID().replaceAll("-", "")}`;
+  const network = await spawnCaptured(docker, ["network", "create", "--driver", "bridge", "--opt", "com.docker.network.bridge.enable_ip_masquerade=false", "--opt", "com.docker.network.bridge.enable_icc=false", networkName], process.cwd(), { PATH: process.env.PATH ?? "/usr/bin:/bin" }, 30_000);
+  if (network.exitCode !== 0 || !/^[a-f0-9]{64}$/.test(network.stdout.trim())) throw new Error(`Cannot create egress-denied preview network: ${network.stderr.slice(-2000)}`);
+  const networkId = network.stdout.trim();
+  let containerId: string | undefined;
+  try {
+    const networkRaw = await dockerText(docker, ["network", "inspect", "--format", "{{json .}}", networkId]);
+    const networkFacts = JSON.parse(networkRaw) as { Internal?: boolean; Driver?: string; Options?: Record<string, string> };
+    if (networkFacts.Internal || networkFacts.Driver !== "bridge" || networkFacts.Options?.["com.docker.network.bridge.enable_ip_masquerade"] !== "false" || networkFacts.Options?.["com.docker.network.bridge.enable_icc"] !== "false") throw new Error("Docker did not enforce the egress-denied preview bridge");
+    const uid = process.getuid?.() ?? 65534, gid = process.getgid?.() ?? 65534;
+    const args = ["create", "--network", networkName, "--read-only", "--cap-drop", "ALL", "--security-opt", "no-new-privileges:true", "--pids-limit", "512", "--memory", "4g", "--cpus", "4", "--user", `${uid}:${gid}`, "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=536870912", "--mount", `type=bind,source=${root},target=/workspace/project`, "--mount", `type=bind,source=${artifactsRoot},target=/workspace/artifacts`, "--workdir", `/workspace/project${command.cwd === "." ? "" : `/${command.cwd}`}`, "--publish", `127.0.0.1:${port}:${port}`, "--env", "LANG=C.UTF-8", "--env", "LC_ALL=C.UTF-8", "--env", "TZ=UTC", "--env", "CI=1"];
+    for (const key of Object.keys(environment).filter((key) => !["PATH", "LANG", "LC_ALL", "TZ", "CI"].includes(key)).sort()) args.push("--env", key);
+    args.push(input.image, command.executable, ...command.args);
+    const dockerEnvironment = { PATH: process.env.PATH ?? "/usr/bin:/bin", ...Object.fromEntries(Object.keys(environment).map((key) => [key, environment[key]!])) };
+    const created = await spawnCaptured(docker, args, process.cwd(), dockerEnvironment, 30_000);
+    if (created.exitCode !== 0 || !/^[a-f0-9]{64}$/.test(created.stdout.trim())) throw new Error(`Docker preview creation failed: ${created.stderr.slice(-2000)}`);
+    containerId = created.stdout.trim();
+    const constraints = await inspectPreviewConstraints(docker, containerId, networkName, port);
+    const started = await spawnCaptured(docker, ["start", containerId], process.cwd(), { PATH: process.env.PATH ?? "/usr/bin:/bin" }, 30_000);
+    if (started.exitCode !== 0) throw new Error(`Docker preview start failed: ${started.stderr.slice(-2000)}`);
+    const egressProbe = await spawnCaptured(docker, ["exec", containerId, "bun", "-e", "try{await fetch('https://example.com',{signal:AbortSignal.timeout(1000)});process.exit(2)}catch{process.exit(0)}"], process.cwd(), { PATH: process.env.PATH ?? "/usr/bin:/bin" }, 5_000);
+    if (egressProbe.exitCode !== 0 || egressProbe.timedOut) throw new Error("Contained preview network egress probe did not fail closed");
+    const deadline = Date.now() + Math.min(input.timeoutMs ?? 30_000, command.timeoutMs);
+    while (Date.now() < deadline) {
+      const state = await dockerText(docker, ["inspect", "--format", "{{.State.Running}} {{.State.ExitCode}} {{.State.Pid}}", containerId]);
+      const [running, exitCode, pidValue] = state.split(" ");
+      if (running !== "true") throw new Error(`Contained preview exited before readiness with code ${exitCode}: ${await containerLogs(docker, containerId)}`);
+      try {
+        const response = await fetch(input.url, { redirect: "manual", signal: AbortSignal.timeout(2_000) });
+        if (response.status < 500) {
+          const base = { schemaVersion: "0.1.0", backend: "docker-egress-denied-preview", imageReference: input.image, imageId: image.imageId, containerId, commandHash: hashJson(command), networkId, networkMasquerade: false, interContainerCommunication: false, egressProbePassed: true, publishedUrl: input.url, loopbackOnly: true, ...constraints, sourceProjectMounted: false, projectMount: "/workspace/project" } as const;
+          const proof = ProjectPreviewIsolationProofSchema.parse({ ...base, proofHash: hashJson(base) });
+          let stopped = false;
+          return { url: input.url, pid: Number.parseInt(pidValue ?? "-1", 10), proof, stdout: () => "container logs retained by Docker during preview", stderr: () => "", stop: async () => { if (stopped) return; stopped = true; await cleanupPreview(docker, containerId!, networkId); } };
+        }
+      } catch {}
+      await delay(150);
+    }
+    throw new Error(`Contained preview did not become ready at ${input.url}`);
+  } catch (error) {
+    if (containerId) await spawnCaptured(docker, ["rm", "--force", containerId], process.cwd(), { PATH: process.env.PATH ?? "/usr/bin:/bin" }, 10_000).catch(() => undefined);
+    await spawnCaptured(docker, ["network", "rm", networkId], process.cwd(), { PATH: process.env.PATH ?? "/usr/bin:/bin" }, 10_000).catch(() => undefined);
+    throw error;
+  }
+}
+
+export function verifyPreviewIsolationProof(proof: ProjectPreviewIsolationProof | undefined, url: string): boolean {
+  if (!proof) return false;
+  const parsed = ProjectPreviewIsolationProofSchema.safeParse(proof);
+  if (!parsed.success || parsed.data.publishedUrl !== url) return false;
+  const { proofHash, ...value } = parsed.data;
+  return hashJson(value) === proofHash;
+}
+
 async function inspectPinnedImage(docker: string, reference: string): Promise<{ imageId: string }> {
   const raw = await dockerText(docker, ["image", "inspect", "--format", "{{json .}}", reference]);
   const value = JSON.parse(raw) as { Id?: string; RepoDigests?: string[] };
@@ -86,6 +161,21 @@ async function inspectConstraints(docker: string, id: string): Promise<{ network
   if (value.NetworkMode !== "none" || value.ReadonlyRootfs !== true || !value.CapDrop?.includes("ALL") || !value.SecurityOpt?.some((item) => item.startsWith("no-new-privileges"))) throw new Error("Docker did not enforce the declared project isolation constraints");
   return { networkMode: "none", readOnlyRoot: true, capabilitiesDropped: "ALL", noNewPrivileges: true };
 }
+
+async function inspectPreviewConstraints(docker: string, id: string, networkName: string, port: number): Promise<{ readOnlyRoot: true; capabilitiesDropped: "ALL"; noNewPrivileges: true }> {
+  const raw = await dockerText(docker, ["inspect", "--format", "{{json .HostConfig}}", id]);
+  const value = JSON.parse(raw) as { NetworkMode?: string; ReadonlyRootfs?: boolean; CapDrop?: string[]; SecurityOpt?: string[]; PortBindings?: Record<string, { HostIp?: string; HostPort?: string }[]> };
+  const binding = value.PortBindings?.[`${port}/tcp`]?.[0];
+  if (value.NetworkMode !== networkName || value.ReadonlyRootfs !== true || !value.CapDrop?.includes("ALL") || !value.SecurityOpt?.some((item) => item.startsWith("no-new-privileges")) || binding?.HostIp !== "127.0.0.1" || binding.HostPort !== String(port)) throw new Error("Docker did not enforce the declared contained-preview constraints");
+  return { readOnlyRoot: true, capabilitiesDropped: "ALL", noNewPrivileges: true };
+}
+
+async function cleanupPreview(docker: string, containerId: string, networkId: string): Promise<void> {
+  await spawnCaptured(docker, ["rm", "--force", containerId], process.cwd(), { PATH: process.env.PATH ?? "/usr/bin:/bin" }, 10_000).catch(() => undefined);
+  await spawnCaptured(docker, ["network", "rm", networkId], process.cwd(), { PATH: process.env.PATH ?? "/usr/bin:/bin" }, 10_000).catch(() => undefined);
+}
+async function containerLogs(docker: string, id: string): Promise<string> { const logs = await spawnCaptured(docker, ["logs", id], process.cwd(), { PATH: process.env.PATH ?? "/usr/bin:/bin" }, 10_000); return `${logs.stdout}\n${logs.stderr}`.slice(-2000); }
+function delay(ms: number): Promise<void> { return new Promise((resolveDelay) => setTimeout(resolveDelay, ms)); }
 
 function authorizeCommand(contract: ProjectContract, command: CommandSpec): void { if (!Object.values(contract.commands).filter((value): value is CommandSpec => Boolean(value)).some((value) => hashJson(value) === hashJson(command))) throw new Error("Command is not declared by the destination contract"); }
 function authorizedEnvironment(contract: ProjectContract, command: CommandSpec, provided?: Record<string, string | undefined>): Record<string, string> { const environment: Record<string, string> = { LANG: "C.UTF-8", LC_ALL: "C.UTF-8", TZ: "UTC", CI: "1" }; for (const [key, value] of Object.entries(provided ?? {})) { if (value === undefined) continue; if (!command.envKeys.includes(key) || !contract.authority.permittedEnvironmentKeys.includes(key)) throw new Error(`Unauthorized command environment key: ${key}`); environment[key] = value; } return environment; }

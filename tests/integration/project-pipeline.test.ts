@@ -28,7 +28,7 @@ describe("project pipeline orchestration", () => {
     const sourceRoot = project.roots.find((node) => node.anchor.file === "src/App.tsx")!;
     const correspondence = ProjectCorrespondenceSchema.parse({ schemaVersion: "0.1.0", projectId: project.projectId, sourceProjectHash: project.sourceHash, captureHash: sha256("pipeline-capture"), mappings: [{ mappingId: "root", sourceNodeId: sourceRoot.id, kind: "one-to-one", instances: [{ stateId: "/:default", renderedNodeId: "root", score: 0.96 }], confidence: 0.96, evidence: ["tag", "layout-visible"], destructiveAuthorized: true }], unresolved: [] });
     const canonical = canonicalSurface();
-    const result = await runProjectPipeline({ root, correspondence, planning: { canonicalOutputHash: canonical.outputHash, reactCanonical: canonical }, policyHash: sha256("pipeline-policy"), mode: "legacy-conversion", profile: "refactor", registeredVariables: canonical.registeredVariables, artifactRoot: artifacts, previewUrl: `http://127.0.0.1:${port}/`, hardenedIsolation: true, mutationControlRecall: 1 });
+    const result = await runProjectPipeline({ root, correspondence, planning: { canonicalOutputHash: canonical.outputHash, reactCanonical: canonical }, policyHash: sha256("pipeline-policy"), mode: "legacy-conversion", profile: "refactor", registeredVariables: canonical.registeredVariables, artifactRoot: artifacts, previewUrl: `http://127.0.0.1:${port}/`, containerImage: "oven/bun@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4", mutationControlRecall: 1 });
     expect(result.validation.hardFailures).toEqual([]);
     expect(result.validation.accepted).toBeTrue();
     expect(result.validation.native.every((command) => command.passed)).toBeTrue();

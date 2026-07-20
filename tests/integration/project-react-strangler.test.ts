@@ -57,13 +57,13 @@ describe("React strangler project adapter", () => {
     expect(provisional.hardFailures).toContain("hardened network-disabled filesystem isolation evidence is absent");
     expect(provisional.hardFailures).toContain("frozen project mutation-control recall is below 100%");
     expect(provisional.visualConditions[0]?.pixelDifferenceRatio).toBe(0);
-    const accepted = await validateProjectPatch({ sandbox, contract: rediscovery.contract, source: project, candidate: reparsed, plan, secondPlan: second, baselineCapture: capture, candidateCapture: capture, targetCapture: capture, registeredVariables: canonical.registeredVariables, hardenedIsolation: true, mutationControlRecall: 1 });
-    expect(accepted.hardFailures).toEqual([]);
-    expect(accepted.accepted).toBeTrue();
-    expect(accepted.rollbackPassed).toBeTrue();
-    expect(accepted.replaySourceStable).toBeTrue();
-    expect(accepted.idempotencePassed).toBeTrue();
-    expect(accepted.metrics).toMatchObject({ textRecall: 1, urlRecall: 1, formRecall: 1, interactionRecall: 1, bemCoverage: 1, tokenCoverage: 1, visualLoss: 0 });
+    const controlsOnly = await validateProjectPatch({ sandbox, contract: rediscovery.contract, source: project, candidate: reparsed, plan, secondPlan: second, baselineCapture: capture, candidateCapture: capture, targetCapture: capture, registeredVariables: canonical.registeredVariables, mutationControlRecall: 1 });
+    expect(controlsOnly.accepted).toBeFalse();
+    expect(controlsOnly.hardFailures).toContain("hardened network-disabled filesystem isolation evidence is absent");
+    expect(controlsOnly.rollbackPassed).toBeTrue();
+    expect(controlsOnly.replaySourceStable).toBeTrue();
+    expect(controlsOnly.idempotencePassed).toBeTrue();
+    expect(controlsOnly.metrics).toMatchObject({ textRecall: 1, urlRecall: 1, formRecall: 1, interactionRecall: 1, bemCoverage: 1, tokenCoverage: 1, visualLoss: 0 });
   }, 20_000);
 });
 

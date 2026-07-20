@@ -43,7 +43,7 @@ function adapter(profile: ProjectFrameworkProfile, target: ProjectSourceAdapter[
       if (target === "bricks" && context.bricksCanonical) return planBricksIntegration({ root: context.root, contract: context.contract, project: context.source, correspondence: context.correspondence, canonical: context.bricksCanonical, mode: context.mode, profile: context.profile, policyHash: context.policyHash });
       return unsupportedPlanner(context, profile);
     },
-    validateNative: async (context) => { const commands = await runSandboxCommands(context.sandbox, context.contract, { ...(context.includeInstall ? { includeInstall: true } : {}) }); return { passed: commands.length > 0 && commands.every((command) => command.passed), commands }; },
+    validateNative: async (context) => { const commands = await runSandboxCommands(context.sandbox, context.contract, { ...(context.includeInstall ? { includeInstall: true } : {}), ...(context.containerImage ? { containerImage: context.containerImage } : {}) }); return { passed: commands.length > 0 && commands.every((command) => command.passed), commands }; },
   };
 }
 
