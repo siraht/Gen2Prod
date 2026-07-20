@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PNG } from "pngjs";
 import { sha256 } from "../../src/core/hash.ts";
 import type { PlannedNode } from "../../src/compiler/types.ts";
 import { discoverProject } from "../../src/project-adapters/discovery.ts";
@@ -10,6 +11,7 @@ import { planReactIntegration, type ReactCanonicalSurface } from "../../src/proj
 import { createProjectSandbox, runSandboxCommands } from "../../src/project-adapters/sandbox.ts";
 import { ProjectCorrespondenceSchema } from "../../src/schemas/project-adapters.ts";
 import { analyzeScssNestingContract } from "../../src/validation/styling-contract.ts";
+import { validateProjectPatch } from "../../src/project-adapters/validate.ts";
 
 describe("React strangler project adapter", () => {
   test("dogfoods dirty route to owned shell while preserving list/key/handler expressions and replans empty", async () => {
@@ -47,6 +49,21 @@ describe("React strangler project adapter", () => {
     const second = await planReactIntegration({ root: sandbox.projectRoot, contract: rediscovery.contract, project: reparsed, correspondence, canonical, mode: "legacy-conversion", profile: "refactor", policyHash: sha256("react-policy") });
     expect(second.operations).toEqual([]);
     expect(second.requiredActions).toEqual([]);
+    const screenshot = join(sandbox.artifactsRoot, "identical.png");
+    const image = new PNG({ width: 12, height: 12 }); image.data.fill(255); await Bun.write(screenshot, PNG.sync.write(image));
+    const capture = captureFixture(screenshot);
+    const provisional = await validateProjectPatch({ sandbox, contract: rediscovery.contract, source: project, candidate: reparsed, plan, secondPlan: second, baselineCapture: capture, candidateCapture: capture, targetCapture: capture, registeredVariables: canonical.registeredVariables });
+    expect(provisional.accepted).toBeFalse();
+    expect(provisional.hardFailures).toContain("hardened network-disabled filesystem isolation evidence is absent");
+    expect(provisional.hardFailures).toContain("frozen project mutation-control recall is below 100%");
+    expect(provisional.visualConditions[0]?.pixelDifferenceRatio).toBe(0);
+    const accepted = await validateProjectPatch({ sandbox, contract: rediscovery.contract, source: project, candidate: reparsed, plan, secondPlan: second, baselineCapture: capture, candidateCapture: capture, targetCapture: capture, registeredVariables: canonical.registeredVariables, hardenedIsolation: true, mutationControlRecall: 1 });
+    expect(accepted.hardFailures).toEqual([]);
+    expect(accepted.accepted).toBeTrue();
+    expect(accepted.rollbackPassed).toBeTrue();
+    expect(accepted.replaySourceStable).toBeTrue();
+    expect(accepted.idempotencePassed).toBeTrue();
+    expect(accepted.metrics).toMatchObject({ textRecall: 1, urlRecall: 1, formRecall: 1, interactionRecall: 1, bemCoverage: 1, tokenCoverage: 1, visualLoss: 0 });
   }, 20_000);
 });
 
@@ -57,3 +74,8 @@ function canonicalSurface(): ReactCanonicalSurface {
 }
 
 function flatten(node: import("../../src/schemas/project-adapters.ts").ProjectMarkupNode): import("../../src/schemas/project-adapters.ts").ProjectMarkupNode[] { return [node, ...node.children.flatMap(flatten)]; }
+
+function captureFixture(screenshot: string): import("../../src/evidence/capture.ts").CaptureResult {
+  const node = { nodeId: "page", tag: "main", text: "Products", contentText: "Products", visible: true, attributes: { class: "page", "aria-label": "Products" }, box: { x: 0, y: 0, width: 12, height: 12 }, styles: { display: "grid", position: "static" } };
+  return { environment: { browser: "synthetic", browserVersion: "1", os: "test", deviceScaleFactor: 1, timezone: "UTC", locale: "en-US", fontSetHash: sha256("fonts"), colorScheme: "light", colorProfile: "srgb" }, captures: [{ viewport: 1280, viewportHeight: 1000, theme: "light", state: "default", screenshot, screenshotHash: sha256("screenshot"), dom: [node], accessibilityTree: [], performance: {}, seo: {}, console: [] }] };
+}

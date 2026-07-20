@@ -36,6 +36,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P8 versioned CMS JSON patch engine | Implemented `update-cms-node` preparation with exact export revision/file checks, unique ID lookup, canonical deep node pre/postconditions, unknown envelope/field retention, canonical output, atomic application, and exact original-byte rollback | Bricks-shaped mutation dogfood retains private/vendor fields, rejects stale revisions, applies one node, and restores the original indented export byte-for-byte |
 | 2026-07-20 | P8 Bricks versioned export graph | Added envelope/version validation, complete element object hashes, parent/child backlink and ancestry-cycle checks, global class/component ownership evidence, query/condition/interaction hashes, inline-style detection, and unknown-setting inventories | Valid dynamic/component fixtures round-trip with zero unresolved items; missing IDs, references, backlinks, cycles, versions, and malformed envelopes fail closed |
 | 2026-07-20 | P8 Bricks offline patch vertical slice | Added 2.x/revision-gated root ownership, complete-object CMS preconditions, semantic container/tag/BEM output, selective owned inline-style removal, shared SCSS, dynamic/private field retention, offline import/rollback packages, exact rollback/reapply, and registry dispatch | Dogfood retains child/envelope/vendor/query/condition/interaction data, removes only known root style payloads, round-trips the tree, rejects stale preimages, and replans empty without remote mutation |
+| 2026-07-20 | P2.6 shared project acceptance validator | Added native-command, patch-scope, untouched-file, immutable-region/binding, state/branch/interaction, owned-SCSS, semantic/content/URL/form/interaction/accessibility, baseline/candidate/target image-diff, rollback, replay, idempotence, mutation-recall, and isolation gates in the strict validation-report schema | React dogfood produces retained diff PNGs and passes every deterministic/native/style/visual/rollback gate; the same run is rejected without hardened-isolation and 100% frozen-control evidence and accepted when those proofs are supplied |
 
 ### Additional implementation decisions
 
@@ -55,6 +56,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | D32 | CMS node operations and source text spans cannot target the same export path in one plan | JSON node replacement canonicalizes the document while source spans rely on original byte offsets | The patch engine rejects mixed modes per file, uses canonical deep equality for CMS nodes, and retains the exact original document separately for rollback |
 | D33 | Bricks graph metadata stores hashes for dynamic payloads and a full hash of every element while the raw export remains the authoritative opaque source | Query/condition/interaction schemas and private plugin fields are version-dependent | Planners can prove preservation without pretending to understand private semantics; the node patch precondition still compares the complete original object |
 | D34 | Bricks owned styling is lowered to shared SCSS and one semantic global-class reference, not retained in element settings | Root style payloads conflict with the project-wide no inline/CMS styling contract | The planner removes only the enumerated visual setting keys on the explicitly owned root; all query, condition, interaction, component, content, vendor, child, and envelope data remains untouched |
+| D35 | Project acceptance is a strict report, not the absence of thrown errors | Build success or pixel similarity alone can hide source, state, rollback, policy, or isolation failures | `accepted` is true only when all recorded hard failures are empty; missing frozen-control or hardened-sandbox evidence is an explicit blocking failure even when local dogfood otherwise passes |
 
 ### Lessons learned
 
@@ -79,6 +81,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L17 | A file hash alone does not prove the intended CMS element is still the planned semantic node | Versioned CMS operations also require exactly one matching ID and canonical equality of the complete `before` object before replacing it |
 | L18 | Valid Bricks references are bidirectional: a known child ID can still point to a different parent | Parsing verifies both existence and the child's parent backlink, then walks ancestry to reject cycles before mutation is available |
 | L19 | Canonical JSON output changes export whitespace even when only one element changes | Exact original bytes are retained as the rollback authority, while semantic preservation is proven through complete object/envelope equality and canonical hashes |
+| L20 | Validating an entire legacy stylesheet against owned-surface rules incorrectly charges preserved project debt to the generated component | Styling gates compile and inspect only the planned owned rule/file payload; untouched legacy selectors remain a residual/reachability concern rather than contaminating the ownership claim |
 
 ## 1. Outcome
 
@@ -913,14 +916,14 @@ Dependencies: P2.5, P1.7–P1.8.
 
 Tasks:
 
-- [ ] Run configured typecheck/build/test commands.
+- [x] Run configured typecheck/build/test commands.
 - [ ] Start preview server and capture all route/state/viewports.
-- [ ] Compare dynamic-region, handler, import, and untouched-file hashes.
-- [ ] Run semantic/content/URL/form/interaction/accessibility checks.
-- [ ] Run BEM/SCSS/token/selector gates on owned surfaces.
-- [ ] Compare baseline/candidate and candidate/approved-target images as profile requires.
-- [ ] Apply inverse patch and verify exact rollback.
-- [ ] Replan the accepted sandbox and require an empty operation list.
+- [x] Compare dynamic-region, handler, import, and untouched-file hashes.
+- [x] Run semantic/content/URL/form/interaction/accessibility checks.
+- [x] Run BEM/SCSS/token/selector gates on owned surfaces.
+- [x] Compare baseline/candidate and candidate/approved-target images as profile requires.
+- [x] Apply inverse patch and verify exact rollback.
+- [x] Replan the accepted sandbox and require an empty operation list.
 
 Acceptance criteria:
 
