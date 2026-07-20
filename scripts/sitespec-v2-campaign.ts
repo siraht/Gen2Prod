@@ -4,10 +4,11 @@ import { pathToFileURL } from "node:url";
 import { buildCanonicalGraph, canonicalize, sha256, type CanonicalGraphRuntime, type DesignCandidate } from "@website-ontology/contracts";
 import { canonicalJson } from "../src/core/hash.ts";
 
-const RESERVE_BYTES = 20 * 1024 ** 3;
+const RESERVE_BYTES = 15 * 1024 ** 3;
 const LIGHTHOUSE_VERSION = "13.4.1";
 const root = resolve(process.argv[2] ?? "");
-if (!process.argv[2]) throw new Error("Usage: bun scripts/sitespec-v2-campaign.ts <external-evidence-directory>");
+const externalSpecPath = process.argv[3] ? resolve(process.argv[3]) : undefined;
+if (!process.argv[2]) throw new Error("Usage: bun scripts/sitespec-v2-campaign.ts <external-evidence-directory> [canonical-sitespec-artifact]");
 
 type CommandRecord = { id: string; command: string[]; exitCode: number; stdout: string; stderr: string; startedAt: string; finishedAt: string };
 const records: CommandRecord[] = [];
@@ -101,17 +102,24 @@ if (freeAtStart < RESERVE_BYTES) throw new Error(`Disk reserve preflight failed:
 const repositoryStatusBefore = await Bun.$`git status --porcelain=v1`.cwd(resolve(import.meta.dir, "..")).text();
 const repositoryHead = (await Bun.$`git rev-parse HEAD`.cwd(resolve(import.meta.dir, "..")).text()).trim();
 
-const referencePath = new URL(import.meta.resolve("@website-ontology/contracts/fixtures/valid/reference-canonical-graph.json"));
-const reference = await Bun.file(referencePath).json() as CanonicalGraphRuntime;
 const qualificationAsset = join(root, "inputs", "approved-hero.png");
 await mkdir(resolve(qualificationAsset, ".."), { recursive: true });
 await Bun.write(qualificationAsset, Bun.file(resolve(import.meta.dir, "..", "fixtures/generated/hero-cta/visual/gold/capture-1280-light-default.png")));
-const graph = rebuild(reference, (entity) => {
-  if (entity.uid === "sitespec://northstar/actions/assessment-form") { entity.authority = { ...entity.authority, state: "approved", assertedBy: "qualification-owner", scope: "semantic-content" }; entity.data = { ...entity.data, destinationRef: "sitespec://northstar/pages/contact" }; delete entity.data.unresolvedBehavior; }
-  if (entity.uid === "sitespec://northstar/assets/hero-home") entity.data = { ...entity.data, source: pathToFileURL(qualificationAsset).href, mediaType: "image/png" };
-});
 const specPath = join(root, "inputs", "approved-site.json");
-await writeJson(specPath, artifact(graph));
+let graph: CanonicalGraphRuntime;
+if (externalSpecPath) {
+  const external = await Bun.file(externalSpecPath).json() as CanonicalGraphRuntime | { spec?: CanonicalGraphRuntime };
+  graph = "spec" in external && external.spec ? external.spec : external as CanonicalGraphRuntime;
+  await writeJson(specPath, artifact(graph));
+} else {
+  const referencePath = new URL(import.meta.resolve("@website-ontology/contracts/fixtures/valid/reference-canonical-graph.json"));
+  const reference = await Bun.file(referencePath).json() as CanonicalGraphRuntime;
+  graph = rebuild(reference, (entity) => {
+    if (entity.uid === "sitespec://northstar/actions/assessment-form") { entity.authority = { ...entity.authority, state: "approved", assertedBy: "qualification-owner", scope: "semantic-content" }; entity.data = { ...entity.data, destinationRef: "sitespec://northstar/pages/contact" }; delete entity.data.unresolvedBehavior; }
+    if (entity.uid === "sitespec://northstar/assets/hero-home") entity.data = { ...entity.data, source: pathToFileURL(qualificationAsset).href, mediaType: "image/png" };
+  });
+  await writeJson(specPath, artifact(graph));
+}
 
 const bootstrapCandidatePath = join(root, "inputs", "bootstrap-candidate.json");
 await writeJson(bootstrapCandidatePath, await candidate("home-bootstrap", graph, qualificationAsset));
@@ -158,6 +166,20 @@ const contactAcceptedResults = join(contactRun, "accepted-results.json");
 await cli("contact-evidence", ["evidence", "record", contactRun, "--spec", specPath, "--lighthouse", contactLighthouse, "--visual-waiver", "qualification://approvals/contact-page-no-visual-target", "--output", contactAcceptedResults]);
 
 const rollout = await cli("site-rollout", ["rollout", "--spec", specPath, "--design-system", approvedReleasePath, "--output", join(root, "final", "rollout")], [3]);
+const acceptedPages = [
+  { pageSubjectRef: "sitespec://northstar/pages/home", runDirectory: anchorRun, results: anchorAcceptedResults },
+  { pageSubjectRef: "sitespec://northstar/pages/assessment", runDirectory: validationRun, results: validationResultsPath },
+  { pageSubjectRef: "sitespec://northstar/pages/contact", runDirectory: contactRun, results: contactAcceptedResults },
+];
+for (const built of (rollout.data as { builtPages: { pageSubjectRef: string; runDirectory: string }[] }).builtPages) {
+  if (acceptedPages.some((page) => page.pageSubjectRef === built.pageSubjectRef)) continue;
+  const pageId = built.pageSubjectRef.split("/").at(-1)!;
+  const lighthousePath = await lighthouse(pageId, built.runDirectory);
+  const acceptedResults = join(built.runDirectory, "accepted-results.json");
+  await cli(`${pageId}-evidence`, ["evidence", "record", built.runDirectory, "--spec", specPath, "--lighthouse", lighthousePath, "--visual-waiver", `qualification://approvals/${pageId}-no-visual-target`, "--output", acceptedResults]);
+  acceptedPages.push({ pageSubjectRef: built.pageSubjectRef, runDirectory: built.runDirectory, results: acceptedResults });
+}
+if (acceptedPages.length !== 5) throw new Error(`Expected accepted evidence for five pages, received ${acceptedPages.length}`);
 const approvedRelease = JSON.parse(await readFile(approvedReleasePath, "utf8")) as { id: string; version: string; componentContracts: { id: string; hash: string; uri: string; mediaType: string; byteLength: number }; [key: string]: unknown };
 const approvedContractsPath = join(designSystemRoot, "objects", `${approvedRelease.componentContracts.hash}.json`);
 const approvedContracts = JSON.parse(await readFile(approvedContractsPath, "utf8")) as { components: { subjectRef: string }[]; [key: string]: unknown };
@@ -221,7 +243,7 @@ const manifest = {
   postflight: { repositoryStatus: repositoryStatusAfter.split("\n").filter(Boolean), freeBytes: freeAtEnd, reserveBytes: RESERVE_BYTES },
   toolchain: { bun: Bun.version, lighthouse: LIGHTHOUSE_VERSION },
   commands: records.map((record) => ({ id: record.id, exitCode: record.exitCode, evidence: `commands/${String(records.indexOf(record) + 1).padStart(2, "0")}-${record.id}.json` })),
-  accepted: { spec: specPath, visualTarget: finalTargetPath, designSystem: approvedReleasePath, validationRun, validationResults: validationResultsPath, anchorRun, anchorResults: anchorAcceptedResults, contactRun, contactResults: contactAcceptedResults, rolloutAudit: (rollout.data as Record<string, unknown>).auditPath, governedGapProposal: gapProposalPath, governedGapRelease: gapReleasePath },
+  accepted: { spec: specPath, visualTarget: finalTargetPath, designSystem: approvedReleasePath, pages: acceptedPages.sort((left, right) => left.pageSubjectRef.localeCompare(right.pageSubjectRef)).map((page) => ({ ...page, manifest: join(page.runDirectory, "manifest.json"), correspondence: join(page.runDirectory, "correspondence.json") })), validationRun, validationResults: validationResultsPath, anchorRun, anchorResults: anchorAcceptedResults, contactRun, contactResults: contactAcceptedResults, rolloutAudit: (rollout.data as Record<string, unknown>).auditPath, governedGapProposal: gapProposalPath, governedGapRelease: gapReleasePath },
   negativeControls: records.filter((record) => record.id.startsWith("reject-")).map((record) => ({ id: record.id, exitCode: record.exitCode })),
   idempotence: { anchorRunId: (anchorBuild.data as Record<string, unknown>).runId, repeatedRunId: (repeatBuild.data as Record<string, unknown>).runId },
   boundedChange: { originalContactRunId: (contactBuild.data as Record<string, unknown>).runId, changedContactRunId: (changedContact.data as Record<string, unknown>).runId, changedSubject: "sitespec://northstar/pages/contact/sections/form.1/slots/body" },
