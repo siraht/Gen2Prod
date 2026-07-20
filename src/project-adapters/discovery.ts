@@ -170,7 +170,7 @@ function command(manager: "bun" | "pnpm" | "npm" | "yarn", script: string, timeo
 function allowedDefaults(profile: ProjectFrameworkProfile, files: string[]): string[] {
   const candidates = profile === "next-app" ? ["app", "src/app", "components", "src/components", "styles", "src/styles"]
     : profile === "wordpress-block-theme" ? ["templates", "patterns", "parts", "styles", "style.css", "functions.php", "theme.json"]
-      : profile === "bricks-export" ? files.filter((path) => /bricks-(?:page|export)\.json$/.test(path))
+      : profile === "bricks-export" ? [...files.filter((path) => /bricks-(?:page|export)\.json$/.test(path)), "gen2prod", "styles"]
         : ["src", "app", "components", "styles"];
   return [...new Set(candidates.filter((candidate) => files.some((path) => path === candidate || path.startsWith(`${candidate}/`)) || !extname(candidate)))];
 }

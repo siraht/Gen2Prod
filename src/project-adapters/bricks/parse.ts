@@ -14,7 +14,7 @@ export async function parseBricksProject(root: string, discovery: ProjectDiscove
     try {
       const value = JSON.parse(source) as { source?: string; version?: string; elements?: { id?: string; parent?: string | 0; children?: string[]; name?: string; settings?: Record<string, unknown> }[]; [key: string]: unknown };
       if (value.source !== "bricksCopiedElements" || !Array.isArray(value.elements)) unresolved.push({ id: `bricks-envelope:${file.path}`, concern: "Invalid Bricks export envelope", evidenceNeeded: ["versioned Bricks copied-elements export"], blocking: true });
-      if (!value.version || !/^\d+\.\d+(?:\.\d+)?(?:[-+].*)?$/.test(value.version)) unresolved.push({ id: `bricks-version:${file.path}`, concern: "Missing or unsupported Bricks export version", evidenceNeeded: ["exact Bricks export version"], blocking: true });
+      if (!value.version || !/^2\./.test(value.version)) unresolved.push({ id: `bricks-version:${file.path}`, concern: "Missing or unsupported Bricks export version", evidenceNeeded: ["supported Bricks copied-elements 2.x export"], blocking: true });
       const ids = new Set((value.elements ?? []).flatMap((element) => element.id ? [element.id] : []));
       if (ids.size !== (value.elements ?? []).filter((element) => element.id).length) unresolved.push({ id: `bricks-duplicate-id:${file.path}`, concern: "Duplicate element IDs", evidenceNeeded: ["unique Bricks element IDs"], blocking: true });
       for (const element of value.elements ?? []) {
