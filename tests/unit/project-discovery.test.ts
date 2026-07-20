@@ -56,4 +56,28 @@ describe("project discovery", () => {
     expect(project.metadata.evidence).toEqual({ consumed: ["src/App.tsx"], ignored: ["bun.lock", "package.json", "src/support.json"] });
     expect(() => projectSourceAdapter({ ...discovery.contract, framework: { ...discovery.contract.framework, target: "vue" } })).toThrow("No exact");
   });
+
+  test("discovers nested SvelteKit layout chains and route support modules", async () => {
+    const root = await mkdtemp(join(tmpdir(), "g2p-sveltekit-discovery-"));
+    await Bun.write(join(root, "package.json"), JSON.stringify({ name: "fixture-sveltekit", scripts: { build: "vite build" }, dependencies: { svelte: "5.56.6", "@sveltejs/kit": "2.0.0" } }));
+    await Bun.write(join(root, "bun.lock"), "lock");
+    await Bun.write(join(root, "src", "routes", "+layout.svelte"), "<slot />\n");
+    await Bun.write(join(root, "src", "routes", "+layout.ts"), "export const prerender = true;\n");
+    await Bun.write(join(root, "src", "routes", "account", "+layout.svelte"), "<slot />\n");
+    await Bun.write(join(root, "src", "routes", "account", "[id]", "+page.svelte"), "<main>Account</main>\n");
+    await Bun.write(join(root, "src", "routes", "account", "[id]", "+page.server.ts"), "export const load = async () => ({}); export const actions = {};\n");
+    const discovery = await discoverProject(root);
+    const route = discovery.contract.integration.routeEntries[0]!;
+    expect(route.route).toBe("/account/[id]");
+    expect(route.dynamic).toBeTrue();
+    expect(route.layoutChain).toEqual(["src/routes/+layout.svelte", "src/routes/account/+layout.svelte"]);
+    expect(discovery.contract.discovery.facts.svelteKitSpecialFiles).toEqual(["src/routes/+layout.ts", "src/routes/account/[id]/+page.server.ts"]);
+    const parsed = await parseProjectSource(root, discovery);
+    expect(parsed.metadata.svelteKitGraph).toEqual([
+      { path: "src/routes/+layout.ts", exports: ["prerender"], loaders: [], actions: [], settings: ["prerender"] },
+      { path: "src/routes/account/[id]/+page.server.ts", exports: ["actions", "load"], loaders: ["load"], actions: ["actions"], settings: [] },
+    ]);
+    expect(parsed.bindings.some((binding) => binding.name === "load" && binding.kind === "loader")).toBeTrue();
+    expect(parsed.bindings.some((binding) => binding.name === "actions" && binding.kind === "action")).toBeTrue();
+  });
 });

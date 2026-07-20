@@ -27,7 +27,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P2.1/P2.2 and P3 Next source graph | Added inherited tsconfig/JSX/alias resolution, Next route/layout/special-file discovery, React props/hooks/refs/imported-component inventory, async data/metadata/server-action evidence, server/client classification, and Next-safe global style placement | Dynamic-route layout-chain tests pass; Next dogfood preserves metadata/fetch/server boundaries, emits no accidental `use client`, and does not duplicate the root global-style import |
 | 2026-07-20 | P1.3 exact native adapter interface | Expanded the registry to exact profiles with read-only discovery, strict Source Project parsing, route projection, planner dispatch, native sandbox validation, and consumed/ignored evidence reporting | Profile/target mismatch fails closed; route projection and evidence accounting tests pass; profiles without a mutation planner return a typed blocking zero-operation plan |
 | 2026-07-20 | P4 Vue SFC graph and strangler planner vertical slice | Added setup/classic script import and binding analysis, typed props/emits/ref/computed/slot/component/style inventories, exact SFC import anchoring, correspondence-gated semantic shell integration, shared ACSS-tokenized nested BEM SCSS, preservation-region obligations, owned-file conflict handling, and Vue/Nuxt registry dispatch | Parser fixtures distinguish recognized Vue semantics from verbatim preservation; dirty SFC dogfood preserves `v-if` and interpolation source, compiles both edited and generated templates, removes root utilities, and produces an empty second plan |
-| 2026-07-20 | P5 Svelte strangler planner vertical slice | Added version-aware Svelte 5 snippet/legacy slot shells, exact instance-script import anchoring, correspondence-gated root wrapping, shared SCSS integration, owned-file conflict handling, and Svelte/SvelteKit registry dispatch | Dirty Svelte dogfood preserves keyed `{#each}`, `{#if}`, action, event-handler, and expression text; edited and generated components compile; second plan is empty |
+| 2026-07-20 | P5 Svelte/SvelteKit graph and strangler planner vertical slice | Added runes/legacy prop/store/import/module/style inventories, first-class directive and await/snippet/slot evidence, SvelteKit layout/special-module/load/action/SSR-setting discovery, version-aware Svelte 5 snippet/legacy slot shells, exact script import anchoring, correspondence-gated root wrapping, shared SCSS integration, and registry dispatch | Parser/discovery fixtures cover nested dynamic routes and runtime semantics; dirty Svelte dogfood preserves keyed `{#each}`, `{#if}`, action, event-handler, and expression text; edited/generated components compile and the second plan is empty |
 
 ### Additional implementation decisions
 
@@ -56,6 +56,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L09 | Vue compiler SFC block offsets point to block content, while template tag insertion needs the preceding opening-tag boundary | Existing scripts use compiler-verified content spans; scriptless SFCs search backward from the compiler's template-content offset for the unique opening tag |
 | L10 | A setup binding named `props` is not the useful prop inventory when `defineProps` carries a type literal | Vue graph analysis records the literal type's property names while retaining the call source hash; destructured props retain their local binding names |
 | L11 | Svelte's modern AST gives the script element span and a separate exact `content.start` boundary | Imports are inserted inside the existing instance script at that compiler offset, or in a new leading script when no instance script exists; the component AST is never reprinted |
+| L12 | Svelte directive names alone do not identify semantics in the modern AST (`click`, `value`, and `fade` omit their source prefixes) | Inventory and binding classification use node types such as `OnDirective`, `BindDirective`, `UseDirective`, and `TransitionDirective`, while retaining each complete directive span verbatim |
 
 ## 1. Outcome
 
@@ -1008,9 +1009,9 @@ Dependencies: P1 shared infrastructure.
 
 Tasks:
 
-- [ ] Parse component/module scripts, runes/legacy bindings, template AST, styles, imports, props, snippets, and slots.
-- [ ] Preserve `{#if}`, `{:else}`, `{#each}`, keys, `{#await}`, actions, transitions, event bindings, and bind directives.
-- [ ] Discover SvelteKit routes, layouts, load functions, form actions, error/loading boundaries, and SSR settings.
+- [x] Parse component/module scripts, runes/legacy bindings, template AST, styles, imports, props, snippets, and slots.
+- [x] Preserve `{#if}`, `{:else}`, `{#each}`, keys, `{#await}`, actions, transitions, event bindings, and bind directives.
+- [x] Discover SvelteKit routes, layouts, load functions, form actions, error/loading boundaries, and SSR settings.
 
 Acceptance criteria:
 

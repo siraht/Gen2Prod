@@ -53,6 +53,24 @@ describe("framework parser location fidelity", () => {
     exact(result.source, nodes);
   });
 
+  test("Svelte inventories runes, props, stores, snippets, await states, and directives", async () => {
+    const source = `<script lang="ts">\nimport Card from './Card.svelte';\nimport { current } from './store';\nlet { title, value = $bindable() }: { title: string; value: string } = $props();\nlet open = $state(false);\nconst label = $derived(title);\n</script>\n{#snippet row(name)}<span>{name}</span>{/snippet}\n<main><input bind:value use:focus transition:fade />{#await $current}<i>Wait</i>{:then item}<Card>{item}</Card>{/await}<slot name="actions" /></main>\n<style>.local { color: red; }</style>`;
+    const result = await project("svelte", "src/App.svelte", source);
+    const graph = (result.parsed.metadata.svelteGraph as { props: string[]; runes: string[]; stores: string[]; snippets: number; slots: string[]; awaitBlocks: number; directives: string[] }[])[0]!;
+    expect(result.parsed.modules[0]).toMatchObject({ imports: ["./Card.svelte", "./store"], components: ["Card"] });
+    expect(graph.props).toEqual(["title", "value"]);
+    expect(graph.runes).toEqual(["$bindable", "$derived", "$props", "$state"]);
+    expect(graph.stores).toEqual(["current"]);
+    expect(graph.snippets).toBe(1);
+    expect(graph.slots).toEqual(["actions"]);
+    expect(graph.awaitBlocks).toBe(1);
+    expect(graph.directives).toEqual(["BindDirective", "TransitionDirective", "UseDirective"]);
+    expect(result.parsed.bindings.some((binding) => binding.name === "open" && binding.kind === "state")).toBeTrue();
+    expect(result.parsed.bindings.some((binding) => binding.name === "current" && binding.kind === "store")).toBeTrue();
+    expect(result.parsed.styleSources).toEqual([expect.objectContaining({ path: "src/App.svelte", scoped: true, module: false })]);
+    exact(source, flatten(result.parsed.roots));
+  });
+
   test("Astro fails closed when compiler positions are not source-valid", async () => {
     const result = await project("astro", "src/pages/index.astro", '---\nconst ok=true;\n---\n<main>{ok && <p>Hi</p>}</main>');
     expect(result.parsed.unresolved.some((item) => item.id.startsWith("astro-location:"))).toBeTrue();

@@ -91,7 +91,7 @@ function routeFromNext(path: string): string {
 }
 
 function routeFromPages(path: string, prefix: string, suffix: RegExp): string {
-  const without = path.replace(prefix, "").replace(suffix, "").replace(/\/index$/, "");
+  const without = path.replace(prefix, "").replace(suffix, "").replace(/\/index$/, "").replace(/^\/+/, "");
   return `/${without}`.replace(/\/$/, "") || "/";
 }
 
@@ -107,7 +107,7 @@ function discoverRoutes(profile: ProjectFrameworkProfile, files: string[]): Rout
     const entry = preferred.find((candidate) => files.includes(candidate));
     if (entry) entries = [{ route: "/", entry }];
   }
-  return entries.sort((left, right) => left.route.localeCompare(right.route)).map((entry) => ({ ...entry, layoutChain: profile === "next-app" ? nextLayoutChain(entry.entry, files) : [], states: [`${entry.route}:default`], dynamic: /\[[^\]]+\]/.test(entry.route) }));
+  return entries.sort((left, right) => left.route.localeCompare(right.route)).map((entry) => ({ ...entry, layoutChain: profile === "next-app" ? nextLayoutChain(entry.entry, files) : profile === "sveltekit" ? svelteLayoutChain(entry.entry, files) : [], states: [`${entry.route}:default`], dynamic: /\[[^\]]+\]/.test(entry.route) }));
 }
 
 function nextLayoutChain(entry: string, files: string[]): string[] {
@@ -116,6 +116,19 @@ function nextLayoutChain(entry: string, files: string[]): string[] {
   let current = dirname(entry);
   while (current === root || current.startsWith(`${root}/`)) {
     for (const extension of ["tsx", "jsx"]) { const candidate = `${current}/layout.${extension}`; if (files.includes(candidate)) layouts.unshift(candidate); }
+    if (current === root) break;
+    current = dirname(current);
+  }
+  return layouts;
+}
+
+function svelteLayoutChain(entry: string, files: string[]): string[] {
+  const root = "src/routes";
+  const layouts: string[] = [];
+  let current = dirname(entry);
+  while (current === root || current.startsWith(`${root}/`)) {
+    const candidate = `${current}/+layout.svelte`;
+    if (files.includes(candidate)) layouts.unshift(candidate);
     if (current === root) break;
     current = dirname(current);
   }
@@ -213,7 +226,7 @@ export async function discoverProject(inputRoot: string, options: DiscoverProjec
     authority: { allowedPaths: options.allowedPaths ?? allowedDefaults(selected.profile, paths), deniedPaths: [".env", ".env.local", ".git", "node_modules", ".gen2prod"], preserveExpressions: true, preserveHandlers: true, preserveDataAccess: true, permitFrozenInstall: options.permitFrozenInstall ?? false, permittedEnvironmentKeys: options.permittedEnvironmentKeys ?? [] },
     states: stateFixtures,
     ...(selected.target === "wordpress" || selected.target === "bricks" ? { cms: { kind: selected.target, exportPath: routes[0]!.entry, version: versionFor(selected.profile, dependencies), pluginVersions: {}, revision: files.find((file) => file.path === routes[0]!.entry)!.sha256, contentIds: [] } } : {}),
-    discovery: { facts: { root, detectedProfile: selected.profile, files: files.length, typeScript: typeScript.facts, ...(selected.profile === "next-app" ? { nextSpecialFiles: paths.filter((path) => /\/(?:loading|error|not-found|template)\.(?:jsx|tsx)$/.test(path)) } : {}) }, inferredDefaults: { generatedDirectory, packageManager: manager?.name ?? null }, explicitOverrides: options, unresolved: requiredActions.map((item) => item.id) },
+    discovery: { facts: { root, detectedProfile: selected.profile, files: files.length, typeScript: typeScript.facts, ...(selected.profile === "next-app" ? { nextSpecialFiles: paths.filter((path) => /\/(?:loading|error|not-found|template)\.(?:jsx|tsx)$/.test(path)) } : {}), ...(selected.profile === "sveltekit" ? { svelteKitSpecialFiles: paths.filter((path) => /\+(?:page|layout)(?:\.server)?\.(?:js|ts)$|\+(?:error|server)\.svelte$/.test(path)) } : {}) }, inferredDefaults: { generatedDirectory, packageManager: manager?.name ?? null }, explicitOverrides: options, unresolved: requiredActions.map((item) => item.id) },
   });
   return { contract, contractHash: hashJson(contract), evidence, requiredActions };
 }
