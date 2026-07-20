@@ -20,6 +20,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P1.5 imports and owned files | Added native TypeScript import analysis, equivalent alias/type-only detection, symbol collision refusal, directive/import-boundary insertion without printing, proven-unused minimal removal, generated-directory confinement, and owned-file operations | CRLF/directive/import formatting, partial request, collision, unused-proof, generated path, patch apply, and rollback tests pass |
 | 2026-07-20 | P1.6 ownership and three-way safety | Added strict sidecar entries with base/current/proposed hashes, source symbol/node/fingerprint/BEM ownership, unique-move rebasing, semantic/duplicate conflict classification, and workspace persistence outside runtime output | Stable, offset-moved, semantically changed, duplicate-anchor, sidecar round-trip, and no-runtime-marker tests pass |
 | 2026-07-20 | P1.7 safe runner and copied sandbox (filesystem hardening still open) | Added exact command authorization, shell-free spawn, filtered env, deadlines, bounded/redacted logs, lockfile guards, copied dependencies only when requested, source fingerprint monitoring, retained command/runtime evidence, and sandbox-only patch/build dogfood | Runner/env/redaction/timeout/lock-drift and source-untouched sandbox build tests pass; production acceptance remains false until a pinned container/OS sandbox can prohibit arbitrary absolute-path writes |
+| 2026-07-20 | P1.8 declarative state capture | Extended stabilized browser evidence with hash-verified network fixtures, route navigation, safe/authorized action separation, post-action rendered source, per-fixture viewport/theme capture, environment/input equivalence hashes, and explicit branch/interaction coverage actions | Mocked route, safe details interaction, screenshot/DOM coverage, fixture equivalence, and unsafe-click refusal dogfood tests pass |
 
 ### Additional implementation decisions
 
@@ -720,11 +721,11 @@ Dependencies: P0.2, P1.7.
 
 Tasks:
 
-- [ ] Define state setup as declarative navigation, viewport, theme, fixture data, safe clicks/keys, and expected assertions.
-- [ ] Reuse stabilized capture controls for fonts, clock, randomness, animation, caret, lazy media, and browser environment.
-- [ ] Capture default plus every declared conditional/interactive state.
-- [ ] Record state coverage against discovered branches and interaction contracts.
-- [ ] Separate safe nonactivating probes from authorized side-effecting actions.
+- [x] Define state setup as declarative navigation, viewport, theme, fixture data, safe clicks/keys, and expected assertions.
+- [x] Reuse stabilized capture controls for fonts, clock, randomness, animation, caret, lazy media, and browser environment.
+- [x] Capture default plus every declared conditional/interactive state.
+- [x] Record state coverage against discovered branches and interaction contracts.
+- [x] Separate safe nonactivating probes from authorized side-effecting actions.
 
 Acceptance criteria:
 

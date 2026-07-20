@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { chromium, type Browser, type Page } from "playwright-core";
 import { ensureDirectory, writeJsonAtomic } from "../core/fs.ts";
 import { sha256 } from "../core/hash.ts";
+import type { StateFixture } from "../schemas/project-adapters.ts";
 
 export type CaptureOptions = {
   url: string;
@@ -13,6 +14,8 @@ export type CaptureOptions = {
   collectRenderedSource?: boolean | undefined;
   viewportHeight?: number | undefined;
   materializeScrollStates?: boolean | undefined;
+  stateFixtures?: StateFixture[] | undefined;
+  fixturePayloads?: Record<string, { body: string; contentType: string; status?: number | undefined }> | undefined;
 };
 
 export type RenderedSource = {
@@ -187,7 +190,14 @@ async function captureOne(browser: Browser, options: CaptureOptions, viewport: n
   })();` });
   const consoleMessages: string[] = [];
   page.on("console", (message) => consoleMessages.push(`${message.type()}: ${message.text()}`));
-  await page.goto(options.url, { waitUntil: "load" });
+  const fixture = options.stateFixtures?.find((item) => item.id === state);
+  for (const action of fixture?.actions.filter((item) => item.kind === "fixture") ?? []) {
+    const payload = options.fixturePayloads?.[action.valueHash];
+    if (!payload || sha256(payload.body) !== action.valueHash) throw new Error(`Missing or hash-invalid fixture payload for ${action.name}`);
+    await page.route(action.name, (route) => route.fulfill({ status: payload.status ?? 200, contentType: payload.contentType, body: payload.body }));
+  }
+  const goto = fixture?.actions.find((item) => item.kind === "goto");
+  await page.goto(goto?.kind === "goto" ? new URL(goto.path, options.url).href : options.url, { waitUntil: "load" });
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   await page.evaluate(() => document.fonts.ready);
   const scrollPositionsVisited = options.materializeScrollStates === false ? 0 : await materializeScrollStates(page);
@@ -198,15 +208,16 @@ async function captureOne(browser: Browser, options: CaptureOptions, viewport: n
     }))),
     new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
   ]));
-  const renderedSource = options.collectRenderedSource ? { ...await captureRenderedSource(page), scrollPositionsVisited } : undefined;
   await stabilize(page, theme);
-  if (state === "focus-visible") await page.keyboard.press("Tab");
-  if (state === "open") await page.locator("details").first().evaluate((element) => element.setAttribute("open", ""));
-  if (state === "dialog-open") await page.locator("dialog").first().evaluate((element) => {
+  if (fixture) await applyFixtureActions(page, fixture);
+  else if (state === "focus-visible") await page.keyboard.press("Tab");
+  else if (state === "open") await page.locator("details").first().evaluate((element) => element.setAttribute("open", ""));
+  else if (state === "dialog-open") await page.locator("dialog").first().evaluate((element) => {
     const dialog = element as HTMLDialogElement;
     if (!dialog.open) dialog.showModal();
   });
-  if (state === "hover") await page.locator("button, a, summary").first().hover();
+  else if (state === "hover") await page.locator("button, a, summary").first().hover();
+  const renderedSource = options.collectRenderedSource ? { ...await captureRenderedSource(page), scrollPositionsVisited } : undefined;
   const screenshot = join(options.outputDirectory, `capture-${viewport}-${theme}-${state}.png`);
   await page.screenshot({ path: screenshot, fullPage: true, animations: "disabled" });
   const performanceEvidence: Record<string, unknown> = await page.evaluate(() => {
@@ -222,6 +233,27 @@ async function captureOne(browser: Browser, options: CaptureOptions, viewport: n
   const result = { viewport, viewportHeight, theme, state, screenshot, screenshotHash: sha256(new Uint8Array(await Bun.file(screenshot).arrayBuffer())), fontSetHash: sha256(fontSet.join("\n")), dom: await captureDom(page), accessibilityTree: await captureAccessibility(page), performance: performanceEvidence, seo, console: consoleMessages, ...(renderedSource ? { renderedSource } : {}) };
   await context.close();
   return result;
+}
+
+async function applyFixtureActions(page: Page, fixture: StateFixture): Promise<void> {
+  for (const action of fixture.actions) {
+    if (action.kind === "goto" || action.kind === "fixture") continue;
+    const locator = page.locator(action.locator).first();
+    if (action.kind === "wait-for") { await locator.waitFor({ state: action.state }); continue; }
+    if (action.kind === "click") {
+      if (!action.sideEffectAuthorized) {
+        const safe = await locator.evaluate((element) => element.matches("summary, [data-g2p-safe-probe]") && !element.closest("form"));
+        if (!safe) throw new Error(`Click requires side-effect authority: ${action.locator}`);
+      }
+      await locator.click();
+    } else if (action.kind === "press") {
+      if (!action.sideEffectAuthorized && !/^(?:Tab|Escape|Arrow(?:Up|Down|Left|Right))$/.test(action.key)) throw new Error(`Key press requires side-effect authority: ${action.key}`);
+      await locator.press(action.key);
+    } else if (action.kind === "fill") {
+      if (!action.sideEffectAuthorized) throw new Error(`Fill requires side-effect authority: ${action.locator}`);
+      await locator.fill(action.value);
+    }
+  }
 }
 
 async function captureWithBrowser(browser: Browser, options: CaptureOptions): Promise<CaptureResult> {
