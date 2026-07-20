@@ -19,6 +19,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P1.4 hash-guarded text edits | Added full preflight, authority/symlink containment, operation DAG and overlap checks, exact AST-bound unique rebasing, descending in-memory edits, owned-file collision refusal, atomic staged writes, exact snapshot rollback, and second-apply refusal | BOM/CRLF/final-newline, untouched-byte, stale span, ambiguous rebase, overlap, graph tamper, path authority, symlink escape, postimage, collision, apply, rollback, and idempotence tests pass |
 | 2026-07-20 | P1.5 imports and owned files | Added native TypeScript import analysis, equivalent alias/type-only detection, symbol collision refusal, directive/import-boundary insertion without printing, proven-unused minimal removal, generated-directory confinement, and owned-file operations | CRLF/directive/import formatting, partial request, collision, unused-proof, generated path, patch apply, and rollback tests pass |
 | 2026-07-20 | P1.6 ownership and three-way safety | Added strict sidecar entries with base/current/proposed hashes, source symbol/node/fingerprint/BEM ownership, unique-move rebasing, semantic/duplicate conflict classification, and workspace persistence outside runtime output | Stable, offset-moved, semantically changed, duplicate-anchor, sidecar round-trip, and no-runtime-marker tests pass |
+| 2026-07-20 | P1.7 safe runner and copied sandbox (filesystem hardening still open) | Added exact command authorization, shell-free spawn, filtered env, deadlines, bounded/redacted logs, lockfile guards, copied dependencies only when requested, source fingerprint monitoring, retained command/runtime evidence, and sandbox-only patch/build dogfood | Runner/env/redaction/timeout/lock-drift and source-untouched sandbox build tests pass; production acceptance remains false until a pinned container/OS sandbox can prohibit arbitrary absolute-path writes |
 
 ### Additional implementation decisions
 
@@ -28,6 +29,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | D22 | Offline CMS contracts do not carry a fake native build command | WordPress/Bricks export validation is an internal structural operation until a real staging runtime is authorized | Framework contracts require `commands.build`; offline CMS contracts may omit it and remain runtime-unaccepted until staging evidence exists |
 | D23 | Parser capability claims describe demonstrated safety, not intended future support | A readable export is not automatically safe to rewrite | WordPress and Bricks remain `read`/`preserve` until their versioned patchers and round-trip controls exist; unreliable Astro spans become blocking unresolved evidence |
 | D24 | Preserve text and comments as first-class ordered Source Project IR nodes | Element-only trees lose whitespace, mixed content, and source comments even when their parent span survives | Framework parsers retain exact text/comment spans; dynamic and opaque regions remain immutable by default |
+| D25 | A copied working directory plus post-run source hashing is an audited sandbox, not a hardened filesystem boundary | This host has Docker but no pinned Gen2Prod runtime image, and unprivileged mount namespaces are disabled | Local dogfood may run and detect source-project changes; promotion/accepted reports must require a digest-pinned network-disabled container backend before claiming escaped-output prevention |
 
 ### Lessons learned
 
@@ -695,15 +697,15 @@ Dependencies: P0.2, P1.4.
 
 Tasks:
 
-- [ ] Create isolated sandbox directories with explicit source and output roots.
-- [ ] Copy/hardlink project inputs without writing the source project; materialize mutable files before edits.
-- [ ] Execute argument-array commands without a shell.
-- [ ] Filter environment variables to contract-approved keys.
-- [ ] Enforce per-command and total deadlines; capture stdout/stderr and exit codes.
-- [ ] Support existing dependencies or an explicitly authorized frozen install.
-- [ ] Verify lockfile hash before and after all commands.
-- [ ] Record tool/runtime versions and sandbox hashes.
-- [ ] Always retain validation artifacts; clean ephemeral processes reliably.
+- [x] Create isolated sandbox directories with explicit source and output roots.
+- [x] Copy/hardlink project inputs without writing the source project; materialize mutable files before edits.
+- [x] Execute argument-array commands without a shell.
+- [x] Filter environment variables to contract-approved keys.
+- [x] Enforce per-command and total deadlines; capture stdout/stderr and exit codes.
+- [x] Support existing dependencies or an explicitly authorized frozen install.
+- [x] Verify lockfile hash before and after all commands.
+- [x] Record tool/runtime versions and sandbox hashes.
+- [x] Always retain validation artifacts; clean ephemeral processes reliably.
 
 Acceptance criteria:
 

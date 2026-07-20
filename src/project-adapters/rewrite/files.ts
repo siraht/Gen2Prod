@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { sha256 } from "../../core/hash.ts";
 import type { ProjectContract, ProjectPatchOperation } from "../../schemas/project-adapters.ts";
 
-export function planOwnedFile(contract: ProjectContract, operationId: string, relativeName: string, contents: string, dependencies: string[] = []): ProjectPatchOperation {
+export function planOwnedFile(contract: ProjectContract, operationId: string, relativeName: string, contents: string, dependencies: string[] = []): Extract<ProjectPatchOperation, { kind: "write-owned-file" }> {
   if (!/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(relativeName) || relativeName.split("/").includes("..")) throw new Error(`Unsafe generated file name: ${relativeName}`);
   const path = join(contract.integration.generatedDirectory, relativeName).replaceAll("\\", "/");
   if (!contract.authority.allowedPaths.some((allowed) => path === allowed || path.startsWith(`${allowed}/`))) throw new Error(`Generated directory is outside destination authority: ${path}`);
