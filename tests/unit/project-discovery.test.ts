@@ -83,12 +83,13 @@ describe("project discovery", () => {
 
   test("discovers Astro dynamic pages, layouts, and content collections", async () => {
     const root = await mkdtemp(join(tmpdir(), "g2p-astro-discovery-"));
-    await Bun.write(join(root, "package.json"), JSON.stringify({ name: "fixture-astro", scripts: { build: "astro build" }, dependencies: { astro: "7.1.1" } }));
+    await Bun.write(join(root, "package.json"), JSON.stringify({ name: "fixture-astro", scripts: { build: "astro build" }, dependencies: { astro: "7.1.1", react: "19.2.0", "react-dom": "19.2.0", "@astrojs/react": "6.0.0" } }));
     await Bun.write(join(root, "bun.lock"), "lock");
     await Bun.write(join(root, "src", "pages", "blog", "[slug].astro"), "<main>Post</main>\n");
     await Bun.write(join(root, "src", "layouts", "Article.astro"), "<article><slot /></article>\n");
     await Bun.write(join(root, "src", "content.config.ts"), "export const collections = {};\n");
     const discovery = await discoverProject(root);
+    expect(discovery.evidence.signals.map((signal) => signal.profile)).toEqual(["astro"]);
     expect(discovery.contract.integration.routeEntries[0]).toMatchObject({ route: "/blog/[slug]", dynamic: true });
     expect(discovery.contract.integration.rootLayouts).toEqual(["src/layouts/Article.astro"]);
     expect(discovery.contract.discovery.facts.astroLayouts).toEqual(["src/layouts/Article.astro"]);
