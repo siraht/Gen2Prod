@@ -42,6 +42,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P9.2 explicit destination apply and rollback | Added a separately invoked acceptance boundary that re-discovers the destination, verifies framework/version/lockfile/root identity, preflights every authorized hash-bound operation before writes, persists a versioned rollback bundle, applies atomically, verifies postimages, and restores exact originals on demand or post-apply races | End-to-end React dogfood proves no implicit source write, accepted apply, generated-file creation, exact changed-file inventory, stale second-apply refusal, exact rollback including generated-file removal, and rejection of an unaccepted report |
 | 2026-07-20 | P9.3 project configuration | Added a strict optional project-adapter config namespace for artifact location, exact profile, frozen-install authority, preview environment names, and explicit copied-audit versus digest-pinned container posture | Existing configuration remains valid; unknown project keys, mutable container tags, missing container digests, and mismatched sandbox/image combinations fail schema validation |
 | 2026-07-20 | P9.3 portable run request | Added a strict, exported framework-neutral request that binds source/render correspondence, canonical semantic/BEM/SCSS surface, ACSS variables, policy hash, mode/profile, preview URL, and frozen fixture payloads | Duplicate/invalid variables, hidden safety claims, unknown fields, invalid payload statuses, and malformed canonical trees fail before planning; target-specific planning remains selected from discovered destination facts |
+| 2026-07-20 | P9.3 project CLI | Added stable JSON/human `project inspect`, `plan`, `run`, `apply`, and `rollback` commands, portable plan input, explicit profile selection, output paths, retained required actions, and environment-name forwarding | CLI dogfood proves read-only inspect/plan, copied-sandbox artifact production with mandatory isolation/mutation rejection, accepted explicit apply, stale refusal, and exact CLI rollback; all project schemas export with the existing schema bundle |
 
 ### Additional implementation decisions
 
@@ -96,6 +97,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L22 | Route-qualified state IDs contain `/` and `:` and are unsafe screenshot filenames | Capture artifacts retain the original state ID in metadata while filenames use a deterministic sanitized representation |
 | L23 | An accepted report is not sufficient if the destination has drifted since inspection | Apply re-runs discovery and patch preparation against the real destination and rejects root, framework, lockfile, path, file, span, AST-anchor, revision, and owned-file precondition drift before mutation |
 | L24 | A container image tag is not a reproducible sandbox identity | The project config accepts only `name@sha256:<digest>` and refuses a container backend without that immutable identity |
+| L25 | A local copied-sandbox run is still useful even when it cannot be promoted | The CLI produces native, preservation, and artifact evidence but deterministically reports the missing hardened isolation and 100% mutation-control recall instead of exposing flags that let an operator assert those proofs |
 
 ## 1. Outcome
 
@@ -1234,10 +1236,10 @@ Dependencies: P9.1–P9.2.
 
 Tasks:
 
-- [ ] Add `project` command tree and stable JSON envelopes.
+- [x] Add `project` command tree and stable JSON envelopes.
 - [x] Add project-adapter configuration without weakening existing config validation.
 - [ ] Extend `doctor` with parser/compiler/browser/sandbox readiness and supported profiles.
-- [ ] Export all schemas.
+- [x] Export all schemas.
 - [ ] Document project contract examples, state fixtures, generated artifacts, safety model, CMS staging, and troubleshooting.
 - [ ] Update implementation matrix only after executable evidence exists.
 

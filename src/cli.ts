@@ -6,7 +6,7 @@ import { dirname, join, resolve } from "node:path";
 import { stringify } from "yaml";
 import { loadConfig, type Gen2ProdConfig } from "./core/config.ts";
 import { Gen2ProdError, UsageError } from "./core/errors.ts";
-import { ensureDirectory, pathExists, readJson, writeTextAtomic } from "./core/fs.ts";
+import { ensureDirectory, pathExists, readJson, writeJsonAtomic, writeTextAtomic } from "./core/fs.ts";
 import { result, type ResultEnvelope } from "./core/result.ts";
 import { ModeSchema, ProfileSchema } from "./schemas/artifacts.ts";
 import { ImageOnlyPolicySchema } from "./schemas/image-only.ts";
@@ -46,6 +46,12 @@ import { runFrameworkAdapterSuite, ALL_FRAMEWORK_ADAPTER_TARGETS } from "./adapt
 import { evaluateFrameworkAdapterPolicy } from "./adapters/evaluate.ts";
 import { runFrameworkAdapterResearch } from "./adapters/research.ts";
 import type { CompiledPage, CompilationPlan } from "./compiler/types.ts";
+import { discoverProject } from "./project-adapters/discovery.ts";
+import { applyAcceptedProjectPatch, rollbackDestinationPatch } from "./project-adapters/destination.ts";
+import { runProjectPipeline } from "./project-adapters/pipeline.ts";
+import { parseProjectSource } from "./project-adapters/registry.ts";
+import { assertProjectRequest, loadProjectAdapterRunRequest, planProjectAdapterRequest, planningContext } from "./project-adapters/request.ts";
+import { ProjectContractSchema, ProjectDestinationBundleSchema, ProjectFrameworkProfileSchema, ProjectPatchPlanSchema, ProjectValidationReportSchema, SourceProjectSchema } from "./schemas/project-adapters.ts";
 
 type GlobalOptions = { config: string; workspace: string; acss?: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -137,6 +143,95 @@ acssCommand
     if (!sourcePath) throw new UsageError("No Automatic.css plugin ZIP was discovered in the project directory");
     const bundle = await prepareAutomaticCss({ sourcePath, outputDirectory: resolve(options.output ?? join(project.workspace, "acss")), mode: project.designSystem?.mode ?? "full", force: options.force });
     emit(result("acss prepare", { version: bundle.provenance.version, mode: bundle.provenance.moduleMode, source: bundle.provenance.source, sourceHash: bundle.provenance.sourceHash, variables: bundle.registry.tokens.length, utilityClasses: bundle.catalog.utilityClasses.length, settings: Object.keys(bundle.catalog.settingsDefaults).length, files: bundle.files }), `Prepared Automatic.css ${bundle.provenance.version} (${bundle.provenance.moduleMode})\nRuntime variables: ${bundle.registry.tokens.length}; utility classes: ${bundle.catalog.utilityClasses.length}; settings defaults: ${Object.keys(bundle.catalog.settingsDefaults).length}\nRegistry: ${bundle.files.registry}\nCatalog: ${bundle.files.catalog}\nProvenance: ${bundle.files.provenance}`);
+  });
+
+const projectCommand = program.command("project").description("inspect, plan, validate, apply, and roll back existing framework/CMS projects");
+projectCommand
+  .command("inspect <root>")
+  .description("discover and parse a destination without modifying it")
+  .addOption(new Option("--profile <profile>", "exact source profile override").choices(ProjectFrameworkProfileSchema.options))
+  .option("--output <path>", "contract and Source Project IR output directory")
+  .action(async (rootValue: string, options: { profile?: string; output?: string }) => {
+    const projectRoot = resolve(rootValue);
+    const cfg = await config();
+    const profile = options.profile ?? cfg.projectAdapters?.profile;
+    const discovery = await discoverProject(projectRoot, profile ? { profile: ProjectFrameworkProfileSchema.parse(profile) } : {});
+    const source = await parseProjectSource(projectRoot, discovery);
+    const output = resolve(options.output ?? join(cfg.projectAdapters?.artifacts ?? join(cfg.workspace, "projects"), source.projectId, "inspect"));
+    await ensureDirectory(output);
+    const contractPath = join(output, "project-contract.json");
+    const sourcePath = join(output, "source-project.json");
+    await writeJsonAtomic(contractPath, discovery.contract);
+    await writeJsonAtomic(sourcePath, source);
+    const envelope = result("project inspect", { projectId: source.projectId, target: discovery.contract.framework.target, profile: discovery.contract.framework.profile, contractHash: discovery.contractHash, sourceHash: source.sourceHash, contractPath, sourcePath, routes: source.routes.length, unresolved: source.unresolved.length });
+    envelope.requiredActions.push(...discovery.requiredActions, ...source.unresolved.map((item) => ({ id: item.id, summary: "Resolve source parser uncertainty", detail: item.concern, blocking: item.blocking })));
+    emit(envelope, `Inspected ${source.projectId} (${discovery.contract.framework.target}/${discovery.contract.framework.profile})\nRoutes: ${source.routes.length}; unresolved: ${source.unresolved.length}\nContract: ${contractPath}\nSource Project IR: ${sourcePath}`);
+  });
+
+projectCommand
+  .command("plan <root> <request>")
+  .description("create a hash-bound destination patch plan without writing the destination")
+  .addOption(new Option("--profile <profile>", "exact source profile override").choices(ProjectFrameworkProfileSchema.options))
+  .option("--output <path>", "patch plan JSON path")
+  .action(async (rootValue: string, requestValue: string, options: { profile?: string; output?: string }) => {
+    const cfg = await config();
+    const request = await loadProjectAdapterRunRequest(resolve(requestValue));
+    const profile = options.profile ?? cfg.projectAdapters?.profile;
+    const planned = await planProjectAdapterRequest({ root: resolve(rootValue), request, ...(profile ? { profile: ProjectFrameworkProfileSchema.parse(profile) } : {}) });
+    const output = resolve(options.output ?? join(cfg.projectAdapters?.artifacts ?? join(cfg.workspace, "projects"), planned.source.projectId, `${planned.plan.planId}.json`));
+    await writeJsonAtomic(output, planned.plan);
+    const envelope = result("project plan", { projectId: planned.source.projectId, planId: planned.plan.planId, target: planned.contract.framework.target, operations: planned.plan.operations.length, predictedChangedFiles: planned.plan.predictedChangedFiles, predictedChangedBytes: planned.plan.predictedChangedBytes, planPath: output });
+    envelope.requiredActions.push(...planned.plan.requiredActions);
+    emit(envelope, `Planned ${planned.plan.operations.length} operation(s) for ${planned.source.projectId}\nChanged files: ${planned.plan.predictedChangedFiles.length}; predicted bytes: ${planned.plan.predictedChangedBytes}\nPlan: ${output}`);
+  });
+
+projectCommand
+  .command("run <root> <request>")
+  .description("run the complete copied-sandbox build, state capture, image diff, and preservation gates")
+  .addOption(new Option("--profile <profile>", "exact source profile override").choices(ProjectFrameworkProfileSchema.options))
+  .option("--output <path>", "content-addressed run artifact root")
+  .action(async (rootValue: string, requestValue: string, options: { profile?: string; output?: string }) => {
+    const cfg = await config();
+    const request = await loadProjectAdapterRunRequest(resolve(requestValue));
+    const profile = options.profile ?? cfg.projectAdapters?.profile;
+    const root = resolve(rootValue);
+    const discovery = await discoverProject(root, profile ? { profile: ProjectFrameworkProfileSchema.parse(profile) } : {});
+    const source = await parseProjectSource(root, discovery);
+    assertProjectRequest(request, discovery.contract.framework.target, source.projectId, source.sourceHash);
+    const output = resolve(options.output ?? join(cfg.projectAdapters?.artifacts ?? join(cfg.workspace, "projects"), source.projectId, "runs"));
+    const configuredEnvironment = Object.fromEntries((cfg.projectAdapters?.previewEnvironmentKeys ?? []).map((key) => [key, process.env[key]]).filter((entry): entry is [string, string] => entry[1] !== undefined));
+    const run = await runProjectPipeline({ root, discovery: profile ? { profile: ProjectFrameworkProfileSchema.parse(profile) } : undefined, correspondence: request.correspondence, planning: planningContext(request), policyHash: request.policyHash, mode: request.mode, profile: request.profile, registeredVariables: request.canonical.registeredVariables, artifactRoot: output, previewUrl: request.previewUrl ?? cfg.projectAdapters?.previewUrl, previewEnvironment: configuredEnvironment, fixturePayloads: request.fixturePayloads, browserExecutable: cfg.capture.browserExecutable, hardenedIsolation: false, mutationControlRecall: 0, includeInstall: cfg.projectAdapters?.includeInstall ?? false });
+    const envelope = result("project run", { runId: run.runId, projectId: run.source.projectId, planId: run.plan.planId, accepted: run.validation.accepted, hardFailures: run.validation.hardFailures, artifacts: run.artifacts, artifactRoot: run.artifactRoot, metrics: run.validation.metrics, stateCoverage: run.validation.stateCoverage });
+    envelope.requiredActions.push(...run.validation.requiredActions);
+    emit(envelope, `Project run ${run.runId}\nAccepted: ${run.validation.accepted ? "yes" : "no"}; hard failures: ${run.validation.hardFailures.length}\nOperations: ${run.plan.operations.length}; states: ${run.validation.stateCoverage.captured}/${run.validation.stateCoverage.declared}\nArtifacts: ${run.artifactRoot}`);
+  });
+
+projectCommand
+  .command("apply <root>")
+  .description("explicitly apply a previously accepted patch after revalidating the destination")
+  .requiredOption("--contract <path>", "accepted project contract JSON")
+  .requiredOption("--source <path>", "accepted Source Project IR JSON")
+  .requiredOption("--plan <path>", "accepted project patch plan JSON")
+  .requiredOption("--validation <path>", "accepted project validation report JSON")
+  .option("--artifacts <path>", "rollback bundle directory")
+  .action(async (rootValue: string, options: { contract: string; source: string; plan: string; validation: string; artifacts?: string }) => {
+    const cfg = await config();
+    const contract = ProjectContractSchema.parse(await readJson(resolve(options.contract)));
+    const source = SourceProjectSchema.parse(await readJson(resolve(options.source)));
+    const plan = ProjectPatchPlanSchema.parse(await readJson(resolve(options.plan)));
+    const validation = ProjectValidationReportSchema.parse(await readJson(resolve(options.validation)));
+    const artifactDirectory = resolve(options.artifacts ?? join(cfg.projectAdapters?.artifacts ?? join(cfg.workspace, "projects"), contract.projectId, "rollback"));
+    const applied = await applyAcceptedProjectPatch({ root: resolve(rootValue), contract, source, plan, validation, artifactDirectory });
+    emit(result("project apply", applied), `Applied ${applied.changedFiles.length} file(s) for ${applied.projectId}\nRollback bundle: ${applied.rollbackBundlePath}`);
+  });
+
+projectCommand
+  .command("rollback <root> <bundle>")
+  .description("restore exact destination originals from a hash-guarded rollback bundle")
+  .action(async (rootValue: string, bundleValue: string) => {
+    const bundle = ProjectDestinationBundleSchema.parse(await readJson(resolve(bundleValue)));
+    const rolledBack = await rollbackDestinationPatch({ root: resolve(rootValue), bundle });
+    emit(result("project rollback", rolledBack), `Rolled back ${rolledBack.restoredFiles.length} file(s) for ${rolledBack.projectId}`);
   });
 
 const synth = program.command("synth").description("manage the frozen synthetic curriculum");

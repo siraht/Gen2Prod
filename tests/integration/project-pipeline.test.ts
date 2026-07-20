@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import type { PlannedNode } from "../../src/compiler/types.ts";
 import { sha256 } from "../../src/core/hash.ts";
 import { ArtifactStore } from "../../src/core/artifact-store.ts";
 import { discoverProject } from "../../src/project-adapters/discovery.ts";
-import { applyAcceptedProjectPatch, rollbackDestinationPatch } from "../../src/project-adapters/destination.ts";
+import { applyAcceptedProjectPatch } from "../../src/project-adapters/destination.ts";
 import { runProjectPipeline } from "../../src/project-adapters/pipeline.ts";
 import { parseProjectSource } from "../../src/project-adapters/registry.ts";
 import type { ReactCanonicalSurface } from "../../src/project-adapters/react/plan.ts";
@@ -48,14 +48,26 @@ describe("project pipeline orchestration", () => {
     expect(await Bun.file(join(root, "src", "App.tsx")).text()).toBe(source);
     expect(Bun.file(join(root, ".gen2prod")).exists()).resolves.toBeFalse();
 
-    const application = await applyAcceptedProjectPatch({ root, contract: result.contract, source: result.source, plan: result.plan, validation: result.validation, artifactDirectory: artifacts });
+    const contractPath = join(artifacts, "accepted-contract.json");
+    const sourcePath = join(artifacts, "accepted-source.json");
+    const planPath = join(artifacts, "accepted-plan.json");
+    const validationPath = join(artifacts, "accepted-validation.json");
+    await Promise.all([Bun.write(contractPath, JSON.stringify(result.contract)), Bun.write(sourcePath, JSON.stringify(result.source)), Bun.write(planPath, JSON.stringify(result.plan)), Bun.write(validationPath, JSON.stringify(result.validation))]);
+    const apply = Bun.spawn(["bun", "src/cli.ts", "--config", resolve("gen2prod.config.yaml"), "--json", "project", "apply", root, "--contract", contractPath, "--source", sourcePath, "--plan", planPath, "--validation", validationPath, "--artifacts", artifacts], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
+    const applyEnvelope = JSON.parse(await new Response(apply.stdout).text()) as { command: string; data: { changedFiles: { path: string }[]; rollbackBundlePath: string } };
+    expect(await apply.exited).toBe(0);
+    expect(applyEnvelope.command).toBe("project apply");
+    const application = applyEnvelope.data;
     expect(application.changedFiles.map((file) => file.path).sort()).toEqual([...result.plan.predictedChangedFiles].sort());
     expect(await Bun.file(join(root, "src", "App.tsx")).text()).toContain("<PageShell>");
     expect(Bun.file(join(root, "src", "components", "gen2prod", "PageShell.tsx")).exists()).resolves.toBeTrue();
     await expect(applyAcceptedProjectPatch({ root, contract: result.contract, source: result.source, plan: result.plan, validation: result.validation, artifactDirectory: artifacts })).rejects.toThrow("root hash changed");
 
-    const bundle = await Bun.file(application.rollbackBundlePath).json();
-    const rollback = await rollbackDestinationPatch({ root, bundle });
+    const rollbackCommand = Bun.spawn(["bun", "src/cli.ts", "--config", resolve("gen2prod.config.yaml"), "--json", "project", "rollback", root, application.rollbackBundlePath], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
+    const rollbackEnvelope = JSON.parse(await new Response(rollbackCommand.stdout).text()) as { command: string; data: { restoredFiles: string[] } };
+    expect(await rollbackCommand.exited).toBe(0);
+    expect(rollbackEnvelope.command).toBe("project rollback");
+    const rollback = rollbackEnvelope.data;
     expect(rollback.restoredFiles.sort()).toEqual([...result.plan.predictedChangedFiles].sort());
     expect(await Bun.file(join(root, "src", "App.tsx")).text()).toBe(source);
     expect(Bun.file(join(root, "src", "components", "gen2prod", "PageShell.tsx")).exists()).resolves.toBeFalse();
