@@ -61,6 +61,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P7.3/P8.2 authenticated CMS staging protocol | Added strict local/staging-only authority and report schemas, connector interface, authenticated HTTP implementation with conditional ETag requests and environment-only credentials, memory staging dogfood, structural preflight, before/candidate/rollback captures, and exact export rollback | WordPress and Bricks fixtures prove two-state captures, dynamic query/condition retention, unique tree/parent/settings validation, stale revision refusal before mutation, exact rollback, secret-free reports, required permissions/versions/content IDs/sanitization/rollback authority, and schema-level production rejection |
 | 2026-07-20 | P4.2 Vue-native metadata | Added profile-specific canonical metadata lowering: Vue/Vite updates the document entry and Nuxt emits static `useHead` state, with escaping, duplicate prevention, exact preimages, scriptless-SFC coalescing, and dynamic-head conflict refusal | Vue/Vite dogfood replaces one title/description and replans empty; Nuxt dogfood creates exactly one setup block, compiles, replans empty, and converts an existing computed `useHead` into a blocking required action |
 | 2026-07-20 | P4.2/P5.2/P6.2 framework-native validation | Added pinned Vue/Vite, SvelteKit, and Astro+React-island projects that run actual typecheck/check/build/preview commands, capture baseline/candidate/target pixels, execute Vue/Svelte server compilers across conditional states, and feed the shared source/semantic/style/image/rollback/idempotence validator | All three native projects pass their commands, declared state capture, zero pixel diffs, source/binding preservation, 100% frozen controls, exact rollback/replay, and empty replanning; copied-audit runs retain only the previously declared hardened-isolation action rather than claiming promotion readiness |
+| 2026-07-20 | P12.1 cross-profile acceptance matrix | Added strict per-profile/per-capability evidence, explicit exception authority, five shared invariants, deterministic aggregation, and exact coverage enforcement across all ten supported profiles and nine scenario classes | The matrix indexes hashed executable tests for every profile/capability, is order-stable, accepts the complete inventory, and rejects a missing scenario, duplicate profile, hidden exception, or inconsistent verdict |
 
 ### Additional implementation decisions
 
@@ -104,6 +105,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | D56 | Missing PHP CLI downgrades syntax evidence rather than blocking all WordPress work | Templates, exports, block structure, shared SCSS, and rollback remain testable without PHP, but delimiter balance is not equivalent to the PHP parser | The fallback catches malformed structure and emits a precise runtime action; PHP-dependent acceptance becomes true only after actual `php -l` results exist |
 | D57 | Vue metadata lowering follows the discovered deployment profile | Vite owns metadata in the document entry while Nuxt owns it through its head composable; treating those as interchangeable would duplicate tags or bypass SSR metadata | `vue-vite` applies one hash-guarded `index.html` edit; `nuxt` adds static `useHead`, and any existing non-identical head computation remains source-owned and blocking |
 | D58 | Framework-native completion is measured through the shared validator with real destination commands and captures | Parser-only compilation can miss package graph, SSR adapter, bundler, preview, hydration, pixel, and replay failures | Vue runs `vue-tsc` and Vite, SvelteKit runs sync/check plus its SSR build, Astro emits a hydrated React island, and all three retain the same deterministic validation fields; sandbox isolation remains an orthogonal promotion authority |
+| D59 | Cross-profile completeness is an evidence matrix, not a framework-name checklist | A profile can have a parser and planner while still lacking forms, conflict refusal, dynamic states, or rollback proof | Each of ten exact profiles must provide hashed executable evidence for all nine shared scenario classes and all five styling/preservation invariants; exceptions require a rationale, alternate evidence, and proof that shared invariants are unchanged |
 
 ### Lessons learned
 
@@ -150,6 +152,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L39 | A scriptless Nuxt SFC cannot receive metadata and imports as two independent zero-width setup-block edits | The planner coalesces static `useHead` with component/style imports into one `<script setup>` insertion; existing script blocks receive a separate non-overlapping metadata operation |
 | L40 | Framework build asset hashes and bootstrap source are not page-content semantics | Semantic recall now derives text from direct node text and URLs from content-bearing anchors/media, excluding generated script/style/link payloads that legitimately change when source modules change |
 | L41 | An authorized import inserted into an opaque frontmatter block changes that block's aggregate hash without authorizing its dynamic descendants | Preservation and binding checks exempt only the exact node targeted by an operation; hydrated islands and other nested preserved regions remain independently required byte-for-byte |
+| L42 | A single aggregate "framework passed" bit hides which behavioral archetype is absent | Capability identity is unique and exhaustive inside each profile row, and profile identity is unique and exhaustive inside the matrix; both levels recompute their verdict instead of trusting a caller flag |
 
 ## 1. Outcome
 
@@ -1496,15 +1499,15 @@ Dependencies: all target adapters.
 
 For every target/profile:
 
-- [ ] at least one static route;
-- [ ] at least one conditional route;
-- [ ] at least one repeated template;
-- [ ] at least one form/error/success flow;
-- [ ] at least one dialog or comparable keyboard interaction;
-- [ ] at least one async/dynamic data state;
-- [ ] at least one metadata/layout case;
-- [ ] at least one stale/conflicting plan;
-- [ ] at least one exact rollback/idempotence proof.
+- [x] at least one static route;
+- [x] at least one conditional route;
+- [x] at least one repeated template;
+- [x] at least one form/error/success flow;
+- [x] at least one dialog or comparable keyboard interaction;
+- [x] at least one async/dynamic data state;
+- [x] at least one metadata/layout case;
+- [x] at least one stale/conflicting plan;
+- [x] at least one exact rollback/idempotence proof.
 
 Acceptance criteria:
 

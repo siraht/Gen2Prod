@@ -559,6 +559,42 @@ export const CmsStagingValidationReportSchema = z.object({
   credentialsRetained: z.literal(false), productionMutationAllowed: z.literal(false), accepted: z.boolean(), reportHash: Sha256Schema,
 }).strict();
 
+export const ProjectAcceptanceCapabilitySchema = z.enum(["static-route", "conditional-route", "repeated-template", "form-error-success", "keyboard-interaction", "async-dynamic-data", "metadata-layout", "stale-conflicting-plan", "rollback-idempotence"]);
+export const ProjectAcceptanceEvidenceSchema = z.object({
+  capability: ProjectAcceptanceCapabilitySchema,
+  status: z.enum(["pass", "explicit-exception"]),
+  assertions: z.array(z.string().min(1)).min(1),
+  artifacts: z.array(z.object({ kind: z.enum(["source-project-ir", "patch-plan", "validation-report", "capture", "replay", "executable-test"]), hash: Sha256Schema, reference: z.string().min(1) }).strict()).min(1),
+  exception: z.object({ rationale: z.string().min(1), alternateEvidence: z.array(Sha256Schema).min(1), sharedInvariantUnchanged: z.literal(true) }).strict().optional(),
+}).strict().superRefine((value, context) => {
+  if (value.status === "explicit-exception" && !value.exception) context.addIssue({ code: "custom", path: ["exception"], message: "explicit exceptions require rationale and alternate evidence" });
+  if (value.status === "pass" && value.exception) context.addIssue({ code: "custom", path: ["exception"], message: "passing evidence cannot hide an exception" });
+});
+export const ProjectProfileAcceptanceSchema = z.object({
+  profile: ProjectFrameworkProfileSchema,
+  frameworkVersion: z.string().min(1),
+  generatorFamily: z.string().min(1),
+  evidence: z.array(ProjectAcceptanceEvidenceSchema).length(ProjectAcceptanceCapabilitySchema.options.length),
+  sharedInvariants: z.object({ sourcePreservation: z.literal(true), bemOnlyClasses: z.literal(true), nestedTokenScss: z.literal(true), noUtilityElementInlineStyles: z.literal(true), hashGuardedRollback: z.literal(true) }).strict(),
+  accepted: z.boolean(),
+}).strict().superRefine((value, context) => {
+  const capabilities = value.evidence.map((item) => item.capability);
+  if (new Set(capabilities).size !== ProjectAcceptanceCapabilitySchema.options.length || ProjectAcceptanceCapabilitySchema.options.some((capability) => !capabilities.includes(capability))) context.addIssue({ code: "custom", path: ["evidence"], message: "every acceptance capability must appear exactly once" });
+  const expected = value.evidence.every((item) => item.status === "pass" || Boolean(item.exception?.sharedInvariantUnchanged));
+  if (value.accepted !== expected) context.addIssue({ code: "custom", path: ["accepted"], message: "profile acceptance does not match its evidence" });
+});
+export const ProjectCrossProfileAcceptanceMatrixSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  profiles: z.array(ProjectProfileAcceptanceSchema).length(ProjectFrameworkProfileSchema.options.length),
+  proceduralResultsHash: Sha256Schema,
+  accepted: z.boolean(),
+  matrixHash: Sha256Schema,
+}).strict().superRefine((value, context) => {
+  const profiles = value.profiles.map((item) => item.profile);
+  if (new Set(profiles).size !== ProjectFrameworkProfileSchema.options.length || ProjectFrameworkProfileSchema.options.some((profile) => !profiles.includes(profile))) context.addIssue({ code: "custom", path: ["profiles"], message: "every supported profile must appear exactly once" });
+  if (value.accepted !== value.profiles.every((profile) => profile.accepted)) context.addIssue({ code: "custom", path: ["accepted"], message: "matrix acceptance does not match profile evidence" });
+});
+
 export type ProjectFrameworkProfile = z.infer<typeof ProjectFrameworkProfileSchema>;
 export type CommandSpec = z.infer<typeof CommandSpecSchema>;
 export type StateFixture = z.infer<typeof StateFixtureSchema>;
@@ -588,3 +624,7 @@ export type ProjectAdapterResearchEvaluation = z.infer<typeof ProjectAdapterRese
 export type ProjectAdapterResearchSummary = z.infer<typeof ProjectAdapterResearchSummarySchema>;
 export type CmsStagingAuthority = z.infer<typeof CmsStagingAuthoritySchema>;
 export type CmsStagingValidationReport = z.infer<typeof CmsStagingValidationReportSchema>;
+export type ProjectAcceptanceCapability = z.infer<typeof ProjectAcceptanceCapabilitySchema>;
+export type ProjectAcceptanceEvidence = z.infer<typeof ProjectAcceptanceEvidenceSchema>;
+export type ProjectProfileAcceptance = z.infer<typeof ProjectProfileAcceptanceSchema>;
+export type ProjectCrossProfileAcceptanceMatrix = z.infer<typeof ProjectCrossProfileAcceptanceMatrixSchema>;
