@@ -247,6 +247,54 @@ export const ProjectCorrespondenceSchema = z.object({
   unresolved: z.array(z.object({ sourceNodeId: z.string(), reason: z.string(), requiredEvidence: z.array(z.string()) }).strict()),
 }).strict();
 
+export type ProjectCanonicalNodeShape = {
+  nodeId: string;
+  originalTag: string;
+  tag: string;
+  role: string;
+  block: string | null;
+  classes: string[];
+  oldClasses: string[];
+  attributes: Record<string, string>;
+  text: string;
+  content?: ({ kind: "text"; value: string } | { kind: "child"; nodeId: string })[] | undefined;
+  children: ProjectCanonicalNodeShape[];
+};
+
+export const ProjectCanonicalNodeSchema: z.ZodType<ProjectCanonicalNodeShape> = z.lazy(() => z.object({
+  nodeId: z.string().min(1),
+  originalTag: z.string().min(1),
+  tag: z.string().min(1),
+  role: z.string(),
+  block: z.string().min(1).nullable(),
+  classes: z.array(z.string().min(1)),
+  oldClasses: z.array(z.string().min(1)),
+  attributes: z.record(z.string(), z.string()),
+  text: z.string(),
+  content: z.array(z.discriminatedUnion("kind", [z.object({ kind: z.literal("text"), value: z.string() }).strict(), z.object({ kind: z.literal("child"), nodeId: z.string().min(1) }).strict()])).optional(),
+  children: z.array(ProjectCanonicalNodeSchema),
+}).strict());
+
+export const ProjectAdapterRunRequestSchema = z.object({
+  schemaVersion: z.literal("0.1.0"),
+  correspondence: ProjectCorrespondenceSchema,
+  canonical: z.object({
+    target: FrameworkAdapterTargetSchema,
+    root: ProjectCanonicalNodeSchema,
+    scss: z.string().min(1),
+    css: z.string(),
+    outputHash: Sha256Schema,
+    registeredVariables: z.array(z.string().regex(/^--[a-z0-9-]+$/)),
+  }).strict(),
+  policyHash: Sha256Schema,
+  mode: ModeSchema,
+  profile: ProfileSchema,
+  previewUrl: z.string().url().optional(),
+  fixturePayloads: z.record(z.string(), z.object({ body: z.string(), contentType: z.string().min(1), status: z.number().int().min(100).max(599).optional() }).strict()).optional(),
+}).strict().superRefine((value, context) => {
+  if (new Set(value.canonical.registeredVariables).size !== value.canonical.registeredVariables.length) context.addIssue({ code: "custom", path: ["canonical", "registeredVariables"], message: "registered variables must be unique" });
+});
+
 const PatchBaseShape = {
   operationId: z.string().min(1),
   dependencies: z.array(z.string()),
@@ -343,6 +391,7 @@ export type ProjectMarkupNode = ProjectMarkupNodeShape;
 export type SourceProject = z.infer<typeof SourceProjectSchema>;
 export type ProjectOwnershipMap = z.infer<typeof ProjectOwnershipMapSchema>;
 export type ProjectCorrespondence = z.infer<typeof ProjectCorrespondenceSchema>;
+export type ProjectAdapterRunRequest = z.infer<typeof ProjectAdapterRunRequestSchema>;
 export type ProjectPatchOperation = z.infer<typeof ProjectPatchOperationSchema>;
 export type ProjectPatchPlan = z.infer<typeof ProjectPatchPlanSchema>;
 export type ProjectValidationReport = z.infer<typeof ProjectValidationReportSchema>;

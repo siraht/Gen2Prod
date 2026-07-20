@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { hashJson, sha256 } from "../../src/core/hash.ts";
-import { CommandSpecSchema, ProjectContractSchema, ProjectPatchPlanSchema } from "../../src/schemas/project-adapters.ts";
+import { CommandSpecSchema, ProjectAdapterRunRequestSchema, ProjectContractSchema, ProjectPatchPlanSchema } from "../../src/schemas/project-adapters.ts";
 
 const hash = sha256("fixture");
 
@@ -30,5 +30,12 @@ describe("project adapter contracts", () => {
     const plan = { schemaVersion: "0.1.0", planId: "plan", projectId: "project", mode: "legacy-conversion", profile: "refactor", contractHash: hash, sourceProjectHash: hash, canonicalOutputHash: hash, policyHash: hash, operations: [], operationGraphHash: hashJson([]), requiredActions: [], predictedChangedFiles: [], predictedChangedBytes: 0 };
     expect(ProjectPatchPlanSchema.parse(plan).operations).toEqual([]);
     expect(() => ProjectPatchPlanSchema.parse({ ...plan, surprise: true })).toThrow();
+  });
+
+  test("binds one framework-neutral canonical surface to a strict run request", () => {
+    const request = { schemaVersion: "0.1.0", correspondence: { schemaVersion: "0.1.0", projectId: "project", sourceProjectHash: hash, captureHash: hash, mappings: [], unresolved: [] }, canonical: { target: "react", root: { nodeId: "main", originalTag: "div", tag: "main", role: "main", block: "page", classes: ["page"], oldClasses: [], attributes: {}, text: "", children: [] }, scss: ".page { color: var(--text-dark); }", css: "", outputHash: hash, registeredVariables: ["--text-dark"] }, policyHash: hash, mode: "legacy-conversion", profile: "refactor" };
+    expect(ProjectAdapterRunRequestSchema.parse(request).canonical.root.tag).toBe("main");
+    expect(() => ProjectAdapterRunRequestSchema.parse({ ...request, canonical: { ...request.canonical, registeredVariables: ["--text-dark", "--text-dark"] } })).toThrow("must be unique");
+    expect(() => ProjectAdapterRunRequestSchema.parse({ ...request, hardenedIsolation: true })).toThrow();
   });
 });
