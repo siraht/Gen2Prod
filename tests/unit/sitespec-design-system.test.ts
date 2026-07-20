@@ -90,6 +90,10 @@ describe("versioned design-system proposal", () => {
     const approved = await approveDesignSystemRelease({ proposal, artifact: currentArtifact, validationPageRef: validationPage.uid, results, approvalRef: "siteops://approvals/northstar-design-system", version: "1.0.0", outputDirectory });
     expect(approved.release.status).toBe("approved");
     expect(approved.release.validationPageRefs).toEqual([validationPage.uid]);
+    const approvedCoverage = await Bun.file(join(approved.objectsDirectory, `${approved.release.coverage.hash}.json`)).json();
+    expect(approvedCoverage.exercised.patterns).toContain("sitespec://northstar/patterns/form");
+    expect(approvedCoverage.exercised.shells).toContain("sitespec://northstar/shells/funnel");
+    expect(approvedCoverage.unexercised.patterns).toContain("sitespec://northstar/patterns/article");
     await expect(approveDesignSystemRelease({ proposal, artifact: currentArtifact, validationPageRef: validationPage.uid, results: { ...results, inputRevisions: [{ subjectRef: validationPage.uid, revision: "0".repeat(64) }] }, approvalRef: "siteops://approvals/northstar-design-system", version: "1.0.1", outputDirectory })).rejects.toThrow("missing or stale");
   });
 

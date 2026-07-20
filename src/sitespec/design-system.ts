@@ -344,11 +344,37 @@ export async function approveDesignSystemRelease(options: {
     if (!result || !["pass", "waived"].includes(result.status)) throw new Error(`Blocking requirement ${requirement.uid} lacks a passing current validation-page result`);
     if (result.subjectRevision !== validationPage.revision) throw new Error(`Result for ${requirement.uid} is stale`);
   }
+  const coveragePath = join(options.outputDirectory, "objects", `${options.proposal.coverage.hash}.json`);
+  const coverageContents = await readFile(coveragePath, "utf8");
+  if (sha256(coverageContents) !== options.proposal.coverage.hash) throw new Error("Provisional design-system coverage artifact failed integrity validation");
+  const previousCoverage = JSON.parse(coverageContents) as {
+    exercised: { designRoles: string[]; patterns: string[]; shells: string[] };
+    unexercised: { designRoles: string[]; patterns: string[]; shells: string[] };
+    [key: string]: unknown;
+  };
+  const validationClosure = new Set(closure(options.artifact, validationPage.uid).map((entity) => entity.uid));
+  const exercised = {
+    designRoles: [...new Set([...previousCoverage.exercised.designRoles, ...previousCoverage.unexercised.designRoles.filter((subjectRef) => validationClosure.has(subjectRef))])].sort(),
+    patterns: [...new Set([...previousCoverage.exercised.patterns, ...previousCoverage.unexercised.patterns.filter((subjectRef) => validationClosure.has(subjectRef))])].sort(),
+    shells: [...new Set([...previousCoverage.exercised.shells, ...previousCoverage.unexercised.shells.filter((subjectRef) => validationClosure.has(subjectRef))])].sort(),
+  };
+  const coverage = await immutableJson(options.outputDirectory, `${slug(options.version)}-coverage`, {
+    ...previousCoverage,
+    exercised,
+    unexercised: {
+      designRoles: previousCoverage.unexercised.designRoles.filter((subjectRef) => !validationClosure.has(subjectRef)),
+      patterns: previousCoverage.unexercised.patterns.filter((subjectRef) => !validationClosure.has(subjectRef)),
+      shells: previousCoverage.unexercised.shells.filter((subjectRef) => !validationClosure.has(subjectRef)),
+    },
+    validationPageRef: validationPage.uid,
+    promotionRule: "Approved from current anchor and structurally different validation-page evidence; unexercised patterns still require mockup review before direct rollout.",
+  });
   const release: DesignSystemRelease = {
     ...options.proposal,
     id: `design-system-${slug(options.version)}`,
     version: options.version,
     status: "approved",
+    coverage,
     validationPageRefs: [validationPage.uid],
     provenance: [...options.proposal.provenance, {
       activity: "design-system-approval",
