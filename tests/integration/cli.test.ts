@@ -8,7 +8,24 @@ test("exposes the full human and automation command surface", async () => {
   const child = Bun.spawn(["bun", "src/cli.ts", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
   const output = await new Response(child.stdout).text();
   expect(await child.exited).toBe(0);
-  for (const command of ["init", "acss", "project", "synth", "evaluate", "run", "adapter", "validate", "research", "distill", "report", "doctor"]) expect(output).toContain(command);
+  for (const command of ["init", "acss", "design", "design-system", "build", "project", "synth", "evaluate", "run", "adapter", "validate", "research", "distill", "report", "doctor"]) expect(output).toContain(command);
+});
+
+test("exposes the SiteSpec design, release, and governed production commands", async () => {
+  const design = Bun.spawn(["bun", "src/cli.ts", "design", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
+  const designHelp = await new Response(design.stdout).text();
+  expect(await design.exited).toBe(0);
+  expect(designHelp).toContain("import-candidate");
+  expect(designHelp).toContain("approve-target");
+  const system = Bun.spawn(["bun", "src/cli.ts", "design-system", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
+  const systemHelp = await new Response(system.stdout).text();
+  expect(await system.exited).toBe(0);
+  expect(systemHelp).toContain("propose");
+  expect(systemHelp).toContain("validate");
+  const build = Bun.spawn(["bun", "src/cli.ts", "build", "--help"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
+  const buildHelp = await new Response(build.stdout).text();
+  expect(await build.exited).toBe(0);
+  for (const option of ["--spec", "--page", "--design-system", "--output"]) expect(buildHelp).toContain(option);
 });
 
 test("exposes the complete project command tree and performs read-only inspection", async () => {

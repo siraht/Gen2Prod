@@ -55,6 +55,11 @@ import { ProjectContractSchema, ProjectDestinationBundleSchema, ProjectFramework
 import { inspectProjectAdapterReadiness } from "./project-adapters/doctor.ts";
 import { prepareProjectCurriculum } from "./project-adapters/curriculum.ts";
 import { loadProjectAdapterIncumbent } from "./project-adapters/policy.ts";
+import type { DesignSystemRelease, ResultManifest, VisualTarget } from "@website-ontology/contracts";
+import { canonicalSiteSpecArtifactSchema, type CanonicalSiteSpecArtifact } from "./schemas/sitespec.ts";
+import { approveVisualTarget, importDesignCandidate } from "./sitespec/design.ts";
+import { approveDesignSystemRelease, proposeDesignSystem } from "./sitespec/design-system.ts";
+import { buildSiteSpecPage } from "./sitespec/production.ts";
 
 type GlobalOptions = { config: string; workspace: string; acss?: string; json?: boolean; input: boolean; verbose?: boolean };
 
@@ -97,6 +102,10 @@ async function currentAdapterPolicy(project: Gen2ProdConfig, explicit?: string) 
 }
 
 async function currentProjectAdapterPolicy(project: Gen2ProdConfig) { return project.projectAdapters?.policyPath ? loadProjectAdapterIncumbent(resolve(project.projectAdapters.policyPath)) : undefined; }
+
+async function siteSpecArtifact(path: string): Promise<CanonicalSiteSpecArtifact> {
+  return canonicalSiteSpecArtifactSchema.parse(await readJson(resolve(path)));
+}
 
 function adapterTargets(value: string | undefined, project: Gen2ProdConfig) {
   return value ? value.split(",").filter(Boolean).map((target) => FrameworkAdapterTargetSchema.parse(target.trim())) : project.adapters?.targets ?? ALL_FRAMEWORK_ADAPTER_TARGETS;
@@ -148,6 +157,80 @@ acssCommand
     if (!sourcePath) throw new UsageError("No Automatic.css plugin ZIP was discovered in the project directory");
     const bundle = await prepareAutomaticCss({ sourcePath, outputDirectory: resolve(options.output ?? join(project.workspace, "acss")), mode: project.designSystem?.mode ?? "full", force: options.force });
     emit(result("acss prepare", { version: bundle.provenance.version, mode: bundle.provenance.moduleMode, source: bundle.provenance.source, sourceHash: bundle.provenance.sourceHash, variables: bundle.registry.tokens.length, utilityClasses: bundle.catalog.utilityClasses.length, settings: Object.keys(bundle.catalog.settingsDefaults).length, files: bundle.files }), `Prepared Automatic.css ${bundle.provenance.version} (${bundle.provenance.moduleMode})\nRuntime variables: ${bundle.registry.tokens.length}; utility classes: ${bundle.catalog.utilityClasses.length}; settings defaults: ${Object.keys(bundle.catalog.settingsDefaults).length}\nRegistry: ${bundle.files.registry}\nCatalog: ${bundle.files.catalog}\nProvenance: ${bundle.files.provenance}`);
+  });
+
+const designCommand = program.command("design").description("verify provider-neutral candidates and promote approved visual targets");
+designCommand
+  .command("import-candidate <candidate>")
+  .description("verify a design-candidate manifest and every local or content-addressed artifact")
+  .requiredOption("--spec <path>", "canonical SiteSpec artifact")
+  .option("--output <path>", "verification report", ".gen2prod/sitespec/design/candidate-verification.json")
+  .action(async (candidatePath: string, options: { spec: string; output: string }) => {
+    const artifact = await siteSpecArtifact(options.spec);
+    const verified = await importDesignCandidate(await readJson(resolve(candidatePath)), artifact.spec);
+    const output = resolve(options.output);
+    await writeJsonAtomic(output, verified);
+    emit(result("design import-candidate", { candidateId: verified.candidate.id, verifiedArtifacts: verified.verifiedArtifacts, externallyAddressedArtifacts: verified.externallyAddressedArtifacts, output }), `Verified design candidate ${verified.candidate.id}\nLocal artifacts: ${verified.verifiedArtifacts.length}; content-addressed artifacts: ${verified.externallyAddressedArtifacts.length}\nReport: ${output}`);
+  });
+designCommand
+  .command("approve-target <candidate>")
+  .description("promote an approved candidate or named regions into a revision-pinned visual target")
+  .requiredOption("--spec <path>", "canonical SiteSpec artifact")
+  .requiredOption("--approval <ref>", "SiteOps/human approval reference")
+  .option("--regions <ids>", "comma-separated candidate region IDs; defaults to every declared region")
+  .option("--output <path>", "visual-target artifact", ".gen2prod/sitespec/design/visual-target.json")
+  .action(async (candidatePath: string, options: { spec: string; approval: string; regions?: string; output: string }) => {
+    const artifact = await siteSpecArtifact(options.spec);
+    const imported = await importDesignCandidate(await readJson(resolve(candidatePath)), artifact.spec);
+    const target = approveVisualTarget({ candidate: imported.candidate, graph: artifact.spec, approvalRef: options.approval, ...(options.regions ? { approvedRegions: options.regions.split(",").map((region) => region.trim()).filter(Boolean) } : {}) });
+    const output = resolve(options.output);
+    await writeJsonAtomic(output, target);
+    emit(result("design approve-target", { targetId: target.id, pageSubjectRef: target.pageSubjectRef, approvedRegions: target.approvedRegions, output }), `Promoted visual target ${target.id}\nPage: ${target.pageSubjectRef}\nRegions: ${target.approvedRegions.join(", ")}\nArtifact: ${output}`);
+  });
+
+const designSystemCommand = program.command("design-system").description("propose and approve immutable SiteSpec-bound design-system releases");
+designSystemCommand
+  .command("propose")
+  .description("synthesize a provisional versioned design system from an approved visual target")
+  .requiredOption("--spec <path>", "canonical SiteSpec artifact")
+  .requiredOption("--visual-target <path>", "approved visual-target artifact")
+  .requiredOption("--version <semver>", "immutable provisional version")
+  .option("--output <path>", "design-system artifact root", ".gen2prod/sitespec/design-system")
+  .action(async (options: { spec: string; visualTarget: string; version: string; output: string }) => {
+    const proposal = await proposeDesignSystem({ artifact: await siteSpecArtifact(options.spec), visualTarget: await readJson<VisualTarget>(resolve(options.visualTarget)), version: options.version, outputDirectory: resolve(options.output) });
+    emit(result("design-system propose", { id: proposal.release.id, version: proposal.release.version, status: proposal.release.status, releasePath: proposal.releasePath, objectsDirectory: proposal.objectsDirectory }), `Proposed design system ${proposal.release.id} (${proposal.release.version})\nStatus: ${proposal.release.status}\nRelease: ${proposal.releasePath}`);
+  });
+designSystemCommand
+  .command("validate")
+  .description("approve a new immutable release version from current validation-page requirement evidence")
+  .requiredOption("--spec <path>", "canonical SiteSpec artifact")
+  .requiredOption("--proposal <path>", "provisional design-system release")
+  .requiredOption("--page <ref>", "designated validation page subject")
+  .requiredOption("--results <path>", "current validation-page result manifest")
+  .requiredOption("--approval <ref>", "SiteOps/human design-system approval reference")
+  .requiredOption("--version <semver>", "new immutable approved version")
+  .option("--output <path>", "design-system artifact root", ".gen2prod/sitespec/design-system")
+  .action(async (options: { spec: string; proposal: string; page: string; results: string; approval: string; version: string; output: string }) => {
+    const approved = await approveDesignSystemRelease({ proposal: await readJson<DesignSystemRelease>(resolve(options.proposal)), artifact: await siteSpecArtifact(options.spec), validationPageRef: options.page, results: await readJson<ResultManifest>(resolve(options.results)), approvalRef: options.approval, version: options.version, outputDirectory: resolve(options.output) });
+    emit(result("design-system validate", { id: approved.release.id, version: approved.release.version, status: approved.release.status, validationPageRefs: approved.release.validationPageRefs, releasePath: approved.releasePath }), `Approved design system ${approved.release.id} (${approved.release.version})\nValidation page: ${approved.release.validationPageRefs?.join(", ")}\nRelease: ${approved.releasePath}`);
+  });
+
+program
+  .command("build")
+  .description("build one SiteSpec page with an approved design-system release")
+  .requiredOption("--spec <path>", "canonical SiteSpec artifact")
+  .requiredOption("--page <ref>", "page subject reference")
+  .requiredOption("--design-system <path>", "approved design-system release")
+  .option("--design-system-root <path>", "design-system artifact root; inferred from the release path")
+  .option("--output <path>", "production artifact root", ".gen2prod/sitespec/production")
+  .action(async (options: { spec: string; page: string; designSystem: string; designSystemRoot?: string; output: string }) => {
+    const releasePath = resolve(options.designSystem);
+    const build = await buildSiteSpecPage({ artifact: await siteSpecArtifact(options.spec), pageSubjectRef: options.page, designSystem: await readJson<DesignSystemRelease>(releasePath), designSystemRoot: resolve(options.designSystemRoot ?? join(dirname(releasePath), "..", "..")), outputDirectory: resolve(options.output) });
+    const envelope = result("build", { runId: build.runId, runDirectory: build.runDirectory, pageSubjectRef: build.pageSubjectRef, validationPassed: build.validation.passed, manifest: join(build.runDirectory, "manifest.json"), results: join(build.runDirectory, "results.json"), correspondence: join(build.runDirectory, "correspondence.json") });
+    envelope.runId = build.runId;
+    envelope.ok = build.validation.passed && !build.results.requiredActions.some((action: { severity: string }) => action.severity === "blocking");
+    emit(envelope, `Built ${build.pageSubjectRef}\nInternal hard gates: ${build.validation.passed ? "pass" : "fail"}\nBlocking evidence actions: ${build.results.requiredActions.filter((action: { severity: string }) => action.severity === "blocking").length}\nArtifacts: ${build.runDirectory}`);
+    if (!envelope.ok) process.exitCode = 3;
   });
 
 const projectCommand = program.command("project").description("inspect, plan, validate, apply, and roll back existing framework/CMS projects");
