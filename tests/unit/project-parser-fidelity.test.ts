@@ -27,6 +27,24 @@ describe("framework parser location fidelity", () => {
     exact(result.source, nodes);
   });
 
+  test("Vue inventories setup props, emits, refs, computed state, slots, components, and style modes", async () => {
+    const source = `<script setup lang="ts">\nimport UserCard from './UserCard.vue';\nimport { ref, computed } from 'vue';\nconst props = defineProps<{ active: boolean; title: string }>();\nconst emit = defineEmits(['save', 'cancel']);\nconst open = ref(false);\nconst label = computed(() => props.title);\n</script>\n<template><component :is="UserCard"><slot name="actions" /><button @click="emit('save')">{{ label }}</button></component></template>\n<style scoped lang="scss">.local { color: red; }</style>\n<style module>.card { display: block; }</style>`;
+    const result = await project("vue", "src/App.vue", source);
+    const graph = (result.parsed.metadata.vueGraph as { props: string[]; emits: string[]; refs: string[]; computed: string[]; slots: string[]; dynamicComponents: number; styles: { scoped: boolean; module: boolean }[] }[])[0]!;
+    expect(result.parsed.modules[0]).toMatchObject({ imports: ["./UserCard.vue", "vue"], components: ["UserCard"] });
+    expect(graph.props).toEqual(["active", "title"]);
+    expect(graph.emits).toEqual(["cancel", "save"]);
+    expect(graph.refs).toEqual(["open"]);
+    expect(graph.computed).toEqual(["label"]);
+    expect(graph.slots).toEqual(["actions"]);
+    expect(graph.dynamicComponents).toBe(1);
+    expect(graph.styles).toEqual([expect.objectContaining({ scoped: true, module: false }), expect.objectContaining({ scoped: false, module: true })]);
+    expect(result.parsed.bindings.some((binding) => binding.name === "title" && binding.kind === "prop")).toBeTrue();
+    expect(result.parsed.bindings.some((binding) => binding.name === "open" && binding.kind === "ref")).toBeTrue();
+    expect(result.parsed.bindings.some((binding) => binding.name === "label" && binding.kind === "state")).toBeTrue();
+    exact(source, flatten(result.parsed.roots));
+  });
+
   test("Svelte preserves if/each/expression regions at exact source spans", async () => {
     const result = await project("svelte", "src/App.svelte", '<script>let items=[1]; let ok=true;</script><main>{#if ok}{#each items as item (item)}<p>{item}</p>{/each}{/if}</main>');
     const nodes = flatten(result.parsed.roots);

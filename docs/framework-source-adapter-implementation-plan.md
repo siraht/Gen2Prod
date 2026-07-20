@@ -26,7 +26,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P2 React strangler vertical slice | Added static enumeration/class-role analysis for ternary/logical/template/array/`clsx` forms and a correspondence-gated planner that emits an owned semantic shell, coalesced native imports, canonical ACSS-token SCSS, exact preserved dynamic islands, collision actions, and an empty second plan | Dirty React/Vite dogfood preserves `map`, key, handler, and data expressions byte-for-byte; removes root utilities; sandbox native build passes; second plan is empty |
 | 2026-07-20 | P2.1/P2.2 and P3 Next source graph | Added inherited tsconfig/JSX/alias resolution, Next route/layout/special-file discovery, React props/hooks/refs/imported-component inventory, async data/metadata/server-action evidence, server/client classification, and Next-safe global style placement | Dynamic-route layout-chain tests pass; Next dogfood preserves metadata/fetch/server boundaries, emits no accidental `use client`, and does not duplicate the root global-style import |
 | 2026-07-20 | P1.3 exact native adapter interface | Expanded the registry to exact profiles with read-only discovery, strict Source Project parsing, route projection, planner dispatch, native sandbox validation, and consumed/ignored evidence reporting | Profile/target mismatch fails closed; route projection and evidence accounting tests pass; profiles without a mutation planner return a typed blocking zero-operation plan |
-| 2026-07-20 | P4 Vue strangler planner vertical slice | Added exact SFC import anchoring, correspondence-gated semantic shell integration, shared ACSS-tokenized nested BEM SCSS, preservation-region obligations, owned-file conflict handling, and Vue/Nuxt registry dispatch | Dirty Vue SFC dogfood preserves `v-if` and interpolation source, compiles both edited and generated SFC templates, removes root utilities, and produces an empty second plan |
+| 2026-07-20 | P4 Vue SFC graph and strangler planner vertical slice | Added setup/classic script import and binding analysis, typed props/emits/ref/computed/slot/component/style inventories, exact SFC import anchoring, correspondence-gated semantic shell integration, shared ACSS-tokenized nested BEM SCSS, preservation-region obligations, owned-file conflict handling, and Vue/Nuxt registry dispatch | Parser fixtures distinguish recognized Vue semantics from verbatim preservation; dirty SFC dogfood preserves `v-if` and interpolation source, compiles both edited and generated templates, removes root utilities, and produces an empty second plan |
 
 ### Additional implementation decisions
 
@@ -52,6 +52,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | L07 | Absence from source is not selector-death evidence, and absence from a default render is not enough either | A legacy rule is removable only when complete source-class analysis and declared rendered-state evidence both miss it; incomplete dynamic class bindings make reachability unknown |
 | L08 | Component and style imports commonly share the same zero-width module anchor | React planning coalesces them into one ordered import operation so overlap preflight remains strict and imports are neither duplicated nor applied against different preimages |
 | L09 | Vue compiler SFC block offsets point to block content, while template tag insertion needs the preceding opening-tag boundary | Existing scripts use compiler-verified content spans; scriptless SFCs search backward from the compiler's template-content offset for the unique opening tag |
+| L10 | A setup binding named `props` is not the useful prop inventory when `defineProps` carries a type literal | Vue graph analysis records the literal type's property names while retaining the call source hash; destructured props retain their local binding names |
 
 ## 1. Outcome
 
@@ -971,7 +972,7 @@ Dependencies: P1 shared infrastructure.
 Tasks:
 
 - [x] Parse SFC blocks with `@vue/compiler-sfc`.
-- [ ] Parse template AST, `<script>`/`<script setup>`, imports/bindings, props/emits, slots, refs, and styles.
+- [x] Parse template AST, `<script>`/`<script setup>`, imports/bindings, props/emits, slots, refs, and styles.
 - [x] Preserve `v-if`/`v-else`, `v-for`, `:key`, `v-bind`, `v-on`, dynamic components, slots, directives, and expressions.
 - [x] Treat scoped/module styles as source evidence but emit new styling into shared SCSS.
 
