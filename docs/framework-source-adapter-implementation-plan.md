@@ -60,6 +60,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | 2026-07-20 | P7 WordPress complete offline inventory/PHP gate | Extended discovery and Source IR over patterns, parts, theme files, WXR/JSON content exports, WordPress/theme/plugin versions, content IDs, and declared revision; added native `php -l` validation with a structural-only fallback that remains runtime-unaccepted | WordPress dogfood discovers exact 6.8.2/ACSS inventory and theme/content artifacts, preserves query/shortcode regions, packages exact rollback, and reports the one current-host action—install/authorize PHP CLI—without stopping static work |
 | 2026-07-20 | P7.3/P8.2 authenticated CMS staging protocol | Added strict local/staging-only authority and report schemas, connector interface, authenticated HTTP implementation with conditional ETag requests and environment-only credentials, memory staging dogfood, structural preflight, before/candidate/rollback captures, and exact export rollback | WordPress and Bricks fixtures prove two-state captures, dynamic query/condition retention, unique tree/parent/settings validation, stale revision refusal before mutation, exact rollback, secret-free reports, required permissions/versions/content IDs/sanitization/rollback authority, and schema-level production rejection |
 | 2026-07-20 | P4.2 Vue-native metadata | Added profile-specific canonical metadata lowering: Vue/Vite updates the document entry and Nuxt emits static `useHead` state, with escaping, duplicate prevention, exact preimages, scriptless-SFC coalescing, and dynamic-head conflict refusal | Vue/Vite dogfood replaces one title/description and replans empty; Nuxt dogfood creates exactly one setup block, compiles, replans empty, and converts an existing computed `useHead` into a blocking required action |
+| 2026-07-20 | P4.2/P5.2/P6.2 framework-native validation | Added pinned Vue/Vite, SvelteKit, and Astro+React-island projects that run actual typecheck/check/build/preview commands, capture baseline/candidate/target pixels, execute Vue/Svelte server compilers across conditional states, and feed the shared source/semantic/style/image/rollback/idempotence validator | All three native projects pass their commands, declared state capture, zero pixel diffs, source/binding preservation, 100% frozen controls, exact rollback/replay, and empty replanning; copied-audit runs retain only the previously declared hardened-isolation action rather than claiming promotion readiness |
 
 ### Additional implementation decisions
 
@@ -102,6 +103,7 @@ This is a living execution ledger. A checked task means executable code and prop
 | D55 | CMS runtime mutation requires a staging authority artifact separate from the offline import package | An export package proves bytes and revisions but does not prove endpoint identity, credentials, permissions, sanitization, or rollback destination | The connector accepts only `local`/`staging`, all four permissions, exact versions/IDs/revision/ETag, environment variable names, and `allowProduction:false`; reports hash the origin and authority but retain no credential values |
 | D56 | Missing PHP CLI downgrades syntax evidence rather than blocking all WordPress work | Templates, exports, block structure, shared SCSS, and rollback remain testable without PHP, but delimiter balance is not equivalent to the PHP parser | The fallback catches malformed structure and emits a precise runtime action; PHP-dependent acceptance becomes true only after actual `php -l` results exist |
 | D57 | Vue metadata lowering follows the discovered deployment profile | Vite owns metadata in the document entry while Nuxt owns it through its head composable; treating those as interchangeable would duplicate tags or bypass SSR metadata | `vue-vite` applies one hash-guarded `index.html` edit; `nuxt` adds static `useHead`, and any existing non-identical head computation remains source-owned and blocking |
+| D58 | Framework-native completion is measured through the shared validator with real destination commands and captures | Parser-only compilation can miss package graph, SSR adapter, bundler, preview, hydration, pixel, and replay failures | Vue runs `vue-tsc` and Vite, SvelteKit runs sync/check plus its SSR build, Astro emits a hydrated React island, and all three retain the same deterministic validation fields; sandbox isolation remains an orthogonal promotion authority |
 
 ### Lessons learned
 
@@ -146,6 +148,8 @@ This is a living execution ledger. A checked task means executable code and prop
 | L37 | CMS revision and ETag are distinct concurrency authorities | Staging import verifies both; rollback is conditional on the candidate ETag, then confirms the original export hash, preventing a concurrent editor from being overwritten |
 | L38 | Hiding credential values from reports is insufficient if the connector serializes them into its authority | Authority stores only environment variable names; the HTTP connector resolves values at call time, while retained reports contain only hashes and non-secret evidence |
 | L39 | A scriptless Nuxt SFC cannot receive metadata and imports as two independent zero-width setup-block edits | The planner coalesces static `useHead` with component/style imports into one `<script setup>` insertion; existing script blocks receive a separate non-overlapping metadata operation |
+| L40 | Framework build asset hashes and bootstrap source are not page-content semantics | Semantic recall now derives text from direct node text and URLs from content-bearing anchors/media, excluding generated script/style/link payloads that legitimately change when source modules change |
+| L41 | An authorized import inserted into an opaque frontmatter block changes that block's aggregate hash without authorizing its dynamic descendants | Preservation and binding checks exempt only the exact node targeted by an operation; hydrated islands and other nested preserved regions remain independently required byte-for-byte |
 
 ## 1. Outcome
 
@@ -1083,7 +1087,7 @@ Tasks:
 - [x] Map dynamic regions to props/slots and BEM components.
 - [x] Preserve emits/listeners and native form bindings.
 - [x] Use framework-native metadata contract/profile.
-- [ ] Compile SFCs, typecheck/build, SSR/render states, compare images and source preservation.
+- [x] Compile SFCs, typecheck/build, SSR/render states, compare images and source preservation.
 
 Acceptance criteria:
 
@@ -1115,7 +1119,7 @@ Tasks:
 
 - [x] Integrate generated BEM components through snippets/slots/props without changing state logic.
 - [x] Preserve native event/bind/action semantics.
-- [ ] Run Svelte compiler, SvelteKit checks/build, SSR state capture, source-preservation and image gates.
+- [x] Run Svelte compiler, SvelteKit checks/build, SSR state capture, source-preservation and image gates.
 
 Acceptance criteria:
 
@@ -1146,7 +1150,7 @@ Tasks:
 
 - [x] Integrate BEM components without moving data/frontmatter logic.
 - [x] Preserve slots, props, route params, and island directives.
-- [ ] Run an actual Astro build and state captures, then source, semantic, style, image, rollback, and idempotence checks.
+- [x] Run an actual Astro build and state captures, then source, semantic, style, image, rollback, and idempotence checks.
 
 Acceptance criteria:
 

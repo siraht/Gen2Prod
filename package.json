@@ -17,8 +17,8 @@
     "verify": "bun run check && bun run test && bun run acceptance && bun run build"
   },
   "dependencies": {
-    "@tesseract.js-data/eng": "1.0.0",
     "@astrojs/compiler": "4.0.0",
+    "@tesseract.js-data/eng": "1.0.0",
     "@vue/compiler-sfc": "3.5.40",
     "axe-core": "^4.10.3",
     "commander": "^14.0.0",
@@ -39,15 +39,24 @@
     "zod": "^4.0.5"
   },
   "devDependencies": {
+    "@astrojs/react": "^6.0.1",
+    "@sveltejs/adapter-static": "^3.0.10",
+    "@sveltejs/kit": "^2.70.1",
+    "@sveltejs/vite-plugin-svelte": "^7.2.0",
     "@types/bun": "^1.2.18",
     "@types/culori": "^2.1.1",
     "@types/pngjs": "^6.0.5",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vue/server-renderer": "^3.5.40",
     "astro": "^7.1.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "vue": "^3.5.40"
+    "svelte-check": "^4.7.3",
+    "vite": "^8.1.5",
+    "vue": "^3.5.40",
+    "vue-tsc": "^3.3.7"
   },
   "engines": {
     "bun": ">=1.2.0"
