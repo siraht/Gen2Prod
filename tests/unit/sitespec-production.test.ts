@@ -4,7 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { PNG } from "pngjs";
-import { buildCanonicalGraph, createContractValidator, type CanonicalGraphRuntime, type DesignCandidate, type ResultManifest } from "@website-ontology/contracts";
+import { buildCanonicalGraph, createContractValidator, sha256, type CanonicalGraphRuntime, type DesignCandidate, type ResultManifest } from "@website-ontology/contracts";
+import { canonicalJson } from "../../src/core/hash.ts";
 import type { CanonicalSiteSpecArtifact } from "../../src/schemas/sitespec.ts";
 import { approveDesignSystemRelease, proposeDesignSystem, selectAnchorPage, selectValidationPage } from "../../src/sitespec/design-system.ts";
 import { approveVisualTarget } from "../../src/sitespec/design.ts";
@@ -89,6 +90,32 @@ describe("SiteSpec governed page production", () => {
     const provisional = { ...approved, status: "provisional" as const };
     await expect(buildSiteSpecPage({ artifact: current, pageSubjectRef: "sitespec://northstar/pages/assessment", designSystem: provisional, designSystemRoot: root, outputDirectory: join(root, "out"), releaseValidation: true })).resolves.toMatchObject({ pageSubjectRef: "sitespec://northstar/pages/assessment" });
     await expect(buildSiteSpecPage({ artifact: current, pageSubjectRef: "sitespec://northstar/pages/contact", designSystem: provisional, designSystemRoot: root, outputDirectory: join(root, "out"), releaseValidation: true })).rejects.toThrow("bounded");
+  });
+
+  test("binds production styles to project-specific design-role token names", async () => {
+    const graph = await approvedFixture();
+    const current = artifact(graph);
+    const root = await mkdtemp(join(tmpdir(), "g2p-production-role-names-"));
+    const release = await approvedRelease(graph, root);
+    const tokenArtifact = await Bun.file(join(root, "objects", `${release.tokens.hash}.json`)).json();
+    tokenArtifact.roles["surface-paper"] = tokenArtifact.roles["surface-brand"];
+    tokenArtifact.roles["typography-display"] = tokenArtifact.roles["typography-page-title"];
+    delete tokenArtifact.roles["surface-brand"];
+    delete tokenArtifact.roles["typography-page-title"];
+    const tokenContents = canonicalJson(tokenArtifact);
+    const tokenHash = sha256(tokenContents);
+    await Bun.write(join(root, "objects", `${tokenHash}.json`), tokenContents);
+    const projectRelease = {
+      ...release,
+      tokens: { ...release.tokens, hash: tokenHash, uri: `artifact://sha256/${tokenHash}`, byteLength: Buffer.byteLength(tokenContents) },
+    };
+    const built = await buildSiteSpecPage({ artifact: current, pageSubjectRef: "sitespec://northstar/pages/home", designSystem: projectRelease, designSystemRoot: root, outputDirectory: join(root, "out") });
+
+    expect(built.css).toContain("--surface-paper:");
+    expect(built.css).toContain("--typography-display:");
+    expect(built.css).not.toContain("--surface-brand:");
+    expect(built.css).not.toContain("--typography-page-title:");
+    expect(built.validation.gates.filter((gate) => gate.hard && !gate.passed)).toEqual([]);
   });
 
   test("copies approved local images, records their hashes, and emits measured intrinsic dimensions", async () => {

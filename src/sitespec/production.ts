@@ -27,6 +27,24 @@ type ArtifactReference = DesignSystemRelease["tokens"];
 type RevisionInput = { subjectRef: string; revision: string };
 type ContractResult = RequirementResult & { status: "pass" | "fail" | "unresolved" | "error" | "waived" };
 type MaterializedAsset = { relativePath: string; contents: Uint8Array; reference: ArtifactReference; width?: number; height?: number };
+type DesignTokenEntry = {
+  $type?: string;
+  $value?: unknown;
+  $extensions?: { "dev.website-ontology/source"?: { subjectRef?: string } };
+};
+type DesignTokenArtifact = {
+  roles: Record<string, DesignTokenEntry>;
+  policies: Record<string, DesignTokenEntry>;
+};
+type ProductionTokenBindings = {
+  action: string;
+  border: string;
+  bodyTypography: string;
+  headingTypography: string;
+  spacing: string;
+  surface: string;
+  surfaceForeground: string;
+};
 
 export type SiteSpecPageBuild = {
   runId: string;
@@ -157,69 +175,101 @@ function confidence(binding?: SpecBinding) {
   };
 }
 
-function tokens(normalForm: NormalForm, release: DesignSystemRelease): TokenRegistry {
+function productionTokens(release: DesignSystemRelease, artifact: DesignTokenArtifact): { bindings: ProductionTokenBindings; registry: TokenRegistry } {
   const source = `artifact://design-system-release/${release.id}`;
-  const token = (id: string, type: "color" | "dimension" | "fontFamily" | "project", value: string, semanticRole: string, allowedProperties: string[]) => ({
-    id,
-    name: id,
-    type,
-    category: semanticRole.split(".")[0]!,
-    value,
-    runtimeVariable: `--${id}`,
-    runtimeExpression: `var(--${id})`,
-    semanticRole,
-    allowedProperties,
-    source,
-    status: "active" as const,
-    sampledValues: { "default@1280": value },
-  });
-  return {
+  const entries = new Map<string, DesignTokenEntry>();
+  for (const [id, entry] of Object.entries(artifact.policies)) entries.set(id, entry);
+  for (const [id, entry] of Object.entries(artifact.roles)) entries.set(id, entry);
+  const ids = [...entries.keys()].sort();
+  const select = (capability: string, preferred: string[], prefix?: string): string => {
+    const id = preferred.find((candidate) => entries.has(candidate)) ?? (prefix ? ids.find((candidate) => candidate.startsWith(prefix)) : undefined);
+    if (!id) throw new Error(`Governed design-system release lacks required token capability: ${capability}`);
+    return id;
+  };
+  const headingTypography = select("heading typography", ["typography-display", "typography-page-title"], "typography-");
+  const bindings: ProductionTokenBindings = {
+    action: select("primary action", ["action-primary"], "action-"),
+    border: select("subtle border", ["border-subtle"]),
+    bodyTypography: select("body typography", ["typography-body", headingTypography], "typography-"),
+    headingTypography,
+    spacing: select("section spacing", ["spacing-section"], "spacing-"),
+    surface: select("brand surface", ["surface-brand", "surface-paper"], "surface-"),
+    surfaceForeground: select("on-surface foreground", ["surface-on-brand"]),
+  };
+  const tokenType = (type: string | undefined): TokenRegistry["tokens"][number]["type"] => {
+    if (["color", "dimension", "fontFamily", "fontWeight", "number", "shadow", "duration", "cubicBezier", "typography"].includes(type ?? "")) return type as TokenRegistry["tokens"][number]["type"];
+    return "project";
+  };
+  const allowedProperties = (id: string): string[] => {
+    if (id === bindings.action) return ["background-color", "color"];
+    if (id === bindings.border) return ["border", "border-top"];
+    if (id === bindings.bodyTypography || id === bindings.headingTypography) return ["font-family"];
+    if (id === bindings.spacing) return ["padding-block", "gap"];
+    if (id === bindings.surface) return ["background-color", "color"];
+    if (id === bindings.surfaceForeground) return ["color"];
+    return [];
+  };
+  const registry: TokenRegistry = {
     schemaVersion: "0.1.0",
     conformsTo: ["https://tr.designtokens.org/format/"],
     adapterSchema: "sitespec-design-system-release",
-    tokens: [
-      token("surface-brand", "color", "#153e5c", "surface.brand", ["background-color", "color"]),
-      token("surface-on-brand", "color", "#ffffff", "surface.on-brand", ["color"]),
-      token("border-subtle", "project", "1px solid currentColor", "surface.border", ["border", "border-top"]),
-      token("action-primary", "color", "#c84a27", "action.primary", ["background-color", "color"]),
-      token("spacing-section", "dimension", "clamp(3rem, 8vw, 7rem)", "spacing.section", ["padding-block", "gap"]),
-      token("typography-page-title", "fontFamily", "system-ui, sans-serif", "typography.page-title", ["font-family"]),
-    ],
+    tokens: ids.map((id) => {
+      const entry = entries.get(id)!;
+      if (entry.$value === undefined) throw new Error(`Governed design-system token ${id} has no value`);
+      const sampledValue = typeof entry.$value === "string" ? entry.$value : JSON.stringify(entry.$value);
+      const subjectRef = entry.$extensions?.["dev.website-ontology/source"]?.subjectRef;
+      return {
+        id,
+        name: id,
+        type: tokenType(entry.$type),
+        category: id.split("-")[0]!,
+        value: entry.$value as TokenRegistry["tokens"][number]["value"],
+        runtimeVariable: `--${id}`,
+        runtimeExpression: `var(--${id})`,
+        semanticRole: subjectRef?.split("/design-roles/")[1] ?? id.replaceAll("-", "."),
+        allowedProperties: allowedProperties(id),
+        source,
+        status: "active" as const,
+        sampledValues: { "default@1280": sampledValue },
+      };
+    }),
   };
+  return { bindings, registry };
 }
 
 function declaration(property: string, value: string, tokenRole?: string): StyleIntent["declarations"][number] {
   return { property, value, important: false, source: "approved-design-system-release", classification: tokenRole ? "governed-design-value" : "structural-constant", ...(tokenRole ? { tokenRole, bindingStatus: "bound" as const } : { bindingStatus: "not-applicable" as const }) };
 }
 
-function styles(normalForm: NormalForm): StyleIntent[] {
+function styles(normalForm: NormalForm, bindings: ProductionTokenBindings): StyleIntent[] {
   return nodes(normalForm.dom).flatMap((node): StyleIntent[] => {
     const classValue = node.attributes.find((attribute) => attribute.name === "class")?.value ?? "";
     if (!classValue) return [];
     const classes = classValue.split(/\s+/).filter(Boolean);
     const block = classes[0]!.split(/__|--/)[0]!;
     const declarations: StyleIntent["declarations"] = [];
-    if (node.tag === "body") declarations.push(declaration("margin", "0"), declaration("font-family", "var(--typography-page-title)", "typography.page-title"));
+    if (node.tag === "body") declarations.push(declaration("margin", "0"), declaration("font-family", `var(--${bindings.bodyTypography})`, bindings.bodyTypography.replaceAll("-", ".")));
     else if (node.tag === "main") declarations.push(declaration("display", "block"));
     else if (node.tag === "section") {
-      declarations.push(declaration("padding-block", "var(--spacing-section)", "spacing.section"));
-      if (block === "hero") declarations.push(declaration("background-color", "var(--surface-brand)", "surface.brand"), declaration("color", "var(--surface-on-brand)", "surface.on-brand"));
-      else if (block === "service-grid") declarations.push(declaration("display", "grid"), declaration("gap", "var(--spacing-section)", "spacing.section"));
+      declarations.push(declaration("padding-block", `var(--${bindings.spacing})`, bindings.spacing.replaceAll("-", ".")));
+      if (block === "hero") declarations.push(declaration("background-color", `var(--${bindings.surface})`, bindings.surface.replaceAll("-", ".")), declaration("color", `var(--${bindings.surfaceForeground})`, bindings.surfaceForeground.replaceAll("-", ".")));
+      else if (block === "service-grid") declarations.push(declaration("display", "grid"), declaration("gap", `var(--${bindings.spacing})`, bindings.spacing.replaceAll("-", ".")));
       else if (block === "article") declarations.push(declaration("max-width", "65ch"));
-      else if (block === "cta") declarations.push(declaration("border-top", "var(--border-subtle)", "surface.border"));
-      else if (block === "form") declarations.push(declaration("border", "var(--border-subtle)", "surface.border"));
-    } else if (node.tag === "a" || node.tag === "button") declarations.push(declaration("background-color", "var(--action-primary)", "action.primary"), declaration("color", "var(--surface-on-brand)", "surface.on-brand"));
-    else if (/^h[1-6]$/.test(node.tag)) declarations.push(declaration("margin-block", "0"));
+      else if (block === "cta") declarations.push(declaration("border-top", `var(--${bindings.border})`, bindings.border.replaceAll("-", ".")));
+      else if (block === "form") declarations.push(declaration("border", `var(--${bindings.border})`, bindings.border.replaceAll("-", ".")));
+    } else if (node.tag === "a" || node.tag === "button") declarations.push(declaration("background-color", `var(--${bindings.action})`, bindings.action.replaceAll("-", ".")), declaration("color", `var(--${bindings.surfaceForeground})`, bindings.surfaceForeground.replaceAll("-", ".")));
+    else if (/^h[1-6]$/.test(node.tag)) declarations.push(declaration("margin-block", "0"), declaration("font-family", `var(--${bindings.headingTypography})`, bindings.headingTypography.replaceAll("-", ".")));
     else if (node.tag === "p") declarations.push(declaration("margin-block", "0"), declaration("max-width", "65ch"));
     else if (node.tag === "img") declarations.push(declaration("display", "block"), declaration("max-width", "100%"), declaration("height", "auto"));
-    else if (node.tag === "article") declarations.push(declaration("display", "grid"), declaration("gap", "var(--spacing-section)", "spacing.section"));
+    else if (node.tag === "article") declarations.push(declaration("display", "grid"), declaration("gap", `var(--${bindings.spacing})`, bindings.spacing.replaceAll("-", ".")));
     else declarations.push(declaration("display", "block"));
     return [{ nodeId: node.nodeId, styleRole: block, layoutRole: node.tag, contentRole: node.specBindings?.[0]?.role ?? node.tag, confidence: confidence(node.specBindings?.[0]), declarations, specBindings: node.specBindings }];
   });
 }
 
-function planFor(projection: SiteSpecProjection, release: DesignSystemRelease): CompilationPlan {
-  const normalForm: NormalForm = { ...projection.normalForm, styles: styles(projection.normalForm), tokens: tokens(projection.normalForm, release) };
+function planFor(projection: SiteSpecProjection, release: DesignSystemRelease, tokenArtifact: DesignTokenArtifact): CompilationPlan {
+  const production = productionTokens(release, tokenArtifact);
+  const normalForm: NormalForm = { ...projection.normalForm, styles: styles(projection.normalForm, production.bindings), tokens: production.registry };
   const root = planned(normalForm.dom);
   return {
     source: {
@@ -256,19 +306,17 @@ async function resolveReleaseJson<T>(release: DesignSystemRelease, reference: Ar
   return JSON.parse(contents) as T;
 }
 
-async function assertReleaseCoverage(release: DesignSystemRelease, root: string, projection: SiteSpecProjection): Promise<void> {
+async function assertReleaseCoverage(release: DesignSystemRelease, root: string, projection: SiteSpecProjection): Promise<DesignTokenArtifact> {
   const contracts = await resolveReleaseJson<{ components: { subjectRef: string }[] }>(release, release.componentContracts, root);
   const shells = await resolveReleaseJson<{ shells: { subjectRef: string }[] }>(release, release.shells, root);
-  const tokenArtifact = await resolveReleaseJson<{ roles: Record<string, unknown>; policies: Record<string, unknown> }>(release, release.tokens, root);
+  const tokenArtifact = await resolveReleaseJson<DesignTokenArtifact>(release, release.tokens, root);
   const approvedPatterns = new Set(contracts.components.map((component) => component.subjectRef));
   const requiredPatterns = projection.normalForm.components.flatMap((component) => component.specBindings?.filter((binding) => binding.role === "pattern").map((binding) => binding.subjectRef) ?? []);
   const missing = requiredPatterns.filter((subjectRef) => !approvedPatterns.has(subjectRef));
   if (missing.length) throw new Error(`Governed design-system release change required for patterns: ${missing.join(", ")}`);
   if (!shells.shells.some((shell) => shell.subjectRef === projection.shell.uid)) throw new Error(`Governed design-system release change required for shell: ${projection.shell.uid}`);
-  const availableTokens = new Set([...Object.keys(tokenArtifact.roles), ...Object.keys(tokenArtifact.policies)]);
-  for (const required of ["surface-brand", "action-primary", "spacing-section", "typography-page-title", "surface-on-brand", "border-subtle"]) {
-    if (!availableTokens.has(required)) throw new Error(`Governed design-system release change required for token: ${required}`);
-  }
+  productionTokens(release, tokenArtifact);
+  return tokenArtifact;
 }
 
 function normalizedValidation(report: ValidationReport): ValidationReport {
@@ -383,9 +431,9 @@ export async function buildSiteSpecPage(options: {
   }
   const projection = projectCanonicalSiteSpec(options.artifact, options.pageSubjectRef);
   assertBuildableProjection(projection);
-  await assertReleaseCoverage(options.designSystem, options.designSystemRoot, projection);
+  const tokenArtifact = await assertReleaseCoverage(options.designSystem, options.designSystemRoot, projection);
   const localAssets = await materializeLocalAssets(projection.normalForm, options.artifact);
-  const plan = planFor(projection, options.designSystem);
+  const plan = planFor(projection, options.designSystem, tokenArtifact);
   const scss = emitScss(plan);
   const css = compileString(scss, { style: "expanded" }).css;
   const html = emitHtml(plan, "page.css", true);
