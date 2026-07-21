@@ -60,6 +60,10 @@ function refs(entity: ContractEntity, field: string): string[] {
   return value as string[];
 }
 
+function optionalRefs(entity: ContractEntity, field: string): string[] {
+  return data(entity)[field] === undefined ? [] : refs(entity, field);
+}
+
 function binding(entity: ContractEntity, role: string): SpecBinding {
   return { subjectRef: entity.uid, subjectRevision: entity.revision, role, authority: authorityState(entity) };
 }
@@ -175,10 +179,10 @@ function componentFor(pattern: ContractEntity, byUid: Map<string, ContractEntity
     type: String(data(pattern).patternKind) as ComponentContract["type"],
     description: pattern.title ?? String(data(pattern).layoutIntent ?? pattern.id),
     props: Object.fromEntries(slots.map((slot) => [slot.id, { type: "richText" as const, required: Boolean((slot.data.fieldSchema as Record<string, unknown>).required) }])),
-    variants: refs(pattern, "variantRefs").map((value) => byUid.get(value)?.id).filter((value): value is string => Boolean(value)),
+    variants: optionalRefs(pattern, "variantRefs").map((value) => byUid.get(value)?.id).filter((value): value is string => Boolean(value)),
     states: [],
     slots: slots.map((slot) => slot.id),
-    bem: { block: id(pattern.id), elements: slots.map((slot) => id(slot.id)), modifiers: refs(pattern, "variantRefs").map((value) => id(byUid.get(value)?.id ?? value)) },
+    bem: { block: id(pattern.id), elements: slots.map((slot) => id(slot.id)), modifiers: optionalRefs(pattern, "variantRefs").map((value) => id(byUid.get(value)?.id ?? value)) },
     specBindings: [binding(pattern, "pattern"), ...slots.map((slot) => binding(slot, "slot-definition"))],
   };
 }
@@ -232,7 +236,7 @@ export function projectCanonicalSiteSpec(input: unknown, pageSubjectRef: string)
     const slots = refs(section, "slotAssignmentRefs").map((value) => byUid.get(value)).filter((value): value is ContractEntity => Boolean(value));
     const items = refs(section, "collectionItemRefs").map((value) => byUid.get(value)).filter((value): value is ContractEntity => Boolean(value));
     const componentBlock = id(pattern.id);
-    return { nodeId: `g2p-${sha256(section.uid).slice(0, 12)}`, tag: "section", attributes: [{ name: "class", value: `${componentBlock}${refs(section, "variantRefs").map((value) => ` ${componentBlock}--${id(byUid.get(value)?.id ?? value)}`).join("")}` }, { name: "data-sitespec-subject", value: section.uid }], text: "", textFingerprint: sha256(""), children: [...slots.map((slot, index) => contentNode(slot, index, byUid, 2, componentBlock)), ...items.map((item, index) => collectionNode(item, byUid, index))], specBindings: [binding(section, "section-instance"), binding(pattern, "pattern")] };
+    return { nodeId: `g2p-${sha256(section.uid).slice(0, 12)}`, tag: "section", attributes: [{ name: "class", value: `${componentBlock}${optionalRefs(section, "variantRefs").map((value) => ` ${componentBlock}--${id(byUid.get(value)?.id ?? value)}`).join("")}` }, { name: "data-sitespec-subject", value: section.uid }], text: "", textFingerprint: sha256(""), children: [...slots.map((slot, index) => contentNode(slot, index, byUid, 2, componentBlock)), ...items.map((item, index) => collectionNode(item, byUid, index))], specBindings: [binding(section, "section-instance"), binding(pattern, "pattern")] };
   });
   const body: DomNode = { nodeId: `g2p-${sha256(page.uid).slice(0, 12)}`, tag: "body", attributes: [{ name: "class", value: "page" }, { name: "data-sitespec-subject", value: page.uid }], text: "", textFingerprint: sha256(""), children: [{ nodeId: `g2p-${sha256(`${page.uid}:main`).slice(0, 12)}`, tag: "main", attributes: [{ name: "class", value: "page__main" }], text: "", textFingerprint: sha256(""), children: sectionNodes, specBindings: [binding(page, "page")] }], specBindings: [binding(page, "page"), binding(route, "route"), binding(shell, "shell")] };
   const actions = entities.filter((entity) => entity.kind === "action");

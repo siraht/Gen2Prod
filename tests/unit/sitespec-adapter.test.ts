@@ -55,4 +55,27 @@ describe("canonical SiteSpec to G2P-NF projection", () => {
     expect(actions[0]!.detail).toContain("authority:");
     expect(actions[0]!.detail).toContain("Subject: sitespec://");
   });
+
+  test("projects contract-valid patterns and sections with optional variant references omitted", async () => {
+    const graph = await graphFixture();
+    const entities = graph.entities.map(({ revision: _revision, ...entity }) => {
+      const next = structuredClone(entity);
+      if (next.kind === "pattern" || next.kind === "section-instance") delete next.data.variantRefs;
+      return next;
+    });
+    const withoutVariants = buildCanonicalGraph({
+      schemaVersion: graph.schemaVersion,
+      kind: graph.kind,
+      id: graph.id,
+      uid: graph.uid,
+      rootRefs: graph.rootRefs,
+      entities,
+    });
+
+    const projection = projectCanonicalSiteSpec(artifact(withoutVariants), "sitespec://northstar/pages/home");
+
+    expect(projection.normalForm.components.every((component) => component.variants.length === 0 && component.bem.modifiers.length === 0)).toBeTrue();
+    const sections = projection.normalForm.dom.children[0]!.children;
+    expect(sections.every((section) => !String(section.attributes.find((attribute) => attribute.name === "class")?.value).includes("--"))).toBeTrue();
+  });
 });
