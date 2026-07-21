@@ -96,6 +96,18 @@ function requiredAction(entity: ContractEntity, reason: string, requiredAuthorit
   };
 }
 
+function markdownText(markdown: string): string {
+  return markdown
+    .replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s+/gm, "")
+    .replace(/^\s{0,3}>\s?/gm, "")
+    .replace(/\*\*|__|~~|`/g, "")
+    .replace(/(^|\s)[*_](?=\S)|(?<=\S)[*_](?=\s|$)/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function actionDestination(action: ContractEntity | undefined, byUid: Map<string, ContractEntity>): string | undefined {
   if (!action) return undefined;
   if (typeof action.data.destinationUri === "string") return action.data.destinationUri;
@@ -150,6 +162,8 @@ function contentNode(entity: ContractEntity, index: number, byUid: Map<string, C
     attributes.push({ name: "src", value: String(asset?.data.source ?? "") }, { name: "alt", value: String(value.alt ?? asset?.data.altRequirement ?? "") });
   } else if (kind === "explicit-empty" || kind === "not-applicable") {
     text = "";
+  } else if (kind === "rich-text") {
+    text = markdownText(String(value.markdown ?? ""));
   } else {
     text = String(value.value ?? value.brief ?? "");
   }
@@ -165,7 +179,14 @@ function contentNode(entity: ContractEntity, index: number, byUid: Map<string, C
 }
 
 function collectionNode(entity: ContractEntity, byUid: Map<string, ContractEntity>, index: number): DomNode {
-  const children = Object.entries((data(entity).fields ?? {}) as Record<string, Record<string, unknown>>).sort(([left], [right]) => left.localeCompare(right)).map(([field, value], fieldIndex): DomNode => {
+  const fields = (data(entity).fields ?? {}) as Record<string, Record<string, unknown>>;
+  const definition = byUid.get(String(data(entity).collectionDefinitionRef));
+  const declaredOrder = Array.isArray(definition?.data.fields)
+    ? (definition.data.fields as { id?: unknown }[]).map((field) => field.id).filter((field): field is string => typeof field === "string")
+    : [];
+  const orderedFields = [...declaredOrder.filter((field) => fields[field] !== undefined), ...Object.keys(fields).filter((field) => !declaredOrder.includes(field)).sort()];
+  const children = orderedFields.map((field, fieldIndex): DomNode => {
+    const value = fields[field]!;
     const text = String(value.text ?? value.value ?? value.label ?? "");
     return { nodeId: `g2p-${sha256(`${entity.uid}:${field}`).slice(0, 12)}-${fieldIndex}`, tag: value.kind === "heading" ? `h${Math.min(6, Math.max(2, Number(value.level ?? 3)))}` : "p", attributes: [{ name: "class", value: `collection-item__${id(field)}` }], text, textFingerprint: sha256(text.toLowerCase()), children: [], specBindings: [binding(entity, `collection-field:${field}`)] };
   });

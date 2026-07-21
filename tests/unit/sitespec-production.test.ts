@@ -118,6 +118,28 @@ describe("SiteSpec governed page production", () => {
     expect(built.validation.gates.filter((gate) => gate.hard && !gate.passed)).toEqual([]);
   });
 
+  test("renders rich-text content and preserves declared collection field order", async () => {
+    const fixture = await approvedFixture();
+    const graph = buildCanonicalGraph({
+      schemaVersion: fixture.schemaVersion,
+      kind: fixture.kind,
+      id: fixture.id,
+      uid: fixture.uid,
+      rootRefs: fixture.rootRefs,
+      entities: fixture.entities.map(({ revision: _revision, ...entity }) => entity.uid === "sitespec://northstar/pages/home/sections/hero.1/slots/body"
+        ? { ...entity, data: { ...entity.data, content: { kind: "rich-text", markdown: "Useful **approved** copy with a [clear destination](https://example.com).", localeRef: "sitespec://northstar/locales/en-us" } } }
+        : entity),
+    });
+    const current = artifact(graph);
+    const root = await mkdtemp(join(tmpdir(), "g2p-production-rich-text-"));
+    const release = await approvedRelease(graph, root);
+    const built = await buildSiteSpecPage({ artifact: current, pageSubjectRef: "sitespec://northstar/pages/home", designSystem: release, designSystemRoot: root, outputDirectory: join(root, "out") });
+
+    expect(built.html).toContain("Useful approved copy with a clear destination.");
+    expect(built.html).not.toContain("**approved**");
+    expect(built.html.indexOf('class="collection-item__heading"')).toBeLessThan(built.html.indexOf('class="collection-item__body"'));
+  });
+
   test("copies approved local images, records their hashes, and emits measured intrinsic dimensions", async () => {
     const root = await mkdtemp(join(tmpdir(), "g2p-production-assets-"));
     const imagePath = join(root, "approved.png");
