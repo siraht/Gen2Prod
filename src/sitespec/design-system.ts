@@ -1,10 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   assertProtocolVersion,
   createContractValidator,
   entityDependencyRefs,
   type ContractEntity,
+  type DesignCandidate,
   type DesignSystemRelease,
   type ResultManifest,
   type VisualTarget,
@@ -13,7 +15,7 @@ import { canonicalJson, sha256 } from "../core/hash.ts";
 import { ensureDirectory, pathExists, writeJsonAtomic, writeTextAtomic } from "../core/fs.ts";
 import type { CanonicalSiteSpecArtifact } from "../schemas/sitespec.ts";
 import { projectCanonicalSiteSpec } from "./adapter.ts";
-import { assertVisualTargetCurrent } from "./design.ts";
+import { assertVisualTargetCurrent, importDesignCandidate } from "./design.ts";
 
 type RevisionInput = { subjectRef: string; revision: string };
 type ArtifactReference = DesignSystemRelease["tokens"];
@@ -153,15 +155,52 @@ function closure(artifact: CanonicalSiteSpecArtifact, pageSubjectRef: string): C
   return [...selected.values()].sort((left, right) => left.uid.localeCompare(right.uid));
 }
 
-function roleToken(entity: ContractEntity): Record<string, unknown> {
+type CandidateVisualSource = {
+  candidateId: string;
+  candidateRef: string;
+  pageSubjectRef: string;
+  approvedRegions: string[];
+  viewport: DesignCandidate["viewport"];
+  html: string;
+  css: string;
+  sourceRefs: { id: string; hash: string; mediaType: string }[];
+  authority: {
+    visual: "approved-target";
+    content: "forbidden";
+    semantics: "forbidden";
+    behavior: "forbidden";
+  };
+};
+
+function cssVariables(css: string): Map<string, string> {
+  const root = css.match(/:root\s*\{([\s\S]*?)\}/i)?.[1] ?? "";
+  return new Map([...root.matchAll(/--([a-z0-9-]+)\s*:\s*([^;]+);/gi)].map((match) => [match[1]!.toLowerCase(), match[2]!.trim()]));
+}
+
+function roleToken(entity: ContractEntity, variables: ReadonlyMap<string, string>): Record<string, unknown> {
   const category = String(data(entity).category);
+  const role = String(data(entity).role ?? entity.id);
+  const candidate = (() => {
+    if (category === "action") return { type: "color", value: variables.get("action") ?? variables.get("clay") ?? variables.get("accent") };
+    if (category === "focus") return { type: "color", value: variables.get("focus") ?? variables.get("clay") ?? variables.get("accent") };
+    if (category === "surface") {
+      const names = role.includes("brand") ? ["brand", "juniper", "surface", "paper"] : ["paper", "surface", "background", "brand", "juniper"];
+      return { type: "color", value: names.map((name) => variables.get(name)).find(Boolean) };
+    }
+    if (category === "typography") {
+      const body = /body|copy|text/.test(role);
+      const names = body ? ["body", "text", "sans"] : ["display", "heading", "title", "serif"];
+      return { type: "fontFamily", value: names.map((name) => variables.get(name)).find(Boolean) };
+    }
+    return undefined;
+  })();
   const values: Record<string, { type: string; value: string }> = {
     surface: { type: "color", value: "#153e5c" },
     typography: { type: "fontFamily", value: "system-ui, sans-serif" },
     action: { type: "color", value: "#c84a27" },
     spacing: { type: "dimension", value: "clamp(3rem, 8vw, 7rem)" },
   };
-  const selected = values[category] ?? { type: "string", value: String(data(entity).intent) };
+  const selected = candidate?.value ? { type: candidate.type, value: candidate.value } : values[category] ?? { type: "string", value: String(data(entity).intent) };
   return {
     $type: selected.type,
     $value: selected.value,
@@ -176,6 +215,33 @@ function roleToken(entity: ContractEntity): Record<string, unknown> {
   };
 }
 
+function candidatePath(uri: string): string | undefined {
+  if (uri.startsWith("file:")) return fileURLToPath(uri);
+  if (uri.startsWith("/")) return uri;
+  return undefined;
+}
+
+async function candidateVisualSource(candidate: DesignCandidate, target: VisualTarget): Promise<CandidateVisualSource> {
+  const localSources = candidate.sourceFiles.flatMap((reference) => {
+    const path = candidatePath(reference.uri);
+    return path ? [{ reference, path }] : [];
+  });
+  const contents = await Promise.all(localSources.map(async ({ reference, path }) => ({ reference, contents: await readFile(path, "utf8") })));
+  const html = contents.filter(({ reference }) => reference.mediaType === "text/html").map(({ contents: value }) => value).join("\n");
+  const css = contents.filter(({ reference }) => reference.mediaType === "text/css").map(({ contents: value }) => value).join("\n");
+  return {
+    candidateId: candidate.id,
+    candidateRef: target.candidateRef,
+    pageSubjectRef: candidate.pageSubjectRef,
+    approvedRegions: [...target.approvedRegions],
+    viewport: candidate.viewport,
+    html,
+    css,
+    sourceRefs: candidate.sourceFiles.map(({ id, hash, mediaType }) => ({ id, hash, mediaType })),
+    authority: { visual: "approved-target", content: "forbidden", semantics: "forbidden", behavior: "forbidden" },
+  };
+}
+
 function inputs(entities: ContractEntity[], target: VisualTarget): RevisionInput[] {
   const revisions = new Map<string, string>();
   for (const entity of entities) revisions.set(entity.uid, entity.revision);
@@ -186,10 +252,19 @@ function inputs(entities: ContractEntity[], target: VisualTarget): RevisionInput
 export async function proposeDesignSystem(options: {
   artifact: CanonicalSiteSpecArtifact;
   visualTarget: VisualTarget;
+  candidate?: DesignCandidate;
   outputDirectory: string;
   version: string;
 }): Promise<DesignSystemProposal> {
   assertVisualTargetCurrent(options.visualTarget, options.artifact.spec);
+  let visualSource: CandidateVisualSource | undefined;
+  if (options.candidate) {
+    const imported = await importDesignCandidate(options.candidate, options.artifact.spec);
+    const expectedRef = `artifact://design-candidate/${imported.candidate.id}`;
+    if (options.visualTarget.candidateRef !== expectedRef) throw new Error(`Visual target ${options.visualTarget.id} approves ${options.visualTarget.candidateRef}, not ${expectedRef}`);
+    if (imported.candidate.pageSubjectRef !== options.visualTarget.pageSubjectRef) throw new Error(`Design candidate ${imported.candidate.id} targets a different page than ${options.visualTarget.id}`);
+    visualSource = await candidateVisualSource(imported.candidate, options.visualTarget);
+  }
   const projection = projectCanonicalSiteSpec(options.artifact, options.visualTarget.pageSubjectRef);
   const graph = options.artifact.spec;
   const siteRef = String(projection.page.data.siteRef);
@@ -201,10 +276,11 @@ export async function proposeDesignSystem(options: {
 
   const anchorClosure = closure(options.artifact, options.visualTarget.pageSubjectRef);
   const exercised = new Set(anchorClosure.map((entity) => entity.uid));
+  const variables = cssVariables(visualSource?.css ?? "");
   const tokens = await immutableJson(options.outputDirectory, `${slug(options.version)}-tokens`, {
     $schema: "https://tr.designtokens.org/format/",
     $description: `Provisional tokens for ${siteRef}; approval depends on validation-page evidence.`,
-    roles: Object.fromEntries(designRoles.map((entity) => [slug(entity.id), roleToken(entity)])),
+    roles: Object.fromEntries(designRoles.map((entity) => [slug(entity.id), roleToken(entity, variables)])),
     policies: {
       "surface-on-brand": { $type: "color", $value: "#ffffff", $description: "Readable foreground on the proposed brand surface." },
       "border-subtle": { $type: "strokeStyle", $value: "solid", $description: "A governed subtle boundary; runtime binding combines the style with currentColor and the baseline width." },
@@ -260,6 +336,16 @@ export async function proposeDesignSystem(options: {
     kind: "implementation-bindings",
     roles: designRoles.map((entity) => ({ subjectRef: entity.uid, subjectRevision: entity.revision, cssCustomProperty: `--${slug(entity.id)}` })),
     patterns: patterns.map((entity) => ({ subjectRef: entity.uid, subjectRevision: entity.revision, bemBlock: slug(entity.id) })),
+    visualSource: visualSource ?? {
+      candidateRef: options.visualTarget.candidateRef,
+      pageSubjectRef: options.visualTarget.pageSubjectRef,
+      approvedRegions: [...options.visualTarget.approvedRegions],
+      html: "",
+      css: "",
+      sourceRefs: [],
+      authority: { visual: "approved-target", content: "forbidden", semantics: "forbidden", behavior: "forbidden" },
+      limitation: "The approved candidate supplied no locally verifiable source; implementation must be checked against the authoritative screenshot.",
+    },
     targets: ["html", "scss", "css", "astro"],
   });
   const coverage = await immutableJson(options.outputDirectory, `${slug(options.version)}-coverage`, {
@@ -297,7 +383,7 @@ export async function proposeDesignSystem(options: {
       activity: "design-system-proposal",
       actor: "gen2prod",
       inputRefs: [...new Set([options.artifact.spec.uid, options.visualTarget.pageSubjectRef, ...(options.visualTarget.inputRevisions as RevisionInput[]).map((input) => input.subjectRef)])],
-      note: `Values are a provisional implementation proposal constrained by approved SiteSpec semantics and promoted visual target ${options.visualTarget.id} (${options.visualTarget.approvalRef}); validation-page evidence is required for approval.`,
+      note: `Values are a provisional implementation proposal constrained by approved SiteSpec semantics and promoted visual target ${options.visualTarget.id} (${options.visualTarget.approvalRef}); ${visualSource ? `verified visual-only candidate sources from ${visualSource.candidateId} were embedded without content, semantic, or behavior authority` : "no locally verifiable visual source was supplied"}; validation-page evidence is required for approval.`,
     }],
   };
   const validation = createContractValidator().validate("artifacts", release);

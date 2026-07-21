@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { buildCanonicalGraph, createContractValidator, type CanonicalGraphRuntime, type DesignCandidate, type ResultManifest } from "@website-ontology/contracts";
 import type { CanonicalSiteSpecArtifact } from "../../src/schemas/sitespec.ts";
 import { approveDesignSystemRelease, proposeDesignSystem, selectAnchorPage, selectValidationPage } from "../../src/sitespec/design-system.ts";
@@ -35,6 +36,45 @@ function approveOutstandingAction(graph: CanonicalGraphRuntime): CanonicalGraphR
 }
 
 describe("versioned design-system proposal", () => {
+  test("embeds verified visual-only candidate source and derives role tokens from it", async () => {
+    const graph = approveOutstandingAction(await graphFixture());
+    const fixture = await Bun.file(new URL(import.meta.resolve("@website-ontology/contracts/fixtures/valid/design-candidate.json"))).json() as DesignCandidate;
+    const page = graph.entities.find((entity) => entity.uid === fixture.pageSubjectRef)!;
+    const sourceDirectory = await mkdtemp(join(tmpdir(), "g2p-design-source-"));
+    const htmlPath = join(sourceDirectory, "candidate.html");
+    const cssPath = join(sourceDirectory, "candidate.css");
+    const html = "<!doctype html><html><body><main></main></body></html>";
+    const css = ':root { --paper: #f4efdf; --juniper: #285b45; --clay: #b85437; --display: "Charter", serif; --body: Lato, sans-serif; }';
+    await Promise.all([writeFile(htmlPath, html), writeFile(cssPath, css)]);
+    const candidate: DesignCandidate = {
+      ...fixture,
+      specRevision: page.revision,
+      sourceFiles: [
+        { schemaVersion: "website-ontology-artifacts/2.0", kind: "artifact-ref", id: "candidate-html", hash: Bun.SHA256.hash(html, "hex"), uri: pathToFileURL(htmlPath).href, mediaType: "text/html", byteLength: Buffer.byteLength(html) },
+        { schemaVersion: "website-ontology-artifacts/2.0", kind: "artifact-ref", id: "candidate-css", hash: Bun.SHA256.hash(css, "hex"), uri: pathToFileURL(cssPath).href, mediaType: "text/css", byteLength: Buffer.byteLength(css) },
+      ],
+    };
+    const target = approveVisualTarget({ candidate, graph, approvalRef: "siteops://approvals/northstar-home" });
+    const outputDirectory = await mkdtemp(join(tmpdir(), "g2p-design-system-source-"));
+    const proposal = await proposeDesignSystem({ artifact: artifact(graph), visualTarget: target, candidate, outputDirectory, version: "1.0.0-source.1" });
+    const tokens = await Bun.file(join(proposal.objectsDirectory, `${proposal.release.tokens.hash}.json`)).json();
+    const bindings = await Bun.file(join(proposal.objectsDirectory, `${proposal.release.implementationBindings.hash}.json`)).json();
+
+    expect(tokens.roles["surface-brand"].$value).toBe("#285b45");
+    expect(tokens.roles["action-primary"].$value).toBe("#b85437");
+    expect(tokens.roles["typography-page-title"].$value).toBe('"Charter", serif');
+    expect(bindings.visualSource).toMatchObject({ candidateId: candidate.id, html, css, authority: { visual: "approved-target", content: "forbidden", semantics: "forbidden", behavior: "forbidden" } });
+  });
+
+  test("rejects a candidate other than the one approved by the visual target", async () => {
+    const graph = approveOutstandingAction(await graphFixture());
+    const fixture = await Bun.file(new URL(import.meta.resolve("@website-ontology/contracts/fixtures/valid/design-candidate.json"))).json() as DesignCandidate;
+    const page = graph.entities.find((entity) => entity.uid === fixture.pageSubjectRef)!;
+    const candidate = { ...fixture, specRevision: page.revision };
+    const target = approveVisualTarget({ candidate, graph, approvalRef: "siteops://approvals/northstar-home" });
+    await expect(proposeDesignSystem({ artifact: artifact(graph), visualTarget: target, candidate: { ...candidate, id: "other-candidate" }, outputDirectory: await mkdtemp(join(tmpdir(), "g2p-design-system-wrong-source-")), version: "1.0.0" })).rejects.toThrow("not artifact://design-candidate/other-candidate");
+  });
+
   test("emits immutable content-addressed artifacts with explicit anchor coverage gaps", async () => {
     const graph = approveOutstandingAction(await graphFixture());
     const fixture = await Bun.file(new URL(import.meta.resolve("@website-ontology/contracts/fixtures/valid/design-candidate.json"))).json() as DesignCandidate;

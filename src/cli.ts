@@ -55,7 +55,7 @@ import { ProjectContractSchema, ProjectDestinationBundleSchema, ProjectFramework
 import { inspectProjectAdapterReadiness } from "./project-adapters/doctor.ts";
 import { prepareProjectCurriculum } from "./project-adapters/curriculum.ts";
 import { loadProjectAdapterIncumbent } from "./project-adapters/policy.ts";
-import type { DesignSystemRelease, ResultManifest, VisualTarget } from "@website-ontology/contracts";
+import type { DesignCandidate, DesignSystemRelease, ResultManifest, VisualTarget } from "@website-ontology/contracts";
 import { canonicalSiteSpecArtifactSchema, type CanonicalSiteSpecArtifact } from "./schemas/sitespec.ts";
 import { approveVisualTarget, importDesignCandidate } from "./sitespec/design.ts";
 import { approveDesignSystemRelease, proposeDesignSystem } from "./sitespec/design-system.ts";
@@ -197,10 +197,11 @@ designSystemCommand
   .description("synthesize a provisional versioned design system from an approved visual target")
   .requiredOption("--spec <path>", "canonical SiteSpec artifact")
   .requiredOption("--visual-target <path>", "approved visual-target artifact")
+  .requiredOption("--candidate <path>", "verified design-candidate manifest approved by the visual target")
   .requiredOption("--release-version <semver>", "immutable provisional version")
   .option("--output <path>", "design-system artifact root", ".gen2prod/sitespec/design-system")
-  .action(async (options: { spec: string; visualTarget: string; releaseVersion: string; output: string }) => {
-    const proposal = await proposeDesignSystem({ artifact: await siteSpecArtifact(options.spec), visualTarget: await readJson<VisualTarget>(resolve(options.visualTarget)), version: options.releaseVersion, outputDirectory: resolve(options.output) });
+  .action(async (options: { spec: string; visualTarget: string; candidate: string; releaseVersion: string; output: string }) => {
+    const proposal = await proposeDesignSystem({ artifact: await siteSpecArtifact(options.spec), visualTarget: await readJson<VisualTarget>(resolve(options.visualTarget)), candidate: await readJson<DesignCandidate>(resolve(options.candidate)), version: options.releaseVersion, outputDirectory: resolve(options.output) });
     emit(result("design-system propose", { id: proposal.release.id, version: proposal.release.version, status: proposal.release.status, releasePath: proposal.releasePath, objectsDirectory: proposal.objectsDirectory }), `Proposed design system ${proposal.release.id} (${proposal.release.version})\nStatus: ${proposal.release.status}\nRelease: ${proposal.releasePath}`);
   });
 designSystemCommand
