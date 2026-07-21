@@ -303,10 +303,12 @@ evidenceCommand
   .option("--viewport <pixels>", "capture viewport width", "1280")
   .option("--height <pixels>", "capture viewport height", "900")
   .option("--threshold <ratio>", "maximum pixel difference ratio", "0.03")
-  .action(async (run: string, options: { spec: string; visualTarget: string; results?: string; output?: string; viewport: string; height: string; threshold: string }) => {
+  .option("--browser-executable <path>", "exact Chrome/Chromium executable; defaults to capture.browserExecutable")
+  .action(async (run: string, options: { spec: string; visualTarget: string; results?: string; output?: string; viewport: string; height: string; threshold: string; browserExecutable?: string }) => {
+    const project = await config();
     const runDirectory = resolve(run);
     const output = resolve(options.output ?? join(runDirectory, "browser-results.json"));
-    const captured = await capturePageEvidence({ artifact: await siteSpecArtifact(options.spec), results: await readJson<ResultManifest>(resolve(options.results ?? join(runDirectory, "results.json"))), visualTarget: await readJson<VisualTarget>(resolve(options.visualTarget)), runDirectory, outputPath: output, viewport: Number.parseInt(options.viewport, 10), viewportHeight: Number.parseInt(options.height, 10), maxPixelDifference: Number.parseFloat(options.threshold) });
+    const captured = await capturePageEvidence({ artifact: await siteSpecArtifact(options.spec), results: await readJson<ResultManifest>(resolve(options.results ?? join(runDirectory, "results.json"))), visualTarget: await readJson<VisualTarget>(resolve(options.visualTarget)), runDirectory, outputPath: output, viewport: Number.parseInt(options.viewport, 10), viewportHeight: Number.parseInt(options.height, 10), maxPixelDifference: Number.parseFloat(options.threshold), browserExecutable: options.browserExecutable ?? project.capture.browserExecutable });
     const visual = captured.results.results.find((item: { requirementRef: string }) => item.requirementRef.endsWith("/visual-target-conformance"));
     const envelope = result("evidence capture", { output, evidencePath: captured.evidencePath, screenshotPath: captured.screenshotPath, diffPath: captured.diffPath, pixelDifferenceRatio: captured.pixelDifferenceRatio, visualStatus: visual?.status });
     envelope.ok = visual?.status === "pass";
