@@ -7,7 +7,7 @@ import { stringify } from "yaml";
 import { loadConfig, type Gen2ProdConfig } from "./core/config.ts";
 import { Gen2ProdError, UsageError } from "./core/errors.ts";
 import { ensureDirectory, pathExists, readJson, writeJsonAtomic, writeTextAtomic } from "./core/fs.ts";
-import { result, type ResultEnvelope } from "./core/result.ts";
+import { protocolRequiredAction, result, type ResultEnvelope } from "./core/result.ts";
 import { ModeSchema, ProfileSchema } from "./schemas/artifacts.ts";
 import { ImageOnlyPolicySchema } from "./schemas/image-only.ts";
 import { exportSchemas } from "./schemas/export.ts";
@@ -248,7 +248,8 @@ program
     const build = await buildSiteSpecPage({ artifact: await siteSpecArtifact(options.spec), pageSubjectRef: options.page, designSystem: await readJson<DesignSystemRelease>(releasePath), designSystemRoot: resolve(options.designSystemRoot ?? join(dirname(releasePath), "..", "..")), outputDirectory: resolve(options.output), ...(options.releaseValidation ? { releaseValidation: true } : {}) });
     const envelope = result("build", { runId: build.runId, runDirectory: build.runDirectory, pageSubjectRef: build.pageSubjectRef, validationPassed: build.validation.passed, manifest: join(build.runDirectory, "manifest.json"), results: join(build.runDirectory, "results.json"), correspondence: join(build.runDirectory, "correspondence.json") });
     envelope.runId = build.runId;
-    envelope.ok = build.validation.passed && !build.results.requiredActions.some((action: { severity: string }) => action.severity === "blocking");
+    envelope.requiredActions.push(...build.results.requiredActions.map(protocolRequiredAction));
+    envelope.ok = build.validation.passed && !envelope.requiredActions.some((action) => action.blocking);
     emit(envelope, `Built ${build.pageSubjectRef}\nInternal hard gates: ${build.validation.passed ? "pass" : "fail"}\nBlocking evidence actions: ${build.results.requiredActions.filter((action: { severity: string }) => action.severity === "blocking").length}\nArtifacts: ${build.runDirectory}`);
     if (!envelope.ok) process.exitCode = 3;
   });
