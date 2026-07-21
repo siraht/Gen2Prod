@@ -3,7 +3,7 @@ import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { buildCanonicalGraph, canonicalize, sha256, type CanonicalGraphRuntime, type DesignCandidate } from "@website-ontology/contracts";
 import { canonicalJson } from "../src/core/hash.ts";
-import { writeQualificationAsset } from "./generate-qualification-asset.ts";
+import { writeQualificationAsset, writeQualificationPdf } from "./generate-qualification-asset.ts";
 
 const RESERVE_BYTES = 15 * 1024 ** 3;
 const LIGHTHOUSE_VERSION = "13.4.1";
@@ -107,8 +107,10 @@ const repositoryStatusBefore = await Bun.$`git status --porcelain=v1`.cwd(resolv
 const repositoryHead = (await Bun.$`git rev-parse HEAD`.cwd(resolve(import.meta.dir, "..")).text()).trim();
 
 const qualificationAsset = join(root, "inputs", "approved-hero.png");
+const qualificationPdf = join(root, "inputs", "approved-rebate-checklist.pdf");
 await mkdir(resolve(qualificationAsset, ".."), { recursive: true });
 await writeQualificationAsset(qualificationAsset);
+await writeQualificationPdf(qualificationPdf);
 const specPath = join(root, "inputs", "approved-site.json");
 let graph: CanonicalGraphRuntime;
 if (externalSpecPath) {
@@ -120,7 +122,9 @@ if (externalSpecPath) {
   const reference = await Bun.file(referencePath).json() as CanonicalGraphRuntime;
   graph = rebuild(reference, (entity) => {
     if (entity.uid === "sitespec://northstar/actions/assessment-form") { entity.authority = { ...entity.authority, state: "approved", assertedBy: "qualification-owner", scope: "semantic-content" }; entity.data = { ...entity.data, destinationRef: "sitespec://northstar/pages/contact" }; delete entity.data.unresolvedBehavior; }
+    if (entity.uid === "sitespec://northstar/actions/rebate-download") entity.data = { ...entity.data, destinationRef: "sitespec://northstar/assets/rebate-checklist" };
     if (entity.uid === "sitespec://northstar/assets/hero-home") entity.data = { ...entity.data, source: pathToFileURL(qualificationAsset).href, mediaType: "image/png" };
+    if (entity.uid === "sitespec://northstar/assets/rebate-checklist") entity.data = { ...entity.data, source: pathToFileURL(qualificationPdf).href, mediaType: "application/pdf" };
   });
   await writeJson(specPath, artifact(graph));
 }

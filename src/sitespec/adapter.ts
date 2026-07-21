@@ -101,6 +101,7 @@ function actionDestination(action: ContractEntity | undefined, byUid: Map<string
     const route = [...byUid.values()].find((entity) => entity.kind === "route" && entity.data.pageRef === destination.uid);
     if (route && typeof route.data.pathname === "string") return route.data.pathname;
   }
+  if (destination?.kind === "asset" && typeof destination.data.source === "string") return destination.data.source;
   return `#${id(action.data.destinationRef)}`;
 }
 
@@ -134,7 +135,10 @@ function contentNode(entity: ContractEntity, index: number, byUid: Map<string, C
     const destination = actionDestination(action, byUid);
     tag = destination ? "a" : "button";
     text = String(value.label ?? "");
-    if (destination) attributes.push({ name: "href", value: String(destination) });
+    if (destination) {
+      attributes.push({ name: "href", value: String(destination) });
+      if (action?.data.actionKind === "download") attributes.push({ name: "download", value: "" });
+    }
     else attributes.push({ name: "type", value: "button" }, { name: "disabled", value: "" }, { name: "aria-disabled", value: "true" });
   } else if (kind === "media") {
     const asset = byUid.get(String(value.assetRef ?? ""));

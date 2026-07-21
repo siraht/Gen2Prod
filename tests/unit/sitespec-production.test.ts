@@ -10,7 +10,7 @@ import { approveDesignSystemRelease, proposeDesignSystem, selectAnchorPage, sele
 import { approveVisualTarget } from "../../src/sitespec/design.ts";
 import { buildSiteSpecPage } from "../../src/sitespec/production.ts";
 
-async function approvedFixture(assetSource?: string): Promise<CanonicalGraphRuntime> {
+async function approvedFixture(assetSource?: string, downloadAssetSource?: string): Promise<CanonicalGraphRuntime> {
   const graph = await Bun.file(new URL(import.meta.resolve("@website-ontology/contracts/fixtures/valid/reference-canonical-graph.json"))).json() as CanonicalGraphRuntime;
   return buildCanonicalGraph({ schemaVersion: graph.schemaVersion, kind: graph.kind, id: graph.id, uid: graph.uid, rootRefs: graph.rootRefs, entities: graph.entities.map(({ revision: _revision, ...entity }) => {
     const next = structuredClone(entity);
@@ -20,6 +20,8 @@ async function approvedFixture(assetSource?: string): Promise<CanonicalGraphRunt
       delete next.data.unresolvedBehavior;
     }
     if (assetSource && next.uid === "sitespec://northstar/assets/hero-home") next.data = { ...next.data, source: assetSource, mediaType: "image/png" };
+    if (downloadAssetSource && next.uid === "sitespec://northstar/actions/rebate-download") next.data = { ...next.data, destinationRef: "sitespec://northstar/assets/rebate-checklist" };
+    if (downloadAssetSource && next.uid === "sitespec://northstar/assets/rebate-checklist") next.data = { ...next.data, source: downloadAssetSource, mediaType: "application/pdf" };
     return next;
   }) });
 }
@@ -108,5 +110,23 @@ describe("SiteSpec governed page production", () => {
     expect(built.results.results.find((result: { requirementRef: string }) => result.requirementRef.endsWith("/design-system-use"))?.status).toBe("pass");
     expect(built.html).toContain('class="hero__heading"');
     expect(built.html).not.toContain("hero-1__");
+  });
+
+  test("materializes approved local download assets with explicit browser semantics", async () => {
+    const root = await mkdtemp(join(tmpdir(), "g2p-production-download-"));
+    const pdfPath = join(root, "approved-checklist.pdf");
+    await Bun.write(pdfPath, "%PDF-1.4\n% deterministic test checklist\n%%EOF\n");
+    const graph = await approvedFixture(undefined, pathToFileURL(pdfPath).href);
+    const current = artifact(graph);
+    const release = await approvedRelease(graph, root);
+    const built = await buildSiteSpecPage({ artifact: current, pageSubjectRef: "sitespec://northstar/pages/rebate-guide", designSystem: release, designSystemRoot: root, outputDirectory: join(root, "out") });
+    const download = built.manifest.artifacts.find((item: { mediaType: string }) => item.mediaType === "application/pdf");
+
+    expect(download?.uri).toBe(`artifact://sha256/${download?.hash}`);
+    expect(download?.byteLength).toBeGreaterThan(0);
+    expect(built.html).toContain(`href="assets/${download?.hash}.pdf"`);
+    expect(built.html).toContain('download=""');
+    expect(built.html).not.toContain("file:");
+    expect(Bun.file(join(built.runDirectory, "assets", `${download?.hash}.pdf`)).exists()).resolves.toBeTrue();
   });
 });

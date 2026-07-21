@@ -22,6 +22,37 @@ export async function writeQualificationAsset(target: string): Promise<void> {
   await Bun.write(target, bytes);
 }
 
+function qualificationPdf(): Uint8Array {
+  const content = "BT /F1 18 Tf 72 720 Td (Northstar Rebate Preparation Checklist) Tj ET\n";
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>",
+    `<< /Length ${Buffer.byteLength(content)} >>\nstream\n${content}endstream`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+  ];
+  let body = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  for (const [index, object] of objects.entries()) {
+    offsets.push(Buffer.byteLength(body));
+    body += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  }
+  const xrefOffset = Buffer.byteLength(body);
+  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((offset) => `${String(offset).padStart(10, "0")} 00000 n `).join("\n")}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  return new TextEncoder().encode(body);
+}
+
+export async function writeQualificationPdf(target: string): Promise<void> {
+  const bytes = qualificationPdf();
+  const file = Bun.file(target);
+  if (await file.exists()) {
+    const current = new Uint8Array(await file.arrayBuffer());
+    if (Buffer.compare(Buffer.from(current), Buffer.from(bytes)) !== 0) throw new Error(`Refusing to replace non-matching qualification PDF ${target}`);
+    return;
+  }
+  await Bun.write(target, bytes);
+}
+
 if (import.meta.main) {
   const target = process.argv[2] ? resolve(process.argv[2]) : undefined;
   if (!target) throw new Error("Usage: bun scripts/generate-qualification-asset.ts <output.png>");
