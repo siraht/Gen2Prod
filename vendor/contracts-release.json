@@ -1,9 +1,11 @@
 {
   "schemaVersion": "g2p-contract-package-pin/2.0",
   "package": "@website-ontology/contracts",
-  "version": "2.0.0-dev.1",
-  "file": "website-ontology-contracts-2.0.0-dev.1.tgz",
-  "sha256": "821a8465917f00d2b6b48f1c774a759605448ca40b60a58deee2261aec09a177",
+  "version": "2.0.0-dev.2",
+  "file": "website-ontology-contracts-2.0.0-dev.2.tgz",
+  "sha256": "57000df58a988ed52d6cedf165ab2f1e69164a1bdfb8e4ecaf345c91cf3c3ca7",
+  "coreSchemaSha256": "fae3cf54fc9ea3c4897626c0336e95f87cd5e955dab408744784b9678f16bd03",
+  "contentRuntimeSha256": "6f7c21607f40a53bd485509fd5d40b6fc2476f1bee496548d5fa32ef6d630499",
   "sourceRepository": "WebsiteOntology",
-  "sourceCommit": "117fd91"
+  "sourceCommit": "95347f23bb961b27b236fb1bbc55fb811108a74e"
 }
