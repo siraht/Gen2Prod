@@ -359,6 +359,20 @@ describe("static compilation", () => {
     expect(output.scss).toContain('content: "x"');
   });
 
+  test("preserves focus-visible as a complete conditional state", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "gen2prod-focus-visible-"));
+    const htmlPath = join(directory, "page.html");
+    await Bun.write(htmlPath, '<!doctype html><html><head><title>Focus visible</title><meta name="description" content="Focus-visible fixture"><style>a:focus-visible{outline:3px solid #b85437;outline-offset:5px}</style></head><body><main><h1>Focus visible</h1><a href="#target">Jump</a><div id="target">Target</div></main></body></html>');
+    const output = await compileStaticPage({ htmlPath, tokenRegistry: { ...inputTokens(), tokens: [] } });
+    const focusOutline = output.plan.styles.flatMap((style) => style.declarations).find((declaration) => declaration.property === "outline");
+    const focusOffset = output.plan.styles.flatMap((style) => style.declarations).find((declaration) => declaration.property === "outline-offset");
+    expect(focusOutline?.condition?.states).toEqual(["focus-visible"]);
+    expect(focusOffset?.condition?.states).toEqual(["focus-visible"]);
+    expect(resolvedSample(output, focusOffset?.value)).toBe("5px");
+    expect(output.scss).toContain("&:focus-visible");
+    expect(output.scss).toMatch(/outline-offset: var\(--g2p-outline-offset-/);
+  });
+
   test("retains responsive rules in condition-aware style intent", async () => {
     const directory = await mkdtemp(join(tmpdir(), "gen2prod-responsive-style-"));
     const htmlPath = join(directory, "page.html");

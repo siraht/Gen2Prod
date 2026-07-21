@@ -373,7 +373,7 @@ function semanticTagResets(node: PlannedNode, declarations: StyleIntent["declara
 
 function conditionedSelector(declaration: CssDeclaration): { selector: string; condition?: StyleCondition } {
   const states: string[] = [];
-  const statePattern = /(?<!:not\():(hover|focus|focus-visible|focus-within|active|visited|checked|disabled|open|indeterminate)\b/g;
+  const statePattern = /(?<!:not\():(focus-visible|focus-within|indeterminate|disabled|checked|visited|active|hover|focus|open)\b/g;
   let selector = declaration.selector.replace(statePattern, (_, state: string) => { states.push(state); return ""; });
   // Canonical output lowers compound states with :where() to cap specificity.
   // Once the state pseudos are extracted, the empty wrapper is not part of the
