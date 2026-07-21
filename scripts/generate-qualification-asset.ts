@@ -54,8 +54,11 @@ export async function writeQualificationPdf(target: string): Promise<void> {
 }
 
 if (import.meta.main) {
-  const target = process.argv[2] ? resolve(process.argv[2]) : undefined;
-  if (!target) throw new Error("Usage: bun scripts/generate-qualification-asset.ts <output.png>");
-  await writeQualificationAsset(target);
-  console.log(JSON.stringify({ ok: true, output: target, width: 1280, height: 1000 }));
+  const pdf = process.argv[2] === "--pdf";
+  const targetArgument = pdf ? process.argv[3] : process.argv[2];
+  const target = targetArgument ? resolve(targetArgument) : undefined;
+  if (!target) throw new Error("Usage: bun scripts/generate-qualification-asset.ts [--pdf] <output>");
+  if (pdf) await writeQualificationPdf(target);
+  else await writeQualificationAsset(target);
+  console.log(JSON.stringify(pdf ? { ok: true, output: target, mediaType: "application/pdf" } : { ok: true, output: target, mediaType: "image/png", width: 1280, height: 1000 }));
 }
