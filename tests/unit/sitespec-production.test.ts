@@ -9,7 +9,7 @@ import { canonicalJson } from "../../src/core/hash.ts";
 import type { CanonicalSiteSpecArtifact } from "../../src/schemas/sitespec.ts";
 import { approveDesignSystemRelease, proposeDesignSystem, selectAnchorPage, selectValidationPage } from "../../src/sitespec/design-system.ts";
 import { approveVisualTarget } from "../../src/sitespec/design.ts";
-import { buildSiteSpecPage } from "../../src/sitespec/production.ts";
+import { buildSiteSpecPage, productionRunId } from "../../src/sitespec/production.ts";
 
 async function approvedFixture(assetSource?: string, downloadAssetSource?: string): Promise<CanonicalGraphRuntime> {
   const graph = await Bun.file(new URL(import.meta.resolve("@website-ontology/contracts/fixtures/valid/reference-canonical-graph.json"))).json() as CanonicalGraphRuntime;
@@ -45,6 +45,11 @@ async function approvedRelease(graph: CanonicalGraphRuntime, root: string) {
 }
 
 describe("SiteSpec governed page production", () => {
+  test("changes run identity when emitted output changes under identical inputs", () => {
+    const input = { assetHashes: [], css: ".page{}", designSystemHash: "design", html: "<main>One</main>", pageId: "home", pageRevision: "page", planHash: "plan", releaseValidation: true, scss: ".page{}", specRevision: "spec" };
+    expect(productionRunId(input)).not.toBe(productionRunId({ ...input, html: "<main>Two</main>" }));
+  });
+
   test("emits deterministic anchor, validation, and remaining-page artifacts with revision traces", async () => {
     const graph = await approvedFixture();
     const current = artifact(graph);

@@ -61,6 +61,29 @@ export type SiteSpecPageBuild = {
   manifest: ArtifactManifest;
 };
 
+export function productionRunId(input: {
+  assetHashes: string[];
+  css: string;
+  designSystemHash: string;
+  html: string;
+  pageId: string;
+  pageRevision: string;
+  planHash: string;
+  releaseValidation: boolean;
+  scss: string;
+  specRevision: string;
+}): string {
+  return `${slug(input.pageId)}-${hashJson({
+    spec: input.specRevision,
+    page: input.pageRevision,
+    designSystem: input.designSystemHash,
+    assets: input.assetHashes,
+    releaseValidation: input.releaseValidation,
+    generator: "sitespec-production-v2",
+    output: { html: sha256(input.html), scss: sha256(input.scss), css: sha256(input.css), plan: input.planHash },
+  }).slice(0, 16)}`;
+}
+
 function slug(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "subject";
 }
@@ -438,7 +461,18 @@ export async function buildSiteSpecPage(options: {
   const css = compileString(scss, { style: "expanded" }).css;
   const html = emitHtml(plan, "page.css", true);
   const validation = normalizedValidation(await validate({ html, scss, css, plan, mode: "greenfield", thresholds: { minBemCoverage: 0.95, minTokenCoverage: 0.95, maxVisualPixelRatio: 0.03, provisional: true } }));
-  const runId = `${slug(projection.page.id)}-${hashJson({ spec: options.artifact.revision, page: projection.page.revision, designSystem: hashJson(options.designSystem), assets: localAssets.map((asset) => asset.reference.hash), releaseValidation: Boolean(options.releaseValidation), generator: "sitespec-production-v2" }).slice(0, 16)}`;
+  const runId = productionRunId({
+    assetHashes: localAssets.map((asset) => asset.reference.hash),
+    css,
+    designSystemHash: hashJson(options.designSystem),
+    html,
+    pageId: projection.page.id,
+    pageRevision: projection.page.revision,
+    planHash: hashJson(plan),
+    releaseValidation: Boolean(options.releaseValidation),
+    scss,
+    specRevision: options.artifact.revision,
+  });
   const runDirectory = join(options.outputDirectory, "runs", runId);
   await ensureDirectory(runDirectory);
   const normalForm = { ...projection.normalForm, styles: plan.styles, tokens: plan.tokens };
