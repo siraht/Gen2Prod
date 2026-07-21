@@ -214,6 +214,73 @@ function interactionFor(action: ContractEntity): InteractionContract {
   return { component: id(action.id), nodeId: `action-${id(action.id)}`, kind: mapped, keyboard: ["Tab", "Enter"], focusManagement: "Preserve visible focus and logical return focus.", stateAttributes: (data(action).states as string[] | undefined) ?? [], reducedMotion: "Required for non-essential motion.", specBindings: [binding(action, "action")] };
 }
 
+function shellTextNode(nodeId: string, tag: string, text: string, className: string, bindings: SpecBinding[], attributes: DomNode["attributes"] = []): DomNode {
+  return { nodeId, tag, attributes: [...attributes, { name: "class", value: className }], text, textFingerprint: sha256(text.replace(/\s+/g, " ").trim().toLowerCase()), children: [], specBindings: bindings };
+}
+
+function brandName(project: ContractEntity | undefined, site: ContractEntity): string {
+  return project?.title?.trim() || site.title?.replace(/\s+website$/i, "").trim() || site.id;
+}
+
+function brandInitials(value: string): string {
+  return value.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() ?? "").join("") || "S";
+}
+
+function shellNodes(options: {
+  byUid: Map<string, ContractEntity>;
+  site: ContractEntity;
+  strategy: ContractEntity;
+  shell: ContractEntity;
+  project?: ContractEntity;
+  navigation?: ContractEntity;
+  main: DomNode;
+}): DomNode[] {
+  const regions = new Set(refs(options.shell, "regions"));
+  const siteBinding = binding(options.site, "site");
+  const shellBinding = binding(options.shell, "shell");
+  const strategyBinding = binding(options.strategy, "site-strategy");
+  const projectBindings = options.project ? [binding(options.project, "project")] : [];
+  const name = brandName(options.project, options.site);
+  const homeRoute = [...options.byUid.values()].find((entity) => entity.kind === "route" && entity.data.siteRef === options.site.uid && entity.data.pathname === "/");
+  const navigationItems = Array.isArray(options.navigation?.data.items) ? options.navigation.data.items as { id: string; label: string; destinationRef: string }[] : [];
+  const routeFor = (pageRef: string): string => String([...options.byUid.values()].find((entity) => entity.kind === "route" && entity.data.pageRef === pageRef)?.data.pathname ?? "#");
+  const children: DomNode[] = [];
+  if (regions.has("header")) {
+    children.push({ nodeId: `g2p-${sha256(`${options.shell.uid}:skip`).slice(0, 12)}`, tag: "a", attributes: [{ name: "href", value: "#main" }, { name: "class", value: "skip-link" }], text: "Skip to content", textFingerprint: sha256("skip to content"), children: [], specBindings: [shellBinding] });
+  }
+  if (regions.has("pilot-disclosure")) {
+    const disclosure = (Array.isArray(options.strategy.data.trust) ? options.strategy.data.trust : []).find((value): value is string => typeof value === "string" && /pilot|qualification/i.test(value)) ?? "Qualification pilot";
+    children.push(shellTextNode(`g2p-${sha256(`${options.shell.uid}:pilot-disclosure`).slice(0, 12)}`, "p", disclosure, "pilot-note", [shellBinding, strategyBinding]));
+  }
+  if (regions.has("header")) {
+    const wordmark = { nodeId: `g2p-${sha256(`${options.shell.uid}:wordmark`).slice(0, 12)}`, tag: "a", attributes: [{ name: "href", value: String(homeRoute?.data.pathname ?? "/") }, { name: "aria-label", value: `${name} home` }, { name: "class", value: "wordmark" }], text: "", textFingerprint: sha256(""), children: [
+      shellTextNode(`g2p-${sha256(`${options.shell.uid}:initials`).slice(0, 12)}`, "span", brandInitials(name), "wordmark__initials", [siteBinding, ...projectBindings], [{ name: "aria-hidden", value: "true" }]),
+      shellTextNode(`g2p-${sha256(`${options.shell.uid}:brand`).slice(0, 12)}`, "strong", name, "wordmark__name", [siteBinding, ...projectBindings]),
+    ], specBindings: [shellBinding, siteBinding, ...projectBindings] } satisfies DomNode;
+    const visibleItems = navigationItems.filter((item) => routeFor(item.destinationRef) !== "/");
+    const navChildren = visibleItems.map((item, index) => shellTextNode(
+      `g2p-${sha256(`${options.navigation?.uid ?? options.shell.uid}:${item.id}`).slice(0, 12)}`,
+      "a",
+      item.label,
+      index === visibleItems.length - 1 ? "site-header__link nav-cta" : "site-header__link",
+      options.navigation ? [binding(options.navigation, `navigation-item:${item.id}`)] : [shellBinding],
+      [{ name: "href", value: routeFor(item.destinationRef) }],
+    ));
+    const navigation = { nodeId: `g2p-${sha256(`${options.shell.uid}:navigation`).slice(0, 12)}`, tag: "nav", attributes: [{ name: "aria-label", value: options.navigation?.title ?? "Primary navigation" }, { name: "class", value: "site-header__navigation" }], text: "", textFingerprint: sha256(""), children: navChildren, specBindings: options.navigation ? [binding(options.navigation, "navigation")] : [shellBinding] } satisfies DomNode;
+    children.push({ nodeId: `g2p-${sha256(`${options.shell.uid}:header`).slice(0, 12)}`, tag: "header", attributes: [{ name: "class", value: "site-header" }], text: "", textFingerprint: sha256(""), children: [wordmark, navigation], specBindings: [shellBinding] });
+  }
+  children.push(options.main);
+  if (regions.has("footer")) {
+    const lastItem = navigationItems.at(-1);
+    children.push({ nodeId: `g2p-${sha256(`${options.shell.uid}:footer`).slice(0, 12)}`, tag: "footer", attributes: [{ name: "class", value: "site-footer" }], text: "", textFingerprint: sha256(""), children: [
+      shellTextNode(`g2p-${sha256(`${options.shell.uid}:footer-brand`).slice(0, 12)}`, "strong", name, "site-footer__brand", [siteBinding, ...projectBindings]),
+      shellTextNode(`g2p-${sha256(`${options.shell.uid}:footer-status`).slice(0, 12)}`, "span", "Qualification pilot", "site-footer__status", [shellBinding, strategyBinding]),
+      ...(lastItem ? [shellTextNode(`g2p-${sha256(`${options.shell.uid}:footer-action`).slice(0, 12)}`, "a", lastItem.label, "site-footer__link", options.navigation ? [binding(options.navigation, `navigation-item:${lastItem.id}`)] : [shellBinding], [{ name: "href", value: routeFor(lastItem.destinationRef) }])] : []),
+    ], specBindings: [shellBinding, siteBinding] });
+  }
+  return children;
+}
+
 function collectProjectionEntities(graph: CanonicalGraphRuntime, page: ContractEntity): ContractEntity[] {
   const byUid = new Map(graph.entities.map((entity) => [entity.uid, entity]));
   const selected = new Map<string, ContractEntity>();
@@ -250,6 +317,10 @@ export function projectCanonicalSiteSpec(input: unknown, pageSubjectRef: string)
   const strategy = site ? byUid.get(ref(site, "strategyRef")) : undefined;
   if (!route || route.kind !== "route" || !shell || shell.kind !== "shell" || !composition || composition.kind !== "page-composition" || !strategy || strategy.kind !== "site-strategy") throw new Error(`Page ${pageSubjectRef} lacks its route, shell, composition, site, or strategy dependency`);
   const entities = collectProjectionEntities(graph, page);
+  const project = site ? byUid.get(ref(site, "projectRef")) : undefined;
+  const navigation = graph.entities.filter((entity) => entity.kind === "navigation" && entity.data.siteRef === site?.uid).sort((left, right) => (left.id === "primary" ? -1 : right.id === "primary" ? 1 : left.uid.localeCompare(right.uid)))[0];
+  for (const entity of [project, navigation]) if (entity && !entities.some((candidate) => candidate.uid === entity.uid)) entities.push(entity);
+  entities.sort((left, right) => left.uid.localeCompare(right.uid));
   const sections = refs(composition, "sectionRefs").map((value) => byUid.get(value)).filter((value): value is ContractEntity => Boolean(value));
   const patterns = sections.map((section) => byUid.get(ref(section, "patternRef"))).filter((value): value is ContractEntity => Boolean(value));
   const sectionNodes = sections.map((section): DomNode => {
@@ -259,7 +330,8 @@ export function projectCanonicalSiteSpec(input: unknown, pageSubjectRef: string)
     const componentBlock = id(pattern.id);
     return { nodeId: `g2p-${sha256(section.uid).slice(0, 12)}`, tag: "section", attributes: [{ name: "class", value: `${componentBlock}${optionalRefs(section, "variantRefs").map((value) => ` ${componentBlock}--${id(byUid.get(value)?.id ?? value)}`).join("")}` }, { name: "data-sitespec-subject", value: section.uid }], text: "", textFingerprint: sha256(""), children: [...slots.map((slot, index) => contentNode(slot, index, byUid, 2, componentBlock)), ...items.map((item, index) => collectionNode(item, byUid, index))], specBindings: [binding(section, "section-instance"), binding(pattern, "pattern")] };
   });
-  const body: DomNode = { nodeId: `g2p-${sha256(page.uid).slice(0, 12)}`, tag: "body", attributes: [{ name: "class", value: "page" }, { name: "data-sitespec-subject", value: page.uid }], text: "", textFingerprint: sha256(""), children: [{ nodeId: `g2p-${sha256(`${page.uid}:main`).slice(0, 12)}`, tag: "main", attributes: [{ name: "class", value: "page__main" }], text: "", textFingerprint: sha256(""), children: sectionNodes, specBindings: [binding(page, "page")] }], specBindings: [binding(page, "page"), binding(route, "route"), binding(shell, "shell")] };
+  const main: DomNode = { nodeId: `g2p-${sha256(`${page.uid}:main`).slice(0, 12)}`, tag: "main", attributes: [{ name: "id", value: "main" }, { name: "class", value: "page__main" }], text: "", textFingerprint: sha256(""), children: sectionNodes, specBindings: [binding(page, "page")] };
+  const body: DomNode = { nodeId: `g2p-${sha256(page.uid).slice(0, 12)}`, tag: "body", attributes: [{ name: "class", value: "page" }, { name: "data-sitespec-subject", value: page.uid }], text: "", textFingerprint: sha256(""), children: shellNodes({ byUid, site: site!, strategy, shell, ...(project ? { project } : {}), ...(navigation ? { navigation } : {}), main }), specBindings: [binding(page, "page"), binding(route, "route"), binding(shell, "shell")] };
   const actions = entities.filter((entity) => entity.kind === "action");
   const unresolved = authorityActions(entities);
   const normalForm: NormalForm = {

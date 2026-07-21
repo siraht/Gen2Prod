@@ -68,6 +68,11 @@ describe("SiteSpec governed page production", () => {
     expect(built.every((page) => createContractValidator().validate("correspondence", page.correspondence).valid)).toBeTrue();
     expect(built.flatMap((page) => page.validation.gates.filter((gate) => gate.hard && !gate.passed).map((gate) => `${page.pageSubjectRef}:${gate.gate}:${gate.assertions.filter((assertion) => !assertion.passed).map((assertion) => assertion.message).join("|")}`))).toEqual([]);
     expect(built.every((page) => page.normalForm.sitespec?.inputRevisions.some((input) => input.subjectRef === page.pageSubjectRef))).toBeTrue();
+    expect(built[0]!.normalForm.sitespec?.inputRevisions.some((input) => input.subjectRef.endsWith("/navigation/primary"))).toBeTrue();
+    expect(built[0]!.html).toContain('<header class="site-header"');
+    expect(built[0]!.html).toContain('<nav aria-label="Primary navigation"');
+    expect(built[0]!.html).toContain('<footer class="site-footer"');
+    expect(built[0]!.html).toContain('href="#main" class="skip-link"');
     expect(built.every((page) => page.correspondence.edges.every((edge: { subjectRevision: string }) => edge.subjectRevision.length === 64))).toBeTrue();
     expect(built[0]!.results.results.find((result: { requirementRef: string }) => result.requirementRef.endsWith("/performance-budget"))?.status).toBe("fail");
     expect(built[0]!.results.requiredActions.map((action: { id: string }) => action.id)).toContain("home-performance-budget-evidence");

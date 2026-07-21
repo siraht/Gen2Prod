@@ -14,6 +14,8 @@ import { dirname, extname, isAbsolute, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "pngjs";
 import { emitHtml, emitScss } from "../compiler/emit.ts";
+import { parseCss } from "../compiler/ingest.ts";
+import { augmentTokenRegistry, extractTokenRegistry, mergeTokenRegistries, resolveStyles } from "../compiler/tokens.ts";
 import type { CompilationPlan, PlannedNode } from "../compiler/types.ts";
 import { canonicalJson, hashJson } from "../core/hash.ts";
 import { ensureDirectory, pathExists, readJson, writeBytesAtomic, writeJsonAtomic, writeTextAtomic } from "../core/fs.ts";
@@ -22,6 +24,7 @@ import type { CanonicalSiteSpecArtifact } from "../schemas/sitespec.ts";
 import { validate, type ValidationReport } from "../validation/gates.ts";
 import { assertBuildableProjection, projectCanonicalSiteSpec, type SiteSpecProjection } from "./adapter.ts";
 import { assertDesignSystemCurrent, selectAnchorPage, selectValidationPage } from "./design-system.ts";
+import { applyApprovedVisualTemplate, type VisualImplementationSource } from "./visual-template.ts";
 
 type ArtifactReference = DesignSystemRelease["tokens"];
 type RevisionInput = { subjectRef: string; revision: string };
@@ -35,6 +38,9 @@ type DesignTokenEntry = {
 type DesignTokenArtifact = {
   roles: Record<string, DesignTokenEntry>;
   policies: Record<string, DesignTokenEntry>;
+};
+type ImplementationBindingsArtifact = {
+  visualSource?: VisualImplementationSource;
 };
 type ProductionTokenBindings = {
   action: string;
@@ -290,34 +296,43 @@ function styles(normalForm: NormalForm, bindings: ProductionTokenBindings): Styl
   });
 }
 
-function planFor(projection: SiteSpecProjection, release: DesignSystemRelease, tokenArtifact: DesignTokenArtifact): CompilationPlan {
+function planFor(projection: SiteSpecProjection, release: DesignSystemRelease, tokenArtifact: DesignTokenArtifact, boundedNormalForm: NormalForm = projection.normalForm, visualSource?: VisualImplementationSource): CompilationPlan {
   const production = productionTokens(release, tokenArtifact);
-  const normalForm: NormalForm = { ...projection.normalForm, styles: styles(projection.normalForm, production.bindings), tokens: production.registry };
+  const declarations = visualSource?.css.trim() ? parseCss(visualSource.css, "external") : [];
+  const discoveredTokens = declarations.length ? extractTokenRegistry(visualSource!.css, `design-candidate:${visualSource!.candidateId ?? visualSource!.candidateRef}`) : { ...production.registry, tokens: [] };
+  const registry = declarations.length ? augmentTokenRegistry(mergeTokenRegistries(production.registry, discoveredTokens), declarations, 1) : production.registry;
+  const normalForm: NormalForm = { ...boundedNormalForm, styles: styles(boundedNormalForm, production.bindings), tokens: registry };
   const root = planned(normalForm.dom);
+  const visualDocument: CompilationPlan["source"] = {
+    path: projection.route.data.pathname as string,
+    html: visualSource?.html ?? "",
+    css: visualSource?.css ?? "",
+    dom: normalForm.dom,
+    documentAttributes: { lang: "en" },
+    metadata: { title: projection.page.title ?? projection.page.id, description: String(projection.page.data.purpose) },
+    resourceLinks: [
+      { rel: "canonical", href: String(projection.route.data.pathname), attributes: { rel: "canonical", href: String(projection.route.data.pathname) } },
+      { rel: "icon", href: "data:,", attributes: { rel: "icon", href: "data:," } },
+    ],
+    classInventory: [],
+    declarations,
+    styleSources: declarations.length ? [{ origin: "external", label: visualSource?.candidateRef ?? "approved-visual-source", bytes: Buffer.byteLength(visualSource?.css ?? "") }] : [],
+    executableScripts: [],
+    executableEvents: [],
+    authorities: declarations.length ? ["computed-visual-truth"] : [],
+  };
+  const resolved = declarations.length ? resolveStyles(visualDocument, root, registry, 0.02) : undefined;
+  const fallbackStyles = normalForm.styles.filter((style) => !resolved?.styles.some((candidate) => candidate.nodeId === style.nodeId));
   return {
-    source: {
-      path: projection.route.data.pathname as string,
-      html: "",
-      css: "",
-      dom: normalForm.dom,
-      documentAttributes: { lang: "en" },
-      metadata: { title: projection.page.title ?? projection.page.id, description: String(projection.page.data.purpose) },
-      resourceLinks: [{ rel: "canonical", href: String(projection.route.data.pathname), attributes: { rel: "canonical", href: String(projection.route.data.pathname) } }],
-      classInventory: [],
-      declarations: [],
-      styleSources: [],
-      executableScripts: [],
-      executableEvents: [],
-      authorities: [],
-    },
+    source: visualDocument,
     semantics: { root, confidenceSummary: { high: nodes(normalForm.dom).length, medium: 0, low: 0 }, review: [] },
     components: normalForm.components,
     bem: normalForm.bem,
-    tokens: normalForm.tokens,
-    styles: normalForm.styles,
+    tokens: registry,
+    styles: [...(resolved?.styles ?? []), ...fallbackStyles],
     interactions: normalForm.interactions,
-    tokenExceptions: [],
-    policyExecution: { requestedActions: ["sitespec-page-production"], executedActions: ["sitespec-page-production"], ignoredActions: [], consumedEvidence: [{ kind: "canonical-site-spec", purpose: "semantic and content authority", decisionImpact: "bounded generated output" }, { kind: "design-system-release", purpose: "governed implementation bindings", decisionImpact: "tokens, components, and shells" }], modelCandidates: 0 },
+    tokenExceptions: resolved?.exceptions ?? [],
+    policyExecution: { requestedActions: ["sitespec-page-production"], executedActions: ["sitespec-page-production", ...(declarations.length ? ["approved-visual-source-cascade", "approved-visual-source-token-binding"] : [])], ignoredActions: [], consumedEvidence: [{ kind: "canonical-site-spec", purpose: "semantic and content authority", decisionImpact: "bounded generated output" }, { kind: "design-system-release", purpose: "governed implementation bindings", decisionImpact: "tokens, components, and shells" }, ...(declarations.length ? [{ kind: "approved-visual-source", purpose: "visual layout and design values only", decisionImpact: "candidate cascade resolved onto SiteSpec-bound nodes" }] : [])], modelCandidates: 0 },
   };
 }
 
@@ -329,17 +344,18 @@ async function resolveReleaseJson<T>(release: DesignSystemRelease, reference: Ar
   return JSON.parse(contents) as T;
 }
 
-async function assertReleaseCoverage(release: DesignSystemRelease, root: string, projection: SiteSpecProjection): Promise<DesignTokenArtifact> {
+async function assertReleaseCoverage(release: DesignSystemRelease, root: string, projection: SiteSpecProjection): Promise<{ tokens: DesignTokenArtifact; bindings: ImplementationBindingsArtifact }> {
   const contracts = await resolveReleaseJson<{ components: { subjectRef: string }[] }>(release, release.componentContracts, root);
   const shells = await resolveReleaseJson<{ shells: { subjectRef: string }[] }>(release, release.shells, root);
   const tokenArtifact = await resolveReleaseJson<DesignTokenArtifact>(release, release.tokens, root);
+  const bindings = await resolveReleaseJson<ImplementationBindingsArtifact>(release, release.implementationBindings, root);
   const approvedPatterns = new Set(contracts.components.map((component) => component.subjectRef));
   const requiredPatterns = projection.normalForm.components.flatMap((component) => component.specBindings?.filter((binding) => binding.role === "pattern").map((binding) => binding.subjectRef) ?? []);
   const missing = requiredPatterns.filter((subjectRef) => !approvedPatterns.has(subjectRef));
   if (missing.length) throw new Error(`Governed design-system release change required for patterns: ${missing.join(", ")}`);
   if (!shells.shells.some((shell) => shell.subjectRef === projection.shell.uid)) throw new Error(`Governed design-system release change required for shell: ${projection.shell.uid}`);
   productionTokens(release, tokenArtifact);
-  return tokenArtifact;
+  return { tokens: tokenArtifact, bindings };
 }
 
 function normalizedValidation(report: ValidationReport): ValidationReport {
@@ -351,9 +367,9 @@ function artifactRef(id: string, contents: string, mediaType: string): ArtifactR
   return { schemaVersion: "website-ontology-artifacts/2.0", kind: "artifact-ref", id, hash, uri: `artifact://sha256/${hash}`, mediaType, byteLength: Buffer.byteLength(contents) };
 }
 
-function correspondence(projection: SiteSpecProjection, htmlRef: ArtifactReference): CorrespondenceMap {
+function correspondence(projection: SiteSpecProjection, normalForm: NormalForm, htmlRef: ArtifactReference): CorrespondenceMap {
   const grouped = new Map<string, { binding: SpecBinding; nodeIds: string[] }>();
-  for (const node of nodes(projection.normalForm.dom)) for (const binding of node.specBindings ?? []) {
+  for (const node of nodes(normalForm.dom)) for (const binding of node.specBindings ?? []) {
     const existing = grouped.get(binding.subjectRef) ?? { binding, nodeIds: [] };
     existing.nodeIds.push(node.nodeId);
     grouped.set(binding.subjectRef, existing);
@@ -454,9 +470,11 @@ export async function buildSiteSpecPage(options: {
   }
   const projection = projectCanonicalSiteSpec(options.artifact, options.pageSubjectRef);
   assertBuildableProjection(projection);
-  const tokenArtifact = await assertReleaseCoverage(options.designSystem, options.designSystemRoot, projection);
-  const localAssets = await materializeLocalAssets(projection.normalForm, options.artifact);
-  const plan = planFor(projection, options.designSystem, tokenArtifact);
+  const releaseArtifacts = await assertReleaseCoverage(options.designSystem, options.designSystemRoot, projection);
+  const boundedNormalForm = applyApprovedVisualTemplate(projection.normalForm, releaseArtifacts.bindings.visualSource);
+  const localAssets = await materializeLocalAssets(boundedNormalForm, options.artifact);
+  const visualSource = releaseArtifacts.bindings.visualSource?.pageSubjectRef === projection.page.uid ? releaseArtifacts.bindings.visualSource : undefined;
+  const plan = planFor(projection, options.designSystem, releaseArtifacts.tokens, boundedNormalForm, visualSource);
   const scss = emitScss(plan);
   const css = compileString(scss, { style: "expanded" }).css;
   const html = emitHtml(plan, "page.css", true);
@@ -475,7 +493,7 @@ export async function buildSiteSpecPage(options: {
   });
   const runDirectory = join(options.outputDirectory, "runs", runId);
   await ensureDirectory(runDirectory);
-  const normalForm = { ...projection.normalForm, styles: plan.styles, tokens: plan.tokens };
+  const normalForm = { ...boundedNormalForm, styles: plan.styles, tokens: plan.tokens };
   const htmlRef = artifactRef(`${slug(projection.page.id)}-html`, html, "text/html");
   const scssRef = artifactRef(`${slug(projection.page.id)}-scss`, scss, "text/x-scss");
   const cssRef = artifactRef(`${slug(projection.page.id)}-css`, css, "text/css");
@@ -483,7 +501,7 @@ export async function buildSiteSpecPage(options: {
   const normalFormRef = artifactRef(`${slug(projection.page.id)}-normal-form`, normalFormContents, "application/json");
   const validationContents = canonicalJson({ ...validation, sitespec: normalForm.sitespec, designSystem: { id: options.designSystem.id, version: options.designSystem.version } });
   const validationRef = artifactRef(`${slug(projection.page.id)}-validation`, validationContents, "application/json");
-  const correspondenceMap = correspondence(projection, htmlRef);
+  const correspondenceMap = correspondence(projection, normalForm, htmlRef);
   const correspondenceContents = canonicalJson(correspondenceMap);
   const correspondenceRef = artifactRef(`${slug(projection.page.id)}-correspondence`, correspondenceContents, "application/json");
   const requirementEvidence = requirementResults(projection, validation, validationRef);
