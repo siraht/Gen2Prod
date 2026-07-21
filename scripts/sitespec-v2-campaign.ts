@@ -55,8 +55,11 @@ async function fileArtifact(id: string, path: string, mediaType: string) {
   return { schemaVersion: "website-ontology-artifacts/2.0" as const, kind: "artifact-ref" as const, id, hash, uri: pathToFileURL(path).href, mediaType, byteLength: contents.byteLength };
 }
 
-async function candidate(id: string, graph: CanonicalGraphRuntime, screenshot: string, sourceFile?: string): Promise<DesignCandidate> {
-  const page = graph.entities.find((entity) => entity.uid === "sitespec://northstar/pages/home")!;
+async function candidate(id: string, graph: CanonicalGraphRuntime, screenshot: string, sourceFile?: string, pageSubjectRef = "sitespec://northstar/pages/home"): Promise<DesignCandidate> {
+  const page = graph.entities.find((entity) => entity.uid === pageSubjectRef)!;
+  const region = pageSubjectRef.endsWith("/home")
+    ? graph.entities.find((entity) => entity.uid === "sitespec://northstar/pages/home/sections/hero.1")!
+    : graph.entities.filter((entity) => entity.kind === "section-instance" && entity.uid.startsWith(`${pageSubjectRef}/sections/`)).sort((left, right) => left.uid.localeCompare(right.uid))[0]!;
   return {
     schemaVersion: "website-ontology-artifacts/2.0",
     kind: "design-candidate",
@@ -71,7 +74,7 @@ async function candidate(id: string, graph: CanonicalGraphRuntime, screenshot: s
     sourceFiles: sourceFile ? [await fileArtifact(`${id}-source`, sourceFile, "text/html")] : [],
     screenshots: [await fileArtifact(`${id}-screenshot`, screenshot, "image/png")],
     generatedAt: "2026-07-20T00:00:00.000Z",
-    regions: [{ id: "hero", subjectRef: "sitespec://northstar/pages/home/sections/hero.1", authority: { content: "none", visual: "advisory" } }],
+    regions: [{ id: region.id, subjectRef: region.uid, authority: { content: "none", visual: "advisory" } }],
   };
 }
 
@@ -172,13 +175,29 @@ const acceptedPages = [
   { pageSubjectRef: "sitespec://northstar/pages/assessment", runDirectory: validationRun, results: validationResultsPath },
   { pageSubjectRef: "sitespec://northstar/pages/contact", runDirectory: contactRun, results: contactAcceptedResults },
 ];
-for (const built of (rollout.data as { builtPages: { pageSubjectRef: string; runDirectory: string }[] }).builtPages) {
-  if (acceptedPages.some((page) => page.pageSubjectRef === built.pageSubjectRef)) continue;
-  const pageId = built.pageSubjectRef.split("/").at(-1)!;
-  const lighthousePath = await lighthouse(pageId, built.runDirectory);
-  const acceptedResults = join(built.runDirectory, "accepted-results.json");
-  await cli(`${pageId}-evidence`, ["evidence", "record", built.runDirectory, "--spec", specPath, "--lighthouse", lighthousePath, "--visual-waiver", `qualification://approvals/${pageId}-no-visual-target`, "--output", acceptedResults]);
-  acceptedPages.push({ pageSubjectRef: built.pageSubjectRef, runDirectory: built.runDirectory, results: acceptedResults });
+const rolloutData = rollout.data as { classifications: { pageSubjectRef: string; category: string }[] };
+for (const classification of rolloutData.classifications.filter((item) => item.category === "mockup-review")) {
+  const pageId = classification.pageSubjectRef.split("/").at(-1)!;
+  const reviewRoot = join(root, "final", "mockup-reviews", pageId);
+  const initialCandidate = join(reviewRoot, "initial-candidate.json");
+  await writeJson(initialCandidate, await candidate(`${pageId}-mockup-review`, graph, qualificationAsset, undefined, classification.pageSubjectRef));
+  await cli(`${pageId}-mockup-import`, ["design", "import-candidate", initialCandidate, "--spec", specPath, "--output", join(reviewRoot, "initial-verification.json")]);
+  const initialTarget = join(reviewRoot, "initial-target.json");
+  await cli(`${pageId}-mockup-approve`, ["design", "approve-target", initialCandidate, "--spec", specPath, "--approval", `qualification://approvals/${pageId}-mockup-review`, "--output", initialTarget]);
+  const pageBuild = await cli(`${pageId}-reviewed-build`, ["build", "--spec", specPath, "--page", classification.pageSubjectRef, "--design-system", approvedReleasePath, "--output", join(root, "final", "production")], [3]);
+  const runDirectory = String((pageBuild.data as Record<string, unknown>).runDirectory);
+  const initialCapture = await cli(`${pageId}-review-capture`, ["evidence", "capture", runDirectory, "--spec", specPath, "--visual-target", initialTarget, "--viewport", "1280", "--height", "1000", "--threshold", "1", "--output", join(runDirectory, "initial-browser-results.json")], [0, 3]);
+  const refinedCandidate = join(reviewRoot, "refined-candidate.json");
+  await writeJson(refinedCandidate, await candidate(`${pageId}-refined-review`, graph, String((initialCapture.data as Record<string, unknown>).screenshotPath), join(runDirectory, "page.html"), classification.pageSubjectRef));
+  await cli(`${pageId}-refined-import`, ["design", "import-candidate", refinedCandidate, "--spec", specPath, "--output", join(reviewRoot, "refined-verification.json")]);
+  const refinedTarget = join(reviewRoot, "refined-target.json");
+  await cli(`${pageId}-refined-approve`, ["design", "approve-target", refinedCandidate, "--spec", specPath, "--approval", `qualification://approvals/${pageId}-refined-visual`, "--output", refinedTarget]);
+  const browserResults = join(runDirectory, "browser-results.json");
+  await cli(`${pageId}-final-capture`, ["evidence", "capture", runDirectory, "--spec", specPath, "--visual-target", refinedTarget, "--viewport", "1280", "--height", "1000", "--threshold", "0.001", "--output", browserResults]);
+  const lighthousePath = await lighthouse(pageId, runDirectory);
+  const acceptedResults = join(runDirectory, "accepted-results.json");
+  await cli(`${pageId}-performance-evidence`, ["evidence", "record", runDirectory, "--spec", specPath, "--results", browserResults, "--lighthouse", lighthousePath, "--output", acceptedResults]);
+  acceptedPages.push({ pageSubjectRef: classification.pageSubjectRef, runDirectory, results: acceptedResults });
 }
 if (acceptedPages.length !== 5) throw new Error(`Expected accepted evidence for five pages, received ${acceptedPages.length}`);
 const approvedRelease = JSON.parse(await readFile(approvedReleasePath, "utf8")) as { id: string; version: string; componentContracts: { id: string; hash: string; uri: string; mediaType: string; byteLength: number }; [key: string]: unknown };
